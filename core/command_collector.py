@@ -1,4 +1,11 @@
-"""收集 AstrBot 中已注册的指令"""
+"""收集 AstrBot 中已注册的指令。
+
+该模块仅用于 `/qq_panel_list` 调试指令展示 AstrBot 端已注册指令,
+不参与 QQ 面板内容的写入。面板内容完全由用户在 schema 里手动配置。
+
+保留该模块是为了让用户能方便地查看 AstrBot 已注册的指令名和描述,
+方便填到 schema 的 selected_commands 中。
+"""
 
 from __future__ import annotations
 
@@ -7,18 +14,34 @@ from typing import Any
 from astrbot.api import logger
 from astrbot.core.star.star_handler import star_handlers_registry
 
-from .config import PANEL_ITEM_DESC_MAX, PANEL_ITEM_NAME_MAX, PANEL_MAX_ITEMS
+from .config import PANEL_ITEM_DESC_MAX
+
+# 导入指令过滤器类型, 用来在 event_filters 里识别真正的指令
+try:
+    from astrbot.core.star.filter.command import CommandFilter
+    from astrbot.core.star.filter.command_group import CommandGroupFilter
+except Exception:  # pragma: no cover - 旧版本可能没有
+    CommandFilter = None  # type: ignore[assignment,misc]
+    CommandGroupFilter = None  # type: ignore[assignment,misc]
 
 
 def _extract_cmd_name(handler: Any) -> str | None:
-    """从 handler 对象上提取指令名。"""
-    # 优先取装饰器上的 cmd_name
-    cmd_name = getattr(handler, "cmd_name", None)
-    if cmd_name:
-        return cmd_name
+    """从 handler 的 event_filters 里提取指令名。
 
-    # 退化到几个常见字段
-    for attr in ("command_name", "name", "cmd"):
+    AstrBot 的指令名不在 handler 上直接拿,
+    而是在 handler.event_filters[*] 里 (CommandFilter / CommandGroupFilter)。
+    """
+    filters = getattr(handler, "event_filters", None) or []
+    for f in filters:
+        if CommandFilter is not None and isinstance(f, CommandFilter):
+            name = getattr(f, "command_name", None)
+            if name:
+                return name
+        if CommandGroupFilter is not None and isinstance(f, CommandGroupFilter):
+            name = getattr(f, "group_name", None)
+            if name:
+                return name
+    for attr in ("cmd_name", "command_name", "name", "cmd"):
         val = getattr(handler, attr, None)
         if val:
             return val
@@ -30,7 +53,6 @@ def _extract_desc(handler: Any) -> str:
     desc = getattr(handler, "desc", None) or getattr(handler, "description", None)
     if desc:
         return desc
-    # 从函数 docstring 取首行
     func = getattr(handler, "handler", None) or getattr(handler, "func", None)
     doc = getattr(func, "__doc__", None) if func else None
     if doc:
@@ -41,31 +63,25 @@ def _extract_desc(handler: Any) -> str:
 
 
 def collect_commands() -> list[dict[str, str]]:
-    """收集 AstrBot 中已注册的所有指令 (去重)
+    """收集 AstrBot 中已注册的所有指令 (去重)。
 
+    仅用于 `/qq_panel_list` 调试指令, 不会写入 QQ 面板。
     返回: [{"name": "/foo", "desc": "..."}, ...]
     """
     seen: dict[str, str] = {}
     try:
-        # star_handlers_registry 支持迭代但不支持下标, 转成 list
         handlers_iter = list(star_handlers_registry)
     except Exception as exc:
         logger.warning(f"[qq-command-panel] 读取 star_handlers_registry 失败: {exc}")
         return [{"name": k, "desc": v} for k, v in seen.items()]
 
     for handler in handlers_iter:
-        # 只取指令类型 handler
-        if getattr(handler, "event_type", None) is None:
-            continue
-
         cmd_name = _extract_cmd_name(handler)
         if not cmd_name:
             continue
-
         full_name = cmd_name if cmd_name.startswith("/") else f"/{cmd_name}"
         if full_name in seen:
             continue
-
         try:
             desc = _extract_desc(handler)
         except Exception as exc:
@@ -73,38 +89,8 @@ def collect_commands() -> list[dict[str, str]]:
             desc = "AstrBot 指令"
         seen[full_name] = desc[:PANEL_ITEM_DESC_MAX]
 
+    logger.info(f"[qq-command-panel] collect_commands 收集到 {len(seen)} 个指令 (仅用于调试)")
     return [{"name": k, "desc": v} for k, v in seen.items()]
 
-    return [{"name": k, "desc": v} for k, v in seen.items()]
 
-
-def filter_commands(
-    all_cmds: list[dict[str, str]],
-    selected: list[str],
-) -> list[dict[str, str]]:
-    """根据用户配置过滤出要同步到面板的指令 (最多 PANEL_MAX_ITEMS 个)
-
-    selected 为空表示不过滤，按所有指令的顺序取前 N 个
-    """
-    if selected:
-        wanted = set(selected)
-        wanted_no_slash = {s.lstrip("/") for s in wanted}
-        filtered = [
-            c for c in all_cmds if c["name"] in wanted or c["name"].lstrip("/") in wanted_no_slash
-        ]
-    else:
-        filtered = list(all_cmds)
-
-    # 截断字段以满足 API 限制
-    result = []
-    for c in filtered[:PANEL_MAX_ITEMS]:
-        result.append(
-            {
-                "name": c["name"][:PANEL_ITEM_NAME_MAX],
-                "desc": c["desc"][:PANEL_ITEM_DESC_MAX],
-            }
-        )
-    return result
-
-
-__all__ = ["collect_commands", "filter_commands"]
+__all__ = ["collect_commands"]
