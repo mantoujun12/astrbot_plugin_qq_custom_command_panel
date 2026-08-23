@@ -1,4 +1,4 @@
-"""收集 AstrBot 中已注册的指令。
+"""收集 AstrBot 中已注册的指令
 
 该模块仅用于 `/qq_panel_list` 调试指令展示 AstrBot 端已注册指令,
 不参与 QQ 面板内容的写入。面板内容完全由用户在 schema 里手动配置。
@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - 旧版本可能没有
 
 
 def _extract_cmd_name(handler: Any) -> str | None:
-    """从 handler 的 event_filters 里提取指令名。
+    """从 handler 的 event_filters 里提取指令名
 
     AstrBot 的指令名不在 handler 上直接拿,
     而是在 handler.event_filters[*] 里 (CommandFilter / CommandGroupFilter)。
@@ -49,7 +49,7 @@ def _extract_cmd_name(handler: Any) -> str | None:
 
 
 def _extract_desc(handler: Any) -> str:
-    """从 handler 对象上提取描述。"""
+    """从 handler 对象上提取描述"""
     desc = getattr(handler, "desc", None) or getattr(handler, "description", None)
     if desc:
         return desc
@@ -63,7 +63,7 @@ def _extract_desc(handler: Any) -> str:
 
 
 def collect_commands() -> list[dict[str, str]]:
-    """收集 AstrBot 中已注册的所有指令 (去重)。
+    """收集 AstrBot 中已注册的所有指令 (去重)
 
     仅用于 `/qq_panel_list` 调试指令, 不会写入 QQ 面板。
     返回: [{"name": "/foo", "desc": "..."}, ...]

@@ -1,4 +1,4 @@
-"""将用户在 schema 中自定义的指令条目写入 QQ 官方机器人指令面板。"""
+"""将用户在 schema 中自定义的指令条目写入 QQ 官方机器人指令面板"""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from .state import PanelStateStore
 
 
 class PanelSyncer:
-    """负责把用户在 schema 里手动配置的指令条目写入 QQ 官方机器人面板。"""
+    """负责把用户在 schema 里手动配置的指令条目写入 QQ 官方机器人面板"""
 
     # 写入 QQ 面板 remark 字段的固定前缀, 用于在 sync 中识别本插件自建的面板 (做 update)。
     # purge 路径不再依赖该前缀 (直接删所有面板, 假设同一 appid 不会与其他插件共用)。
@@ -41,7 +41,7 @@ class PanelSyncer:
 
     @staticmethod
     def is_owned_panel(panel: dict[str, Any]) -> bool:
-        """判定一个面板是否由本插件创建 (依据 remark 前缀)。
+        """判定一个面板是否由本插件创建 (依据 remark 前缀)
 
         公开方法, 供 main.py 调试指令与 sync 内部共用, 避免"本插件面板"
         判定逻辑在多处各自实现导致策略漂移。
@@ -62,23 +62,21 @@ class PanelSyncer:
         *,
         log_prefix: str = "清理面板",
     ) -> bool:
-        """删除一个面板, 失败仅记录 warning 不抛出。
+        """删除一个面板, 失败仅记录 warning 不抛出
 
         多处清理流程 (sync_for_platform / clear_for_platform / purge_all) 共用,
         统一通过本方法删除, 避免重复 try/except/log 模板。
         """
         try:
             await client.delete_panel(str(panel_id))
-            logger.info(
-                f"[qq-command-panel] {log_prefix} scope={scope} panel_id={panel_id}"
-            )
+            logger.info(f"[qq-command-panel] {log_prefix} scope={scope} panel_id={panel_id}")
             return True
         except Exception as exc:
             logger.warning(f"[qq-command-panel] {log_prefix}失败: {exc}")
             return False
 
     def _build_clients(self) -> dict[str, QQClient]:
-        """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端。"""
+        """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端"""
         clients: dict[str, QQClient] = {}
         platforms, _source = get_configured_platforms(self._config, self.context)
         for pf_id, info in platforms.items():
@@ -91,26 +89,37 @@ class PanelSyncer:
             clients[pf_id] = client
         return clients
 
-    async def _list_all_panels(self, client: QQClient) -> list[dict[str, Any]]:
-        """按所有支持场景逐个调用 list_panels 并合并结果。
+    async def _list_all_panels(
+        self,
+        client: QQClient,
+    ) -> tuple[list[dict[str, Any]], set[str]]:
+        """按所有支持场景逐个调用 list_panels 并合并结果
 
         QQ API 要求 GET /v2/panels 必须传 scope, 所以需要循环请求一次。
-        任一场景失败不影响其他场景, 最后汇总。
+        任一场景失败不抛出, 但会记录到 failed_scopes 集合并 warning,
+        调用方据此判断返回的 panels 是否完整 — 否则缺失场景会被
+        sync_for_platform 误判为"无现有面板"而创建重复面板。
+
+        返回: (panels, failed_scopes)
+            panels         - 跨场景合并后的面板列表 (可能不完整)
+            failed_scopes  - 查询失败的场景集合; 为空表示清单完整
         """
         all_panels: list[dict[str, Any]] = []
+        failed_scopes: set[str] = set()
         for scope in SCENES:
             try:
                 panels = await client.list_panels(scope)
                 all_panels.extend(panels)
             except Exception as exc:
                 logger.warning(f"[qq-command-panel] 查询 {scope} 面板列表失败: {exc}")
-        return all_panels
+                failed_scopes.add(scope)
+        return all_panels, failed_scopes
 
     def _owned_panels_by_scope(
         self,
         all_panels: list[dict[str, Any]],
     ) -> dict[str, dict[str, Any]]:
-        """把本插件 owned 的面板按 scope 分组, 供 sync_for_platform 比对使用。"""
+        """把本插件 owned 的面板按 scope 分组, 供 sync_for_platform 比对使用"""
         grouped: dict[str, dict[str, Any]] = {}
         for p in all_panels:
             if not self.is_owned_panel(p):
@@ -130,7 +139,7 @@ class PanelSyncer:
         existing_panel: dict[str, Any] | None,
         total_panels: int,
     ) -> tuple[str | None, int]:
-        """同步单个 scope 的面板: 优先 update 已有, 否则 create 新建。
+        """同步单个 scope 的面板: 优先 update 已有, 否则 create 新建
 
         返回 (saved_panel_id_or_None, new_total_panels)。
         - saved_panel_id 为 None 表示该 scope 未写入 (上限达到 / 失败)
@@ -140,9 +149,7 @@ class PanelSyncer:
             panel_id = existing_panel.get("panel_id")
             if panel_id:
                 await client.update_panel(panel_id, items, remark)
-                logger.info(
-                    f"[qq-command-panel] 更新面板 scope={scope} panel_id={panel_id}"
-                )
+                logger.info(f"[qq-command-panel] 更新面板 scope={scope} panel_id={panel_id}")
                 return str(panel_id), total_panels
 
         # QQ 限制: 一个机器人最多创建 PANEL_MAX_ITEMS 个面板.
@@ -171,17 +178,21 @@ class PanelSyncer:
         scenes: list[str],
         items: list[dict[str, str]],
     ) -> dict[str, str]:
-        """把用户在 schema 配置的 items 写入一个平台下所有场景的面板。
+        """把用户在 schema 配置的 items 写入一个平台下所有场景的面板
 
         返回 {scope: panel_id}。items 为空时清理该平台所有本插件面板。
         """
         platform = getattr(client, "platform_label", "qq")
         remark = f"{self.REMARK_PREFIX} {platform}/{pf_id}"
 
-        try:
-            all_existing = await self._list_all_panels(client)
-        except Exception as exc:
-            raise RuntimeError(f"查询面板列表失败: {exc}") from exc
+        all_existing, failed_scopes = await self._list_all_panels(client)
+        # 任一场景查询失败时清单不完整, 直接中止协调 — 否则缺失场景会被
+        # 误判为"无现有面板"而创建重复面板, 或跳过旧面板的清理。
+        if failed_scopes:
+            raise RuntimeError(
+                f"查询面板列表不完整, 失败场景: {sorted(failed_scopes)}; "
+                "已中止本次同步以避免重复创建, 请稍后重试 /qq_panel_resync"
+            )
 
         existing_by_scope = self._owned_panels_by_scope(all_existing)
 
@@ -219,14 +230,12 @@ class PanelSyncer:
             old_id = old.get("panel_id")
             if not old_id:
                 continue
-            await self._safe_delete_panel(
-                client, old_id, scope, log_prefix="删除已停用场景面板"
-            )
+            await self._safe_delete_panel(client, old_id, scope, log_prefix="删除已停用场景面板")
 
         return saved
 
     async def purge_all(self) -> dict[str, dict[str, str]]:
-        """删除所有平台上**全部**指令面板, 并清空本地状态。
+        """删除所有平台上**全部**指令面板, 并清空本地状态
 
         因为同一 appid 不会有其他插件共用 `/v2/panels`, 所以直接删除全部面板,
         而不仅限于 remark 带前缀的本插件面板。返回每个平台删除后的剩余面板数。
@@ -236,15 +245,9 @@ class PanelSyncer:
         clients = self._build_clients()
         result: dict[str, dict[str, str]] = {}
         for pf_id, client in clients.items():
-            try:
-                all_panels = await self._list_all_panels(client)
-            except Exception as exc:
-                logger.error(
-                    f"[qq-command-panel] purge 准备阶段查询 {pf_id} 面板失败: {exc}",
-                    exc_info=True,
-                )
-                result[pf_id] = {"deleted": "?", "remaining": "?", "error": str(exc)}
-                continue
+            # purge 路径容忍部分场景失败: 即使查询不完整, 已拿到的面板
+            # 仍然可以删, 失败场景的面板留着等下次重试即可。
+            all_panels, _failed = await self._list_all_panels(client)
 
             deleted = 0
             for p in all_panels:
@@ -258,22 +261,27 @@ class PanelSyncer:
                 if ok:
                     deleted += 1
 
-            # 删除后复查剩余
-            remaining_count: Any = "?"
-            try:
-                remaining = await self._list_all_panels(client)
-                remaining_count = len(remaining)
-            except Exception as exc:
-                logger.warning(f"[qq-command-panel] purge 后复查 {pf_id} 面板数失败: {exc}")
-
-            result[pf_id] = {"deleted": str(deleted), "remaining": str(remaining_count)}
+            # 删除后复查剩余 (复查阶段同样容忍部分场景失败)
+            remaining_panels, post_failed = await self._list_all_panels(client)
+            if _failed or post_failed:
+                failed_scopes = _failed | post_failed
+                result[pf_id] = {
+                    "error": (
+                        f"查询面板列表不完整, 失败场景: {sorted(failed_scopes)}; "
+                        "已删除已列出的面板, 请稍后重试"
+                    )
+                }
+            else:
+                result[pf_id] = {
+                    "deleted": str(deleted), "remaining": str(len(remaining_panels))
+                }
 
         # 清空本地持久化的 panel_id 映射
         self._state.save({})
         return result
 
     async def sync_all(self) -> dict[str, dict[str, str]]:
-        """总入口: 把用户在 schema 中自定义的指令条目写入所有启用的 QQ 平台。
+        """总入口: 把用户在 schema 中自定义的指令条目写入所有启用的 QQ 平台
 
         返回 {pf_id: {scope: panel_id}}
         """
@@ -324,8 +332,10 @@ class PanelSyncer:
         pf_id: str,
         client: QQClient,
     ) -> None:
-        """删除该平台下本插件之前创建的所有面板 (用于指令清空时的清理)。"""
-        all_existing = await self._list_all_panels(client)
+        """删除该平台下本插件之前创建的所有面板 (用于指令清空时的清理)"""
+        # clear 路径容忍部分场景失败: 删少了一些面板不影响最终一致性,
+        # 下次 sync 还会按 remark 重新识别并清理。
+        all_existing, _failed = await self._list_all_panels(client)
         for p in all_existing:
             if not self.is_owned_panel(p):
                 continue
@@ -336,7 +346,7 @@ class PanelSyncer:
             await self._safe_delete_panel(client, panel_id, scope)
 
     def set_config(self, config: dict[str, Any]) -> None:
-        """运行期刷新配置引用。"""
+        """运行期刷新配置引用"""
         self._config = dict(config or {})
 
 

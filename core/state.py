@@ -22,7 +22,7 @@ STATE_FILENAME = "panel_state.yaml"
 
 
 class PanelStateStore:
-    """panel_id 持久化存储。"""
+    """panel_id 持久化存储"""
 
     def __init__(self, data_dir: Path | str):
         self.data_dir = Path(data_dir)
@@ -30,7 +30,7 @@ class PanelStateStore:
         self.state_file = self.data_dir / STATE_FILENAME
 
     def load(self) -> dict[str, dict[str, str]]:
-        """加载持久化的 {pf_id: {scope: panel_id}} 映射。"""
+        """加载持久化的 {pf_id: {scope: panel_id}} 映射"""
         if not self.state_file.exists():
             return {}
         try:
@@ -49,7 +49,7 @@ class PanelStateStore:
             return {}
 
     def save(self, state: dict[str, dict[str, str]]) -> None:
-        """原子写入 panel_id 映射。"""
+        """原子写入 panel_id 映射"""
         tmp_file = self.state_file.with_suffix(".yaml.tmp")
         try:
             with tmp_file.open("w", encoding="utf-8") as f:
@@ -65,7 +65,7 @@ class PanelStateStore:
                 logger.debug(f"[qq-command-panel] 清理临时文件失败: {cleanup_exc}")
 
     def clear(self) -> None:
-        """删除持久化文件。"""
+        """删除持久化文件"""
         try:
             if self.state_file.exists():
                 self.state_file.unlink()
