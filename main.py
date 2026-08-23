@@ -13,6 +13,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.star.star_handler import star_handlers_registry
 
 from .core import (
     DEFAULT_SCENES,
@@ -61,13 +62,19 @@ class QQCommandPanelPlugin(Star):
         return Path("data")
 
     async def initialize(self) -> None:
-        """插件初始化：启动时同步一次面板。"""
+        """插件初始化: 启动时同步一次面板。"""
         self._http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
         self._syncer = PanelSyncer(
             self.context,
             self._http,
             data_dir=self.data_dir,
             config=dict(self.config),
+        )
+        # 调试日志: 启动时注册表里有多少 handler
+        # 如果是 0, 说明初始化时机太早, 需要延迟同步
+        logger.info(
+            f"[qq-command-panel] initialize: star_handlers_registry "
+            f"长度={len(star_handlers_registry)}"
         )
         try:
             await self._syncer.sync_all()
@@ -108,6 +115,76 @@ class QQCommandPanelPlugin(Star):
         lines = [f"已注册指令 (最多展示 {PANEL_MAX_ITEMS} 个):"]
         for c in cmds[:PANEL_MAX_ITEMS]:
             lines.append(f"- {c['name']}: {c['desc']}")
+        yield event.plain_result("\n".join(lines))
+
+    @filter.command("qq_panel_debug")
+    async def debug_handlers(self, event: AstrMessageEvent):
+        """调试: 打印 star_handlers_registry 里每个 handler 的关键属性
+
+        用来排查为什么 collect_commands() 没拿到指令。
+        """
+        lines = [f"star_handlers_registry 总数: {len(star_handlers_registry)}"]
+        for idx, h in enumerate(star_handlers_registry[:10]):
+            event_type = getattr(h, "event_type", None)
+            cmd_name = getattr(h, "cmd_name", None)
+            command_name = getattr(h, "command_name", None)
+            desc = getattr(h, "desc", None)
+            description = getattr(h, "description", None)
+            type_name = type(h).__name__
+            # 拿到 handler 的真实函数对象, 取 docstring
+            func = getattr(h, "handler", None) or getattr(h, "func", None)
+            doc = getattr(func, "__doc__", None) if func else None
+            doc_first = doc.strip().split("\n", 1)[0].strip() if doc else None
+
+            lines.append(
+                f"\n#{idx} type={type_name}\n"
+                f"  event_type={event_type!r}\n"
+                f"  cmd_name={cmd_name!r}\n"
+                f"  command_name={command_name!r}\n"
+                f"  desc={desc!r}\n"
+                f"  description={description!r}\n"
+                f"  doc_first={doc_first!r}"
+            )
+
+        # 顺便打印一下 context.platform_settings 的结构, 方便排查平台配置读取
+        platform_settings = getattr(self.context, "platform_settings", None)
+        if isinstance(platform_settings, list):
+            lines.append(f"\nplatform_settings 数: {len(platform_settings)}")
+            for i, pf in enumerate(platform_settings):
+                if i >= 5:
+                    lines.append("  ...")
+                    break
+                # 只展示字段名 + 类型, 不打印 secret
+                if isinstance(pf, dict):
+                    keys = sorted(k for k in pf.keys() if "secret" not in k.lower())
+                    pf_platform = pf.get("platform")
+                    lines.append(f"  #{i} keys={keys}, platform={pf_platform!r}")
+                else:
+                    lines.append(f"  #{i} <non-dict: {type(pf).__name__}>")
+
+        yield event.plain_result("\n".join(lines))
+
+    @filter.command("qq_panel_platforms")
+    async def debug_platforms(self, event: AstrMessageEvent):
+        """调试: 打印插件识别到的 QQ 平台配置
+
+        用来排查 get_platforms_from_context 是否正确读取到 appid / secret。
+        """
+        from .core.config import get_platforms_from_context
+
+        platforms = get_platforms_from_context(self.context)
+        if not platforms:
+            yield event.plain_result("未识别到任何 QQ 平台配置")
+            return
+        lines = [f"识别到 {len(platforms)} 个 QQ 平台配置:"]
+        for pf_id, info in platforms.items():
+            # 不打印 secret 明文
+            appid = info.get("appid", "")
+            masked = appid[:4] + "***" + appid[-4:] if len(appid) > 8 else "***"
+            lines.append(
+                f"- pf_id={pf_id}, platform={info.get('platform')}, "
+                f"appid={masked}, secret={'<set>' if info.get('secret') else '<empty>'}"
+            )
         yield event.plain_result("\n".join(lines))
 
 
