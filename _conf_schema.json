@@ -7,7 +7,7 @@
     "hint": "c2c=单聊, group=群聊, channel=文字子频道, dm=频道私信。channel/dm 仅支持全局配置。"
   },
   "qq_platforms": {
-    "description": "QQ 官方机器人平台凭证 (留空则自动从 AstrBot 平台配置读取)",
+    "description": "QQ 官方机器人平台凭证",
     "type": "template_list",
     "default": [],
     "obvious_hint": true,
