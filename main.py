@@ -30,7 +30,7 @@ from .core import (
     "astrbot_plugin_qq_custom_command_panel",
     "mantoujun12",
     "将 AstrBot 已注册的指令同步到 QQ 官方机器人指令面板",
-    "1.0.0",
+    "0.1.1",
     "https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel",
 )
 class QQCommandPanelPlugin(Star):
@@ -72,10 +72,11 @@ class QQCommandPanelPlugin(Star):
         )
         # 调试日志: 启动时注册表里有多少 handler
         # 如果是 0, 说明初始化时机太早, 需要延迟同步
-        logger.info(
-            f"[qq-command-panel] initialize: star_handlers_registry "
-            f"长度={len(star_handlers_registry)}"
-        )
+        try:
+            handlers_count = len(list(star_handlers_registry))
+        except Exception as exc:
+            handlers_count = f"<无法读取: {exc}>"
+        logger.info(f"[qq-command-panel] initialize: star_handlers_registry 长度={handlers_count}")
         try:
             await self._syncer.sync_all()
         except Exception as exc:
@@ -123,8 +124,19 @@ class QQCommandPanelPlugin(Star):
 
         用来排查为什么 collect_commands() 没拿到指令。
         """
-        lines = [f"star_handlers_registry 总数: {len(star_handlers_registry)}"]
-        for idx, h in enumerate(star_handlers_registry[:10]):
+        # star_handlers_registry 是 StarHandlerRegistry 对象,
+        # 只支持迭代, 不支持下标; 先转成 list 避免索引报错
+        try:
+            handlers = list(star_handlers_registry)
+        except Exception as exc:
+            yield event.plain_result(f"无法读取 star_handlers_registry: {exc}")
+            return
+
+        lines = [
+            f"star_handlers_registry 总数: {len(handlers)}",
+            f"registry 类型: {type(star_handlers_registry).__name__}",
+        ]
+        for idx, h in enumerate(handlers[:10]):
             event_type = getattr(h, "event_type", None)
             cmd_name = getattr(h, "cmd_name", None)
             command_name = getattr(h, "command_name", None)
@@ -161,6 +173,8 @@ class QQCommandPanelPlugin(Star):
                     lines.append(f"  #{i} keys={keys}, platform={pf_platform!r}")
                 else:
                     lines.append(f"  #{i} <non-dict: {type(pf).__name__}>")
+        else:
+            lines.append(f"\nplatform_settings 不是 list, 类型={type(platform_settings).__name__}")
 
         yield event.plain_result("\n".join(lines))
 

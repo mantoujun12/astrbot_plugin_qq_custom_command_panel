@@ -47,23 +47,33 @@ def collect_commands() -> list[dict[str, str]]:
     """
     seen: dict[str, str] = {}
     try:
-        for handler in star_handlers_registry:
-            # 只取指令类型 handler
-            if getattr(handler, "event_type", None) is None:
-                continue
-
-            cmd_name = _extract_cmd_name(handler)
-            if not cmd_name:
-                continue
-
-            full_name = cmd_name if cmd_name.startswith("/") else f"/{cmd_name}"
-            if full_name in seen:
-                continue
-
-            desc = _extract_desc(handler)
-            seen[full_name] = desc[:PANEL_ITEM_DESC_MAX]
+        # star_handlers_registry 支持迭代但不支持下标, 转成 list
+        handlers_iter = list(star_handlers_registry)
     except Exception as exc:
-        logger.warning(f"[qq-command-panel] 收集指令失败: {exc}")
+        logger.warning(f"[qq-command-panel] 读取 star_handlers_registry 失败: {exc}")
+        return [{"name": k, "desc": v} for k, v in seen.items()]
+
+    for handler in handlers_iter:
+        # 只取指令类型 handler
+        if getattr(handler, "event_type", None) is None:
+            continue
+
+        cmd_name = _extract_cmd_name(handler)
+        if not cmd_name:
+            continue
+
+        full_name = cmd_name if cmd_name.startswith("/") else f"/{cmd_name}"
+        if full_name in seen:
+            continue
+
+        try:
+            desc = _extract_desc(handler)
+        except Exception as exc:
+            logger.debug(f"[qq-command-panel] 提取指令描述失败 {full_name}: {exc}")
+            desc = "AstrBot 指令"
+        seen[full_name] = desc[:PANEL_ITEM_DESC_MAX]
+
+    return [{"name": k, "desc": v} for k, v in seen.items()]
 
     return [{"name": k, "desc": v} for k, v in seen.items()]
 
