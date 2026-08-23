@@ -262,8 +262,19 @@ class PanelSyncer:
                     deleted += 1
 
             # 删除后复查剩余 (复查阶段同样容忍部分场景失败)
-            remaining_panels, _ = await self._list_all_panels(client)
-            result[pf_id] = {"deleted": str(deleted), "remaining": str(len(remaining_panels))}
+            remaining_panels, post_failed = await self._list_all_panels(client)
+            if _failed or post_failed:
+                failed_scopes = _failed | post_failed
+                result[pf_id] = {
+                    "error": (
+                        f"查询面板列表不完整, 失败场景: {sorted(failed_scopes)}; "
+                        "已删除已列出的面板, 请稍后重试"
+                    )
+                }
+            else:
+                result[pf_id] = {
+                    "deleted": str(deleted), "remaining": str(len(remaining_panels))
+                }
 
         # 清空本地持久化的 panel_id 映射
         self._state.save({})
