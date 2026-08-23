@@ -46,6 +46,12 @@ QQ 官方机器人指令面板的 API 限制:
 - [] 完善配置 - 连接测试等
 - [] Web UI - 可视化配置，一键同步 AstrBot 指令列表并按需选择
 
+## 参考链接
+
+- [QQ 机器人开放平台 - 开发文档 v2](https://bot.qq.com/wiki/develop/api-v2/) - 指令面板 / 消息收发 / API 鉴权等官方接口规范
+- [AstrBot 插件开发指南](https://docs.astrbot.app/dev/star/plugin-new.html) - Star / filter / schema / 插件 Pages 等开发参考
+- [AstrBot Plugin Pages](https://docs.astrbot.app/dev/star/guides/plugin-pages.html) - 自建 WebUI 的 bridge / Web API 规范 (对应下一步计划中的 Web UI)
+
 ## 许可证
 
 本项目使用 AGPLv3 协议开源, 详见 [LICENSE](LICENSE) 文件。
