@@ -6,17 +6,71 @@
     "default": ["c2c", "group"],
     "hint": "c2c=单聊, group=群聊, channel=文字子频道, dm=频道私信。channel/dm 仅支持全局配置。"
   },
-  "selected_commands": {
-    "description": "要同步到 QQ 面板的指令列表 (留空则同步全部已注册指令)",
-    "type": "list",
-    "options": [],
+  "qq_platforms": {
+    "description": "QQ 官方机器人平台凭证 (留空则自动从 AstrBot 平台配置读取)",
+    "type": "template_list",
     "default": [],
-    "hint": "最多 20 个指令。name 最长 14 字符，desc 最长 30 字符。"
+    "obvious_hint": true,
+    "hint": "直接填写 appid + clientSecret 后即可同步指令面板，不依赖 AstrBot 后台是否配置了 qq_official 适配器。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
+    "templates": {
+      "qq_platform": {
+        "name": "QQ 机器人",
+        "display_item": "name",
+        "items": {
+          "name": {
+            "description": "备注名 (可选)",
+            "type": "string",
+            "hint": "仅用于在面板里区分多条配置, 可留空"
+          },
+          "appid": {
+            "description": "AppID",
+            "type": "string",
+            "hint": "QQ 机器人后台 -> 开发设置 -> 机器人基本信息 中的 AppID"
+          },
+          "secret": {
+            "description": "ClientSecret (AppSecret)",
+            "type": "string",
+            "hint": "⚠️ 会明文保存, 请勿截图分享此页面"
+          },
+          "platform": {
+            "description": "平台类型",
+            "type": "string",
+            "options": ["qq_official", "qq_official_webhook"],
+            "default": "qq_official",
+            "hint": "默认 qq_official 即可"
+          }
+        }
+      }
+    }
+  },
+  "selected_commands": {
+    "description": "要在 QQ 指令面板展示的自定义指令条目",
+    "type": "template_list",
+    "default": [],
+    "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板, 不依赖 AstrBot 已注册的指令。最多 20 条, name 最长 14 字符, desc 最长 30 字符。",
+    "templates": {
+      "command": {
+        "name": "指令条目",
+        "display_item": "name",
+        "items": {
+          "name": {
+            "description": "指令名",
+            "type": "string",
+            "hint": "用户将在 QQ 面板里看到的指令名, 例如 /foo, 不带 / 也可"
+          },
+          "desc": {
+            "description": "指令描述",
+            "type": "string",
+            "hint": "最长 30 字符, 会显示在 QQ 面板上"
+          }
+        }
+      }
+    }
   },
   "auto_sync_on_config_change": {
     "description": "配置变更后自动同步",
     "type": "bool",
     "default": true,
-    "hint": "开启后，当配置变更时会自动把变更同步到 QQ 面板。"
+    "hint": "开启后, 当配置变更时会自动把变更同步到 QQ 面板。"
   }
 }

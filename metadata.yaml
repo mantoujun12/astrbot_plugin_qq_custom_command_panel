@@ -1,8 +1,8 @@
 name: astrbot_plugin_qq_custom_command_panel
 display_name: QQ 自定义指令面板
-desc: 将 AstrBot 已注册的指令同步到 QQ 官方机器人指令面板，用户在 QQ 输入 / 即可唤起面板快速调用 AstrBot 指令。支持 c2c、group、channel、dm 四种场景。
-short_desc: 帮助用户在 QQ 使用指令面板快速调用 AstrBot 的指令
-version: v0.1.0
+desc: 在 QQ 官方机器人指令面板里展示用户在 AstrBot WebUI 中自定义配置的指令条目。用户在 schema 的 selected_commands 字段里手动添加要展示的指令 (name + desc), 插件原样写入面板。支持 c2c、group、channel、dm 四种场景。
+short_desc: 用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容
+version: v0.2.0
 author: mantoujun12
 repo: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel
 support_platforms:
