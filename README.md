@@ -1,4 +1,4 @@
-# astrbot_plugin_qq_custom_command_panel
+![astrbot_plugin_qq_custom_command_panel](https://socialify.git.ci/mantoujun12/astrbot_plugin_qq_custom_command_panel/image?description=1&language=1&name=1&pattern=Circuit+Board&theme=Auto)
 
 QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配置要展示的指令条目, 插件会把它们写入 QQ 官方机器人的指令面板, 用户在 QQ 输入 `/` 即可看到面板内容。
 
