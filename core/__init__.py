@@ -1,14 +1,16 @@
 """初始化插件"""
 
-from .command_collector import collect_commands, filter_commands
+from .command_collector import collect_commands
 from .config import (
     DEFAULT_SCENES,
     PANEL_ITEM_DESC_MAX,
     PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
     SCENES,
+    get_configured_platforms,
     get_enabled_scenes,
     get_platforms_from_context,
+    get_platforms_from_schema,
     get_selected_commands,
 )
 from .panel_syncer import PanelSyncer
@@ -26,8 +28,9 @@ __all__ = [
     "PanelSyncer",
     "QQClient",
     "collect_commands",
-    "filter_commands",
+    "get_configured_platforms",
     "get_enabled_scenes",
     "get_platforms_from_context",
+    "get_platforms_from_schema",
     "get_selected_commands",
 ]
