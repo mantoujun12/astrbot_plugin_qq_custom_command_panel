@@ -4,7 +4,13 @@ desc: 在 QQ 官方机器人指令面板里展示用户在 AstrBot WebUI 中自�
 short_desc: 用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容
 version: v0.2.0
 author: mantoujun12
+social_link: https://github.com/mantoujun12
 repo: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel
 support_platforms:
   - qq_official
   - qq_official_webhook
+tags:
+  - QQ
+  - 机器人
+  - 自定义
+  - 指令面板
