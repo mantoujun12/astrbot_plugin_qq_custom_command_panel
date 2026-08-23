@@ -1,0 +1,22 @@
+{
+  "scenes": {
+    "description": "生效场景 (选择哪些场景下要显示 QQ 指令面板)",
+    "type": "list",
+    "options": ["c2c", "group", "channel", "dm"],
+    "default": ["c2c", "group"],
+    "hint": "c2c=单聊, group=群聊, channel=文字子频道, dm=频道私信。channel/dm 仅支持全局配置。"
+  },
+  "selected_commands": {
+    "description": "要同步到 QQ 面板的指令列表 (留空则同步全部已注册指令)",
+    "type": "list",
+    "options": [],
+    "default": [],
+    "hint": "最多 20 个指令。name 最长 14 字符，desc 最长 30 字符。"
+  },
+  "auto_sync_on_config_change": {
+    "description": "配置变更后自动同步",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，当配置变更时会自动把变更同步到 QQ 面板。"
+  }
+}
