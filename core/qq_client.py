@@ -24,6 +24,7 @@ class QQClient:
         secret: str,
         http: aiohttp.ClientSession,
         token_ttl: int = DEFAULT_TOKEN_TTL,
+        platform_label: str = "qq",
     ):
         self.appid = appid
         self.secret = secret
@@ -31,6 +32,8 @@ class QQClient:
         self._token: str | None = None
         self._token_expire_at: float = 0.0
         self._token_ttl = token_ttl
+        # 平台标签 (qq_official / qq_official_webhook), 仅用于日志和调试展示
+        self.platform_label = platform_label
 
     async def _ensure_token(self) -> str:
         """获取 / 刷新 access_token，带内存缓存。"""
@@ -67,6 +70,7 @@ class QQClient:
         method: str,
         path: str,
         json_body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """通用 QQ API 请求。"""
         token = await self._ensure_token()
@@ -75,7 +79,9 @@ class QQClient:
             "Content-Type": "application/json; charset=utf-8",
         }
         url = f"{QQ_API_BASE}{path}"
-        async with self._http.request(method, url, headers=headers, json=json_body) as resp:
+        async with self._http.request(
+            method, url, headers=headers, params=params, json=json_body
+        ) as resp:
             text = await resp.text()
             try:
                 data: dict[str, Any] = await resp.json()
@@ -89,11 +95,20 @@ class QQClient:
     # 指令面板 API 封装
     # ------------------------------------------------------------------
 
-    async def list_panels(self) -> list[dict[str, Any]]:
-        """查询指令面板列表。"""
-        data = await self.request("GET", "/v2/panels")
-        panels = data.get("panels", []) if isinstance(data, dict) else []
-        return list(panels)
+    async def list_panels(self, scope: str) -> list[dict[str, Any]]:
+        """查询指定场景的指令面板列表。
+
+        QQ API 要求 GET /v2/panels 必须带 scope 参数 (c2c/group/channel/dm),
+        否则会返回 40030011 生效场景不合法。
+        返回原始 records 列表 (每个元素带有 panel.scope 字段)。
+        """
+        data = await self.request("GET", "/v2/panels", params={"scope": scope})
+        records = data.get("records", []) if isinstance(data, dict) else []
+        # 把 scope 回填到每个 record 上, 调用方合并多场景时不用关心来源
+        for r in records:
+            if isinstance(r, dict) and "scope" not in r:
+                r["scope"] = scope
+        return list(records)
 
     async def create_panel(
         self,
