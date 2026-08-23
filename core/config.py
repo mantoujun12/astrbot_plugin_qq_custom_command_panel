@@ -105,6 +105,7 @@ def _parse_platform_entry(pf_meta: Any) -> dict[str, str] | None:
     secret = (
         pf_meta.get("secret")
         or pf_meta.get("client_secret")
+        or pf_meta.get("clientSecret")
         or pf_meta.get("app_secret")
         or pf_meta.get("token")
     )
