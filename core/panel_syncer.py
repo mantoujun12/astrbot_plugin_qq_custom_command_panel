@@ -91,20 +91,31 @@ class PanelSyncer:
             clients[pf_id] = client
         return clients
 
-    async def _list_all_panels(self, client: QQClient) -> list[dict[str, Any]]:
+    async def _list_all_panels(
+        self,
+        client: QQClient,
+    ) -> tuple[list[dict[str, Any]], set[str]]:
         """按所有支持场景逐个调用 list_panels 并合并结果。
 
         QQ API 要求 GET /v2/panels 必须传 scope, 所以需要循环请求一次。
-        任一场景失败不影响其他场景, 最后汇总。
+        任一场景失败不抛出, 但会记录到 failed_scopes 集合并 warning,
+        调用方据此判断返回的 panels 是否完整 — 否则缺失场景会被
+        sync_for_platform 误判为"无现有面板"而创建重复面板。
+
+        返回: (panels, failed_scopes)
+            panels         - 跨场景合并后的面板列表 (可能不完整)
+            failed_scopes  - 查询失败的场景集合; 为空表示清单完整
         """
         all_panels: list[dict[str, Any]] = []
+        failed_scopes: set[str] = set()
         for scope in SCENES:
             try:
                 panels = await client.list_panels(scope)
                 all_panels.extend(panels)
             except Exception as exc:
                 logger.warning(f"[qq-command-panel] 查询 {scope} 面板列表失败: {exc}")
-        return all_panels
+                failed_scopes.add(scope)
+        return all_panels, failed_scopes
 
     def _owned_panels_by_scope(
         self,
@@ -178,10 +189,14 @@ class PanelSyncer:
         platform = getattr(client, "platform_label", "qq")
         remark = f"{self.REMARK_PREFIX} {platform}/{pf_id}"
 
-        try:
-            all_existing = await self._list_all_panels(client)
-        except Exception as exc:
-            raise RuntimeError(f"查询面板列表失败: {exc}") from exc
+        all_existing, failed_scopes = await self._list_all_panels(client)
+        # 任一场景查询失败时清单不完整, 直接中止协调 — 否则缺失场景会被
+        # 误判为"无现有面板"而创建重复面板, 或跳过旧面板的清理。
+        if failed_scopes:
+            raise RuntimeError(
+                f"查询面板列表不完整, 失败场景: {sorted(failed_scopes)}; "
+                "已中止本次同步以避免重复创建, 请稍后重试 /qq_panel_resync"
+            )
 
         existing_by_scope = self._owned_panels_by_scope(all_existing)
 
@@ -236,15 +251,9 @@ class PanelSyncer:
         clients = self._build_clients()
         result: dict[str, dict[str, str]] = {}
         for pf_id, client in clients.items():
-            try:
-                all_panels = await self._list_all_panels(client)
-            except Exception as exc:
-                logger.error(
-                    f"[qq-command-panel] purge 准备阶段查询 {pf_id} 面板失败: {exc}",
-                    exc_info=True,
-                )
-                result[pf_id] = {"deleted": "?", "remaining": "?", "error": str(exc)}
-                continue
+            # purge 路径容忍部分场景失败: 即使查询不完整, 已拿到的面板
+            # 仍然可以删, 失败场景的面板留着等下次重试即可。
+            all_panels, _failed = await self._list_all_panels(client)
 
             deleted = 0
             for p in all_panels:
@@ -258,15 +267,9 @@ class PanelSyncer:
                 if ok:
                     deleted += 1
 
-            # 删除后复查剩余
-            remaining_count: Any = "?"
-            try:
-                remaining = await self._list_all_panels(client)
-                remaining_count = len(remaining)
-            except Exception as exc:
-                logger.warning(f"[qq-command-panel] purge 后复查 {pf_id} 面板数失败: {exc}")
-
-            result[pf_id] = {"deleted": str(deleted), "remaining": str(remaining_count)}
+            # 删除后复查剩余 (复查阶段同样容忍部分场景失败)
+            remaining_panels, _ = await self._list_all_panels(client)
+            result[pf_id] = {"deleted": str(deleted), "remaining": str(len(remaining_panels))}
 
         # 清空本地持久化的 panel_id 映射
         self._state.save({})
@@ -325,7 +328,9 @@ class PanelSyncer:
         client: QQClient,
     ) -> None:
         """删除该平台下本插件之前创建的所有面板 (用于指令清空时的清理)。"""
-        all_existing = await self._list_all_panels(client)
+        # clear 路径容忍部分场景失败: 删少了一些面板不影响最终一致性,
+        # 下次 sync 还会按 remark 重新识别并清理。
+        all_existing, _failed = await self._list_all_panels(client)
         for p in all_existing:
             if not self.is_owned_panel(p):
                 continue

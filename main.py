@@ -124,11 +124,16 @@ class QQCommandPanelPlugin(Star):
         for pf_id, client in clients.items():
             platform = getattr(client, "platform_label", "qq")
             try:
-                panels = await self._syncer._list_all_panels(client)
+                panels, failed_scopes = await self._syncer._list_all_panels(client)
             except Exception as exc:
                 lines.append(f"\n[{pf_id}] ({platform}) 拉取失败: {exc}")
                 continue
 
+            if failed_scopes:
+                lines.append(
+                    f"\n[{pf_id}] ({platform}) ⚠️ 清单不完整, "
+                    f"失败场景: {sorted(failed_scopes)}; 已展示可拿到的部分:"
+                )
             lines.append(f"\n[{pf_id}] ({platform}) 共 {len(panels)} 个面板:")
             if not panels:
                 lines.append("  <无>")
