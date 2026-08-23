@@ -38,9 +38,9 @@ class QQClient:
         if self._token and self._token_expire_at > now:
             return self._token
 
-        url = f"{QQ_API_BASE}/app/getAppAccessToken"
-        params = {"appId": self.appid, "clientSecret": self.secret}
-        async with self._http.get(url, params=params) as resp:
+        url = "https://bots.qq.com/app/getAppAccessToken"
+        json_body = {"appId": self.appid, "clientSecret": self.secret}
+        async with self._http.post(url, json=json_body) as resp:
             data = await resp.json()
         token = data.get("access_token")
         expires_in = int(data.get("expires_in", 7200))
