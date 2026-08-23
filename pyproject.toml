@@ -1,0 +1,27 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# AstrBot 插件运行时会把 panel_state.yaml 写到 data/,
+# 排除掉避免 ruff 去 lint 这个运行时生成的目录
+extend-exclude = ["data"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle
+# F: pyflakes
+# I: isort
+# UP: pyupgrade
+# B: flake8-bugbear
+# S: flake8-bandit (S110 = try-except-pass)
+select = ["E", "W", "F", "I", "UP", "B", "S"]
+
+# 插件代码中 catch Exception 是合理的 (第三方 API / 文件 IO 容错),
+# 在具体位置已用 logger 记录, 不需要逐条声明异常类型
+ignore = ["BLE001"]
+
+[tool.ruff.lint.per-file-ignores]
+# 入口与调试指令里需要在最外层兜底 exceptions, 集中提示用户即可
+"main.py" = ["BLE001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

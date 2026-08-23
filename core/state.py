@@ -61,8 +61,8 @@ class PanelStateStore:
             try:
                 if tmp_file.exists():
                     tmp_file.unlink()
-            except Exception:
-                pass
+            except Exception as cleanup_exc:
+                logger.debug(f"[qq-command-panel] 清理临时文件失败: {cleanup_exc}")
 
     def clear(self) -> None:
         """删除持久化文件。"""

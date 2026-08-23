@@ -17,8 +17,8 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from .core import (
     DEFAULT_SCENES,
     PANEL_ITEM_DESC_MAX,
-    PANEL_ITEM_MAX_ITEMS,
     PANEL_ITEM_NAME_MAX,
+    PANEL_MAX_ITEMS,
     SCENES,
     PanelSyncer,
     collect_commands,
@@ -53,8 +53,8 @@ class QQCommandPanelPlugin(Star):
             if callable(getter):
                 try:
                     return Path(getter())
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(f"[qq-command-panel] {attr}() 调用失败: {exc}")
             elif getter:
                 return Path(getter)
         # 最后兜底
@@ -105,8 +105,8 @@ class QQCommandPanelPlugin(Star):
         if not cmds:
             yield event.plain_result("未找到任何指令")
             return
-        lines = [f"已注册指令 (最多展示 {PANEL_ITEM_MAX_ITEMS} 个):"]
-        for c in cmds[:PANEL_ITEM_MAX_ITEMS]:
+        lines = [f"已注册指令 (最多展示 {PANEL_MAX_ITEMS} 个):"]
+        for c in cmds[:PANEL_MAX_ITEMS]:
             lines.append(f"- {c['name']}: {c['desc']}")
         yield event.plain_result("\n".join(lines))
 
@@ -115,8 +115,8 @@ class QQCommandPanelPlugin(Star):
 __all__ = [
     "DEFAULT_SCENES",
     "PANEL_ITEM_DESC_MAX",
-    "PANEL_ITEM_MAX_ITEMS",
     "PANEL_ITEM_NAME_MAX",
+    "PANEL_MAX_ITEMS",
     "SCENES",
     "QQCommandPanelPlugin",
 ]

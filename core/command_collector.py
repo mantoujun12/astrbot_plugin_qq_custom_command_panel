@@ -7,7 +7,7 @@ from typing import Any
 from astrbot.api import logger
 from astrbot.core.star.star_handler import star_handlers_registry
 
-from .config import PANEL_ITEM_DESC_MAX, PANEL_ITEM_MAX_ITEMS, PANEL_ITEM_NAME_MAX
+from .config import PANEL_ITEM_DESC_MAX, PANEL_ITEM_NAME_MAX, PANEL_MAX_ITEMS
 
 
 def _extract_cmd_name(handler: Any) -> str | None:
@@ -80,16 +80,14 @@ def filter_commands(
         wanted = set(selected)
         wanted_no_slash = {s.lstrip("/") for s in wanted}
         filtered = [
-            c
-            for c in all_cmds
-            if c["name"] in wanted or c["name"].lstrip("/") in wanted_no_slash
+            c for c in all_cmds if c["name"] in wanted or c["name"].lstrip("/") in wanted_no_slash
         ]
     else:
         filtered = list(all_cmds)
 
     # 截断字段以满足 API 限制
     result = []
-    for c in filtered[:PANEL_ITEM_MAX_ITEMS]:
+    for c in filtered[:PANEL_MAX_ITEMS]:
         result.append(
             {
                 "name": c["name"][:PANEL_ITEM_NAME_MAX],

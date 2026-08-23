@@ -40,11 +40,23 @@ class QQClient:
 
         url = "https://bots.qq.com/app/getAppAccessToken"
         json_body = {"appId": self.appid, "clientSecret": self.secret}
-        async with self._http.post(url, json=json_body) as resp:
-            data = await resp.json()
+        try:
+            async with self._http.post(url, json=json_body) as resp:
+                if resp.status >= 400:
+                    text = await resp.text()
+                    raise RuntimeError(f"获取 access_token HTTP {resp.status}: {text}")
+                data = await resp.json()
+        except Exception:
+            # 拉取失败时清掉旧 token, 下次重新尝试
+            self._token = None
+            self._token_expire_at = 0.0
+            raise
+
         token = data.get("access_token")
         expires_in = int(data.get("expires_in", 7200))
         if not token:
+            self._token = None
+            self._token_expire_at = 0.0
             raise RuntimeError(f"获取 access_token 失败: {data}")
         self._token = token
         self._token_expire_at = now + expires_in - self._token_ttl
