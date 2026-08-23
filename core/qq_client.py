@@ -16,7 +16,7 @@ DEFAULT_TOKEN_TTL = 600  # 提前 10 分钟刷新
 
 
 class QQClient:
-    """QQ 官方机器人 API 异步客户端。"""
+    """QQ 官方机器人 API 异步客户端"""
 
     def __init__(
         self,
@@ -36,7 +36,7 @@ class QQClient:
         self.platform_label = platform_label
 
     async def _ensure_token(self) -> str:
-        """获取 / 刷新 access_token，带内存缓存。"""
+        """获取 / 刷新 access_token, 带内存缓存"""
         now = time.time()
         if self._token and self._token_expire_at > now:
             return self._token
@@ -72,7 +72,7 @@ class QQClient:
         json_body: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """通用 QQ API 请求。"""
+        """通用 QQ API 请求"""
         token = await self._ensure_token()
         headers = {
             "Authorization": f"QQBot {token}",
@@ -96,7 +96,7 @@ class QQClient:
     # ------------------------------------------------------------------
 
     async def list_panels(self, scope: str) -> list[dict[str, Any]]:
-        """查询指定场景的指令面板列表。
+        """查询指定场景的指令面板列表
 
         QQ API 要求 GET /v2/panels 必须带 scope 参数 (c2c/group/channel/dm),
         否则会返回 40030011 生效场景不合法。
@@ -118,7 +118,7 @@ class QQClient:
         target_openids: list[str] | None = None,
         remark: str = "",
     ) -> str:
-        """创建指令面板，返回 panel_id。"""
+        """创建指令面板，返回 panel_id"""
         body: dict[str, Any] = {
             "scope": scope,
             "target_type": target_type,
@@ -144,7 +144,7 @@ class QQClient:
         items: list[dict[str, Any]],
         remark: str = "",
     ) -> None:
-        """修改指令面板内容。"""
+        """修改指令面板内容"""
         body = {
             "panel": {
                 "items": items,
@@ -154,7 +154,7 @@ class QQClient:
         await self.request("PUT", f"/v2/panels/{panel_id}", json_body=body)
 
     async def delete_panel(self, panel_id: str) -> None:
-        """删除指令面板。"""
+        """删除指令面板"""
         await self.request("DELETE", f"/v2/panels/{panel_id}")
 
 
