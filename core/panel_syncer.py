@@ -45,8 +45,6 @@ class PanelSyncer:
         # 不要和 .astrbot-plugin/i18n/ (WebUI 专用, 嵌套结构) 混淆。
         locales_dir = Path(__file__).resolve().parent / "i18n"
         language = (self._config or {}).get("language", DEFAULT_LANGUAGE)
-        if not isinstance(language, str):
-            language = DEFAULT_LANGUAGE
         self.translator: Translator = initialize(locales_dir, language)
 
     @staticmethod

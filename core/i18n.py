@@ -52,7 +52,13 @@ class Translator:
         return self._language
 
     def set_language(self, language: str | None) -> None:
-        """切换语言, 未识别时回退到 DEFAULT_LANGUAGE 并记录 warning"""
+        """切换语言, 未识别时回退到 DEFAULT_LANGUAGE 并记录 warning
+
+        非字符串配置值 (真值数字/列表等) 直接回退到默认语言,
+        避免 set_config / _apply_language 等所有入口对配置值 .strip() 抛异常。
+        """
+        if not isinstance(language, str):
+            language = DEFAULT_LANGUAGE
         target = (language or DEFAULT_LANGUAGE).strip()
         if target not in SUPPORTED_LANGUAGES:
             logger.warning(

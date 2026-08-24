@@ -325,6 +325,7 @@ class QQCommandPanelPlugin(Star):
 
         用来确认 AstrBot 是不是真的用了新版本的代码。
         """
+        self._apply_language()
         import inspect
         import os
         import time
