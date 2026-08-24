@@ -107,7 +107,7 @@ class QQCommandPanelPlugin(Star):
 
     @filter.command("qq_panel_fetch")
     async def fetch_panels(self, event: AstrMessageEvent):
-        """拉取所有 QQ 平台上已注册的指令面板 (调试用)"""
+        """拉取所有 QQ 平台上已注册的指令面板"""
         if not self._syncer:
             yield event.plain_result("插件尚未初始化完成，请稍后再试")
             return
@@ -165,7 +165,7 @@ class QQCommandPanelPlugin(Star):
 
     @filter.command("qq_panel_purge")
     async def purge_panels(self, event: AstrMessageEvent):
-        """删除所有 QQ 平台上**全部**指令面板 (调试用)
+        """删除所有 QQ 平台上全部指令面板
 
         因为同一 appid 不会有其他插件共用 /v2/panels, 所以不按 remark 过滤,
         直接清空该 appid 下所有面板, 然后清空本地状态。
@@ -197,7 +197,7 @@ class QQCommandPanelPlugin(Star):
 
     @filter.command("qq_panel_list")
     async def list_cmds(self, event: AstrMessageEvent):
-        """列出当前 AstrBot 已注册的指令 (调试用)
+        """列出当前 AstrBot 已注册的指令
 
         该指令仅用于辅助用户填 schema 的 selected_commands,
         不会把列出的指令写入 QQ 面板。面板内容由用户在 schema 中自定义。
@@ -215,7 +215,7 @@ class QQCommandPanelPlugin(Star):
 
     @filter.command("qq_panel_platforms")
     async def debug_platforms(self, event: AstrMessageEvent):
-        """调试: 打印插件识别到的 QQ 平台配置
+        """打印插件识别到的 QQ 平台配置
 
         同时展示 schema (qq_platforms) 和 context 两种来源,
         用来排查 appid / secret 的识别问题。
@@ -251,7 +251,7 @@ class QQCommandPanelPlugin(Star):
 
     @filter.command("qq_panel_reload_check")
     async def debug_reload_check(self, event: AstrMessageEvent):
-        """调试: 打印当前加载的代码路径和文件修改时间
+        """打印当前加载的代码路径和文件修改时间
 
         用来确认 AstrBot 是不是真的用了新版本的代码。
         """
