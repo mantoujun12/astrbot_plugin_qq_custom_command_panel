@@ -11,6 +11,8 @@ from typing import Any
 
 import aiohttp
 
+from .i18n import t
+
 QQ_API_BASE = "https://api.bot.qq.com"
 DEFAULT_TOKEN_TTL = 600  # 提前 10 分钟刷新
 
@@ -47,7 +49,7 @@ class QQClient:
             async with self._http.post(url, json=json_body) as resp:
                 if resp.status >= 400:
                     text = await resp.text()
-                    raise RuntimeError(f"获取 access_token HTTP {resp.status}: {text}")
+                    raise RuntimeError(t("qq.get_token_http_error", status=resp.status, text=text))
                 data = await resp.json()
         except Exception:
             # 拉取失败时清掉旧 token, 下次重新尝试
@@ -60,7 +62,7 @@ class QQClient:
         if not token:
             self._token = None
             self._token_expire_at = 0.0
-            raise RuntimeError(f"获取 access_token 失败: {data}")
+            raise RuntimeError(t("qq.get_token_failed", data=data))
         self._token = token
         self._token_expire_at = now + expires_in - self._token_ttl
         return token
@@ -88,7 +90,15 @@ class QQClient:
             except Exception:
                 data = {"raw": text}
             if resp.status >= 400:
-                raise RuntimeError(f"QQ API {method} {path} 失败 [{resp.status}]: {data}")
+                raise RuntimeError(
+                    t(
+                        "qq.api_failed",
+                        method=method,
+                        path=path,
+                        status=resp.status,
+                        data=data,
+                    )
+                )
             return data
 
     # ------------------------------------------------------------------
@@ -135,7 +145,7 @@ class QQClient:
         data = await self.request("POST", "/v2/panels", json_body=body)
         panel_id = data.get("panel_id") if isinstance(data, dict) else None
         if not panel_id:
-            raise RuntimeError(f"创建面板失败，未返回 panel_id: {data}")
+            raise RuntimeError(t("qq.create_panel_no_id", data=data))
         return str(panel_id)
 
     async def update_panel(

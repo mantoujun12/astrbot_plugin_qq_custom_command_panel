@@ -18,6 +18,8 @@ from pathlib import Path
 import yaml
 from astrbot.api import logger
 
+from .i18n import LOG_TAG, t
+
 STATE_FILENAME = "panel_state.yaml"
 
 
@@ -45,7 +47,7 @@ class PanelStateStore:
                     normalized[str(k)] = {str(sk): str(sv) for sk, sv in v.items() if sv}
             return normalized
         except Exception as exc:
-            logger.warning(f"[qq-command-panel] 读取面板状态失败: {exc}")
+            logger.warning(f"{LOG_TAG} {t('log.load_state_failed', exc=exc)}")
             return {}
 
     def save(self, state: dict[str, dict[str, str]]) -> None:
@@ -56,13 +58,13 @@ class PanelStateStore:
                 yaml.safe_dump(state, f, allow_unicode=True, sort_keys=False)
             tmp_file.replace(self.state_file)
         except Exception as exc:
-            logger.error(f"[qq-command-panel] 保存面板状态失败: {exc}")
+            logger.error(f"{LOG_TAG} {t('log.save_state_failed', exc=exc)}")
             # 清理临时文件
             try:
                 if tmp_file.exists():
                     tmp_file.unlink()
             except Exception as cleanup_exc:
-                logger.debug(f"[qq-command-panel] 清理临时文件失败: {cleanup_exc}")
+                logger.debug(f"{LOG_TAG} {t('log.cleanup_tmp_failed', exc=cleanup_exc)}")
 
     def clear(self) -> None:
         """删除持久化文件"""
@@ -70,7 +72,7 @@ class PanelStateStore:
             if self.state_file.exists():
                 self.state_file.unlink()
         except Exception as exc:
-            logger.warning(f"[qq-command-panel] 清理面板状态失败: {exc}")
+            logger.warning(f"{LOG_TAG} {t('log.clear_state_failed', exc=exc)}")
 
 
 __all__ = ["STATE_FILENAME", "PanelStateStore"]
