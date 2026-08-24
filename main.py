@@ -27,7 +27,7 @@ from .core import (
     get_platforms_from_context,
     get_platforms_from_schema,
 )
-from .core.i18n import LOG_TAG, t
+from .core.i18n import LOG_TAG, get_instance, t
 
 
 @register(
@@ -105,6 +105,19 @@ class QQCommandPanelPlugin(Star):
             return None
         self._syncer.set_config(dict(self.config))
         return self._syncer
+
+    def _apply_language(self) -> None:
+        """把当前配置里的 language 显式应用到全局翻译器
+
+        `t()` 读取的是 core.i18n 的模块级单例, 这里主动同步一次配置语言,
+        保证即使 syncer 尚未初始化, 只读指令也能在运行时修改 language
+        后立即用新语言回复, 而不是沿用上一次的全局翻译器语言。
+        """
+        try:
+            language = dict(self.config).get("language")
+        except Exception:
+            language = None
+        get_instance().set_language(language)
 
     # ------------------------------------------------------------------
     # 调试指令
@@ -246,6 +259,7 @@ class QQCommandPanelPlugin(Star):
         该指令仅用于辅助用户填 schema 的 selected_commands,
         不会把列出的指令写入 QQ 面板。面板内容由用户在 schema 中自定义。
         """
+        self._apply_language()
         cmds = collect_commands()
         if not cmds:
             yield event.plain_result(t("cmd.list_no_commands"))
