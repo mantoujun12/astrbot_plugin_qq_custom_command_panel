@@ -41,8 +41,9 @@ class PanelSyncer:
         # 引用一份当前插件配置；plugin 实例可在运行期通过 set_config 刷新
         self._config: dict[str, Any] = config or {}
 
-        # 初始化 i18n 单例
-        locales_dir = Path(__file__).resolve().parent.parent / "locales"
+        # 初始化 i18n 单例 (运行时翻译数据放在 core/i18n/,
+        # 不要和 .astrbot-plugin/i18n/ (WebUI 专用, 嵌套结构) 混淆。
+        locales_dir = Path(__file__).resolve().parent / "i18n"
         language = (self._config or {}).get("language", DEFAULT_LANGUAGE)
         self.translator: Translator = initialize(locales_dir, language)
 

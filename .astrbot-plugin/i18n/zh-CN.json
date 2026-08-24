@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "display_name": "QQ 自定义指令面板",
+    "short_desc": "用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容",
+    "desc": "在 QQ 官方机器人指令面板里展示用户在 AstrBot WebUI 中自定义配置的指令条目。用户添加要展示的指令，插件原样写入面板。支持私聊、群聊、子频道、频道私信四种场景。"
+  },
+  "config": {
+    "language": {
+      "description": "插件日志与调试指令输出语言",
+      "hint": "zh-CN=简体中文, en-US=English。影响 logger 输出以及 /qq_panel_* 系列指令的回复内容, 不影响 selected_commands 用户自定义条目。",
+      "labels": ["简体中文", "English"]
+    },
+    "scenes": {
+      "description": "生效场景 (选择哪些场景下要显示 QQ 指令面板)",
+      "hint": "c2c=单聊, group=群聊, channel=文字子频道, dm=频道私信。channel/dm 仅支持全局配置。",
+      "labels": ["单聊", "群聊", "文字子频道", "频道私信"]
+    },
+    "qq_platforms": {
+      "description": "QQ 官方机器人平台凭证",
+      "hint": "直接填写 appid + clientSecret 后即可同步指令面板，不依赖 AstrBot 后台是否配置了 qq_official 适配器。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
+      "templates": {
+        "qq_platform": {
+          "name": "QQ 机器人",
+          "items": {
+            "name": {
+              "description": "备注名 (可选)",
+              "hint": "仅用于在面板里区分多条配置, 可留空"
+            },
+            "appid": {
+              "description": "AppID",
+              "hint": "QQ 机器人后台 -> 开发设置 -> 机器人基本信息 中的 AppID"
+            },
+            "secret": {
+              "description": "ClientSecret (AppSecret)",
+              "hint": "⚠️ 会明文保存, 请勿截图分享此页面"
+            },
+            "platform": {
+              "description": "平台类型",
+              "hint": "默认 qq_official 即可",
+              "labels": ["QQ 官方机器人", "QQ 官方机器人 Webhook"]
+            }
+          }
+        }
+      }
+    },
+    "selected_commands": {
+      "description": "要在 QQ 指令面板展示的自定义指令条目",
+      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板, 不依赖 AstrBot 已注册的指令。最多 20 条, name 最长 14 字符, desc 最长 30 字符。",
+      "templates": {
+        "command": {
+          "name": "指令条目",
+          "items": {
+            "name": {
+              "description": "指令名",
+              "hint": "用户将在 QQ 面板里看到的指令名, 例如 /foo, 不带 / 也可"
+            },
+            "desc": {
+              "description": "指令描述",
+              "hint": "最长 30 字符, 会显示在 QQ 面板上"
+            }
+          }
+        }
+      }
+    },
+    "auto_sync_on_config_change": {
+      "description": "配置变更后自动同步",
+      "hint": "开启后, 当配置变更时会自动把变更同步到 QQ 面板。"
+    }
+  }
+}

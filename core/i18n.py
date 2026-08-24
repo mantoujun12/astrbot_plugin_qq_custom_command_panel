@@ -1,7 +1,13 @@
 """轻量级国际化 (i18n) 支持
 
-零第三方依赖: 直接加载 locales 目录下 JSON 文件,
+零第三方依赖: 加载 `core/i18n/<lang>.json` 扁平翻译表,
 提供模块级单例 `translator` + 便捷函数 `t`。
+
+注意: 本模块处理的是运行时日志 / 指令回复文案, 与 AstrBot WebUI
+专用的 `.astrbot-plugin/i18n/*.json` (嵌套 metadata/config 结构)
+是两条独立的 i18n 管线, 不要混用:
+  - core/i18n/*.json         → 运行时 flat key → 本模块 Translator 读取
+  - .astrbot-plugin/i18n/*.json → WebUI 展示 metadata/config → AstrBot 读取
 """
 
 from __future__ import annotations
@@ -130,7 +136,7 @@ def get_instance() -> Translator:
     """
     global _instance
     if _instance is None:
-        default_dir = Path(__file__).resolve().parent.parent / "locales"
+        default_dir = Path(__file__).resolve().parent / "i18n"
         _instance = Translator(default_dir, DEFAULT_LANGUAGE)
     return _instance
 
