@@ -27,13 +27,14 @@ from .core import (
     get_platforms_from_context,
     get_platforms_from_schema,
 )
+from .core.i18n import LOG_TAG, get_instance, t
 
 
 @register(
     "astrbot_plugin_qq_custom_command_panel",
     "mantoujun12",
     "用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容",
-    "v0.2.0",
+    "v0.2.2",
     "https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel",
 )
 class QQCommandPanelPlugin(Star):
@@ -57,7 +58,7 @@ class QQCommandPanelPlugin(Star):
                 try:
                     return Path(getter())
                 except Exception as exc:
-                    logger.debug(f"[qq-command-panel] {attr}() 调用失败: {exc}")
+                    logger.debug(f"{LOG_TAG} {t('log.attr_call_failed', attr=attr, exc=exc)}")
             elif getter:
                 return Path(getter)
         return Path("data")
@@ -74,12 +75,18 @@ class QQCommandPanelPlugin(Star):
         try:
             handlers_count = len(list(star_handlers_registry))
         except Exception as exc:
-            handlers_count = f"<无法读取: {exc}>"
-        logger.info(f"[qq-command-panel] initialize: star_handlers_registry 长度={handlers_count}")
+            handlers_count = t(
+                "label.unavailable_with_reason",
+                reason=str(exc),
+            )
+        logger.info(f"{LOG_TAG} " + t("log.initialize_handlers_count", count=handlers_count))
         try:
             await self._syncer.sync_all()
         except Exception as exc:
-            logger.error(f"[qq-command-panel] 启动同步失败: {exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} {t('log.startup_sync_failed', exc=exc)}",
+                exc_info=True,
+            )
 
     async def terminate(self) -> None:
         """插件销毁：关闭 HTTP 会话"""
@@ -89,34 +96,56 @@ class QQCommandPanelPlugin(Star):
         self._syncer = None
 
     # ------------------------------------------------------------------
+    # 便捷 helper：避免每个指令里重复写 early-out
+    # ------------------------------------------------------------------
+
+    def _ready_syncer(self) -> PanelSyncer | None:
+        """刷新配置并返回 syncer，未就绪返回 None"""
+        if not self._syncer:
+            return None
+        self._syncer.set_config(dict(self.config))
+        return self._syncer
+
+    def _apply_language(self) -> None:
+        """把当前配置里的 language 显式应用到全局翻译器
+
+        `t()` 读取的是 core.i18n 的模块级单例, 这里主动同步一次配置语言,
+        保证即使 syncer 尚未初始化, 只读指令也能在运行时修改 language
+        后立即用新语言回复, 而不是沿用上一次的全局翻译器语言。
+        """
+        try:
+            language = dict(self.config).get("language")
+        except Exception:
+            language = None
+        get_instance().set_language(language)
+
+    # ------------------------------------------------------------------
     # 调试指令
     # ------------------------------------------------------------------
 
     @filter.command("qq_panel_resync")
     async def resync(self, event: AstrMessageEvent):
         """手动触发面板同步"""
-        if not self._syncer:
-            yield event.plain_result("插件尚未初始化完成，请稍后再试")
+        syncer = self._ready_syncer()
+        if not syncer:
+            yield event.plain_result(t("cmd.plugin_not_initialized"))
             return
-        self._syncer.set_config(dict(self.config))
         try:
-            await self._syncer.sync_all()
-            yield event.plain_result("✅ QQ 指令面板同步完成")
+            await syncer.sync_all()
+            yield event.plain_result(t("cmd.resync_success"))
         except Exception as exc:
-            yield event.plain_result(f"❌ 同步失败: {exc}")
+            yield event.plain_result(t("cmd.sync_failed", exc=exc))
 
     @filter.command("qq_panel_fetch")
     async def fetch_panels(self, event: AstrMessageEvent):
         """拉取所有 QQ 平台上已注册的指令面板"""
-        if not self._syncer:
-            yield event.plain_result("插件尚未初始化完成，请稍后再试")
+        syncer = self._ready_syncer()
+        if not syncer:
+            yield event.plain_result(t("cmd.plugin_not_initialized"))
             return
-        self._syncer.set_config(dict(self.config))
-        clients = self._syncer._build_clients()
+        clients = syncer._build_clients()
         if not clients:
-            yield event.plain_result(
-                "未识别到任何 QQ 平台 (请检查 schema qq_platforms 或 context 平台配置)"
-            )
+            yield event.plain_result(t("cmd.no_platform_detected"))
             return
 
         lines: list[str] = []
@@ -124,19 +153,40 @@ class QQCommandPanelPlugin(Star):
         for pf_id, client in clients.items():
             platform = getattr(client, "platform_label", "qq")
             try:
-                panels, failed_scopes = await self._syncer._list_all_panels(client)
+                panels, failed_scopes = await syncer._list_all_panels(client)
             except Exception as exc:
-                lines.append(f"\n[{pf_id}] ({platform}) 拉取失败: {exc}")
+                lines.append(
+                    "\n"
+                    + t(
+                        "cmd.fetch_platform_failed",
+                        pf_id=pf_id,
+                        platform=platform,
+                        exc=exc,
+                    )
+                )
                 continue
 
             if failed_scopes:
                 lines.append(
-                    f"\n[{pf_id}] ({platform}) ⚠️ 清单不完整, "
-                    f"失败场景: {sorted(failed_scopes)}; 已展示可拿到的部分:"
+                    "\n"
+                    + t(
+                        "cmd.fetch_incomplete_warning",
+                        pf_id=pf_id,
+                        platform=platform,
+                        scopes=sorted(failed_scopes),
+                    )
                 )
-            lines.append(f"\n[{pf_id}] ({platform}) 共 {len(panels)} 个面板:")
+            lines.append(
+                "\n"
+                + t(
+                    "cmd.fetch_platform_summary",
+                    pf_id=pf_id,
+                    platform=platform,
+                    count=len(panels),
+                )
+            )
             if not panels:
-                lines.append("  <无>")
+                lines.append(f"  {t('label.unavailable')}")
                 continue
             for p in panels:
                 panel_id = p.get("panel_id", "?")
@@ -145,11 +195,11 @@ class QQCommandPanelPlugin(Star):
                 if not isinstance(panel_content, dict):
                     panel_content = p
                 owned = PanelSyncer.is_owned_panel(p)
-                tag = "🟢 本插件" if owned else "⚪ 其他"
+                tag = f"🟢 {t('label.plugin_owned')}" if owned else f"⚪ {t('label.other')}"
                 items = panel_content.get("items", []) or []
                 if isinstance(items, list):
                     total += len(items)
-                    items_count = len(items)
+                    items_count: str | int = len(items)
                 else:
                     items_count = "?"
                 lines.append(f"  - panel_id={panel_id} scope={scope} {tag} items={items_count}")
@@ -159,8 +209,11 @@ class QQCommandPanelPlugin(Star):
                             continue
                         lines.append(f"      • {it.get('name', '?')}: {it.get('desc', '')}")
                     if len(items) > 5:
-                        lines.append(f"      • ... 共 {len(items)} 条")
-        lines.insert(0, f"全平台汇总: 共 {len(clients)} 个平台, {total} 条指令条目")
+                        lines.append(t("cmd.fetch_truncated_items", count=len(items)))
+        lines.insert(
+            0,
+            t("cmd.fetch_total_summary", platforms=len(clients), items=total),
+        )
         yield event.plain_result("\n".join(lines))
 
     @filter.command("qq_panel_purge")
@@ -170,28 +223,32 @@ class QQCommandPanelPlugin(Star):
         因为同一 appid 不会有其他插件共用 /v2/panels, 所以不按 remark 过滤,
         直接清空该 appid 下所有面板, 然后清空本地状态。
         """
-        if not self._syncer:
-            yield event.plain_result("插件尚未初始化完成，请稍后再试")
+        syncer = self._ready_syncer()
+        if not syncer:
+            yield event.plain_result(t("cmd.plugin_not_initialized"))
             return
-        self._syncer.set_config(dict(self.config))
 
         try:
-            result = await self._syncer.purge_all()
+            result = await syncer.purge_all()
         except Exception as exc:
-            yield event.plain_result(f"❌ purge 失败: {exc}")
+            yield event.plain_result(t("cmd.purge_failed", exc=exc))
             return
 
-        lines = ["🧹 清理完成"]
+        lines = [t("cmd.purge_done")]
         if not result:
-            lines.append("未识别到任何 QQ 平台 (请检查 schema qq_platforms 或 context 平台配置)")
+            lines.append(t("cmd.no_platform_detected"))
         for pf_id, info in result.items():
             err = info.get("error")
             if err:
-                lines.append(f"- [{pf_id}] 失败: {err}")
+                lines.append(t("cmd.purge_platform_failed", pf_id=pf_id, err=err))
             else:
                 lines.append(
-                    f"- [{pf_id}] 删除 {info.get('deleted', '?')} 个, "
-                    f"剩余 {info.get('remaining', '?')} 个"
+                    t(
+                        "cmd.purge_platform_report",
+                        pf_id=pf_id,
+                        deleted=info.get("deleted", "?"),
+                        remaining=info.get("remaining", "?"),
+                    )
                 )
         yield event.plain_result("\n".join(lines))
 
@@ -202,15 +259,16 @@ class QQCommandPanelPlugin(Star):
         该指令仅用于辅助用户填 schema 的 selected_commands,
         不会把列出的指令写入 QQ 面板。面板内容由用户在 schema 中自定义。
         """
+        self._apply_language()
         cmds = collect_commands()
         if not cmds:
-            yield event.plain_result("未找到任何指令")
+            yield event.plain_result(t("cmd.list_no_commands"))
             return
-        lines = [f"已注册指令 (最多展示 {PANEL_MAX_ITEMS} 个):"]
+        lines = [t("cmd.list_header", limit=PANEL_MAX_ITEMS)]
         for c in cmds[:PANEL_MAX_ITEMS]:
             lines.append(f"- {c['name']}: {c['desc']}")
         lines.append("")
-        lines.append("提示: 该列表仅作参考, 面板内容由 schema 的 selected_commands 配置决定。")
+        lines.append(t("cmd.list_hint"))
         yield event.plain_result("\n".join(lines))
 
     @filter.command("qq_panel_platforms")
@@ -220,31 +278,43 @@ class QQCommandPanelPlugin(Star):
         同时展示 schema (qq_platforms) 和 context 两种来源,
         用来排查 appid / secret 的识别问题。
         """
+        syncer = self._ready_syncer()
+        if not syncer:
+            yield event.plain_result(t("cmd.plugin_not_initialized"))
+            return
         from_schema = get_platforms_from_schema(dict(self.config))
         from_context = get_platforms_from_context(self.context)
         active, source = get_configured_platforms(dict(self.config), self.context)
 
         def _fmt(platforms: dict) -> list[str]:
             if not platforms:
-                return ["  <无>"]
+                return [f"  {t('label.unavailable')}"]
             out = []
             for pf_id, info in platforms.items():
                 appid = info.get("appid", "")
                 masked = appid[:4] + "***" + appid[-4:] if len(appid) > 8 else "***"
+                secret_label = (
+                    t("label.secret_set") if info.get("secret") else t("label.secret_empty")
+                )
                 out.append(
-                    f"  - pf_id={pf_id}, platform={info.get('platform')}, "
-                    f"appid={masked}, secret={'<set>' if info.get('secret') else '<empty>'}"
+                    t(
+                        "cmd.platforms_entry_line",
+                        pf_id=pf_id,
+                        platform=info.get("platform"),
+                        appid=masked,
+                        secret=secret_label,
+                    )
                 )
             return out
 
         lines = [
-            f"生效来源: {source}",
-            f"生效平台数: {len(active)}",
+            t("cmd.platforms_active_source", source=source),
+            t("cmd.platforms_active_count", count=len(active)),
             "",
-            f"[schema] qq_platforms ({len(from_schema)}):",
+            t("cmd.platforms_schema_header", count=len(from_schema)),
             *_fmt(from_schema),
             "",
-            f"[context] platform_settings ({len(from_context)}):",
+            t("cmd.platforms_context_header", count=len(from_context)),
             *_fmt(from_context),
         ]
         yield event.plain_result("\n".join(lines))
@@ -255,6 +325,7 @@ class QQCommandPanelPlugin(Star):
 
         用来确认 AstrBot 是不是真的用了新版本的代码。
         """
+        self._apply_language()
         import inspect
         import os
         import time
@@ -262,19 +333,24 @@ class QQCommandPanelPlugin(Star):
         try:
             file_path = inspect.getfile(type(self))
         except Exception as exc:
-            file_path = f"<无法获取: {exc}>"
+            file_path = t("label.unavailable_with_reason", reason=str(exc))
 
         try:
             mtime = os.path.getmtime(file_path)
             mtime_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
         except Exception as exc:
-            mtime_str = f"<无法获取: {exc}>"
+            mtime_str = t("label.unavailable_with_reason", reason=str(exc))
 
-        yield event.plain_result(
-            f"当前类: {type(self).__module__}.{type(self).__name__}\n"
-            f"文件路径: {file_path}\n"
-            f"文件修改时间: {mtime_str}"
-        )
+        lines = [
+            t(
+                "cmd.reload_current_class_line",
+                module=type(self).__module__,
+                cls=type(self).__name__,
+            ),
+            t("cmd.reload_file_path_line", path=file_path),
+            t("cmd.reload_mtime_line", mtime=mtime_str),
+        ]
+        yield event.plain_result("\n".join(lines))
 
 
 __all__ = [

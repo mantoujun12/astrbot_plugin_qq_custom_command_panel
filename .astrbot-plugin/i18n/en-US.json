@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "display_name": "QQ Custom Command Panel",
+    "short_desc": "Customize QQ Official bot command panel content via AstrBot WebUI",
+    "desc": "Displays user-customized command entries in the QQ Official bot command panel. Users add the commands they want to show, the plugin writes them verbatim to the panel. Supports 4 scenes: private chat, group chat, text channel, channel DM."
+  },
+  "config": {
+    "language": {
+      "description": "Language for plugin logs and debug command output",
+      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output and /qq_panel_* replies; user-authored selected_commands entries are NOT translated.",
+      "labels": ["简体中文", "English"]
+    },
+    "scenes": {
+      "description": "Active scenes (where QQ command panel is visible)",
+      "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration.",
+      "labels": ["Private chat", "Group chat", "Text channel", "Channel DM"]
+    },
+    "qq_platforms": {
+      "description": "QQ Official bot platform credentials",
+      "hint": "Fill in appid + clientSecret to sync command panels directly, independent of whether qq_official adapter is configured in AstrBot dashboard. Add multiple entries for multiple bots. ⚠️ secret is saved in plain text, DO NOT screenshot share.",
+      "templates": {
+        "qq_platform": {
+          "name": "QQ Bot",
+          "items": {
+            "name": {
+              "description": "Label (optional)",
+              "hint": "Used only to distinguish entries in the panel, can be left empty"
+            },
+            "appid": {
+              "description": "AppID",
+              "hint": "AppID in QQ Bot Dashboard -> Development Settings -> Bot Basic Info"
+            },
+            "secret": {
+              "description": "ClientSecret (AppSecret)",
+              "hint": "⚠️ Saved in plain text, DO NOT screenshot share this page"
+            },
+            "platform": {
+              "description": "Platform type",
+              "hint": "Default qq_official works for most cases",
+              "labels": ["QQ Official Bot", "QQ Official Bot Webhook"]
+            }
+          }
+        }
+      }
+    },
+    "selected_commands": {
+      "description": "Custom command entries to show in the QQ command panel",
+      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars.",
+      "templates": {
+        "command": {
+          "name": "Command entry",
+          "items": {
+            "name": {
+              "description": "Command name",
+              "hint": "The name users see in the QQ panel, e.g. /foo; leading / is optional"
+            },
+            "desc": {
+              "description": "Command description",
+              "hint": "Max 30 chars, displayed in the QQ panel"
+            }
+          }
+        }
+      }
+    },
+    "auto_sync_on_config_change": {
+      "description": "Auto-sync when config changes",
+      "hint": "When enabled, config updates are auto-synced to the QQ command panel."
+    }
+  }
+}

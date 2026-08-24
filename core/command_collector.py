@@ -15,6 +15,7 @@ from astrbot.api import logger
 from astrbot.core.star.star_handler import star_handlers_registry
 
 from .config import PANEL_ITEM_DESC_MAX
+from .i18n import LOG_TAG, t
 
 # 导入指令过滤器类型, 用来在 event_filters 里识别真正的指令
 try:
@@ -59,7 +60,7 @@ def _extract_desc(handler: Any) -> str:
         first_line = doc.strip().split("\n", 1)[0].strip()
         if first_line:
             return first_line
-    return "AstrBot 指令"
+    return t("fallback.command_desc_default")
 
 
 def collect_commands() -> list[dict[str, str]]:
@@ -72,7 +73,7 @@ def collect_commands() -> list[dict[str, str]]:
     try:
         handlers_iter = list(star_handlers_registry)
     except Exception as exc:
-        logger.warning(f"[qq-command-panel] 读取 star_handlers_registry 失败: {exc}")
+        logger.warning(f"{LOG_TAG} {t('log.read_handlers_registry_failed', exc=exc)}")
         return [{"name": k, "desc": v} for k, v in seen.items()]
 
     for handler in handlers_iter:
@@ -85,11 +86,11 @@ def collect_commands() -> list[dict[str, str]]:
         try:
             desc = _extract_desc(handler)
         except Exception as exc:
-            logger.debug(f"[qq-command-panel] 提取指令描述失败 {full_name}: {exc}")
-            desc = "AstrBot 指令"
+            logger.debug(f"{LOG_TAG} {t('log.extract_cmd_desc_failed', cmd=full_name, exc=exc)}")
+            desc = t("fallback.command_desc_default")
         seen[full_name] = desc[:PANEL_ITEM_DESC_MAX]
 
-    logger.info(f"[qq-command-panel] collect_commands 收集到 {len(seen)} 个指令 (仅用于调试)")
+    logger.info(f"{LOG_TAG} {t('log.collect_commands_summary', count=len(seen))}")
     return [{"name": k, "desc": v} for k, v in seen.items()]
 
 

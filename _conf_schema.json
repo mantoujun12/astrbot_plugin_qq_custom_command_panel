@@ -1,4 +1,11 @@
 {
+  "language": {
+    "description": "插件日志与调试指令输出语言",
+    "type": "string",
+    "options": ["zh-CN", "en-US"],
+    "default": "zh-CN",
+    "hint": "zh-CN=简体中文, en-US=English。影响 logger 输出以及 /qq_panel_* 系列指令的回复内容, 不影响 selected_commands 用户自定义条目。"
+  },
   "scenes": {
     "description": "生效场景 (选择哪些场景下要显示 QQ 指令面板)",
     "type": "list",
