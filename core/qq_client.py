@@ -148,19 +148,67 @@ class QQClient:
             raise RuntimeError(t("qq.create_panel_no_id", data=data))
         return str(panel_id)
 
+    async def get_panel(self, panel_id: str) -> dict[str, Any]:
+        """查询单个指令面板详情
+
+        GET /v2/panels/{panel_id}
+        返回原始面板对象 (含 scope / panel_id / panel.items / panel.remark / target_type 等)。
+        """
+        data = await self.request("GET", f"/v2/panels/{panel_id}")
+        if not isinstance(data, dict):
+            raise RuntimeError(t("qq.get_panel_invalid_response", data=data))
+        return data
+
     async def update_panel(
         self,
         panel_id: str,
-        items: list[dict[str, Any]],
+        items: list[dict[str, Any]] | None = None,
         remark: str = "",
+        *,
+        target_type: str | None = None,
+        target_openids: list[str] | None = None,
     ) -> None:
-        """修改指令面板内容"""
-        body = {
-            "panel": {
-                "items": items,
-                "remark": remark[:255],
-            }
-        }
+        """修改指令面板内容 (扩展版)
+
+        新增可选 keyword-only 参数, 不传即保持原行为 100% 向后兼容:
+        - items: 为 None 时不更新 items 字段 (仅改 remark / target_type)
+        - target_type: "all" | "specific" | None (None 不更新)
+        - target_openids: target_type=specific 时必填; 根据面板原 scope
+          自动映射为 user_openids / group_openids / channel_openids
+        """
+        body: dict[str, Any] = {}
+        panel_inner: dict[str, Any] = {}
+        if items is not None:
+            panel_inner["items"] = items
+        if remark:
+            panel_inner["remark"] = remark[:255]
+        if panel_inner:
+            body["panel"] = panel_inner
+        if target_type is not None:
+            body["target_type"] = target_type
+            if target_type == "specific" and target_openids is not None:
+                # specific 场景必须知道原面板 scope, 才能映射到正确的 openids 键名
+                try:
+                    detail = await self.get_panel(panel_id)
+                except Exception as exc:
+                    raise RuntimeError(
+                        t("qq.update_panel_get_scope_failed", panel_id=panel_id, exc=exc)
+                    ) from exc
+                scope = detail.get("scope")
+                if scope == "c2c" or scope == "dm":
+                    body["user_openids"] = list(target_openids)
+                elif scope == "group":
+                    body["group_openids"] = list(target_openids)
+                elif scope == "channel":
+                    body["channel_openids"] = list(target_openids)
+                else:
+                    raise RuntimeError(
+                        t(
+                            "qq.update_panel_scope_unknown",
+                            panel_id=panel_id,
+                            scope=scope,
+                        )
+                    )
         await self.request("PUT", f"/v2/panels/{panel_id}", json_body=body)
 
     async def delete_panel(self, panel_id: str) -> None:
