@@ -186,6 +186,8 @@ class QQClient:
             body["panel"] = panel_inner
         if target_type is not None:
             body["target_type"] = target_type
+            if target_type == "specific" and target_openids is None:
+                raise ValueError("target_openids is required when target_type is 'specific'")
             if target_type == "specific" and target_openids is not None:
                 # specific 场景必须知道原面板 scope, 才能映射到正确的 openids 键名
                 try:
