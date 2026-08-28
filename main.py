@@ -216,6 +216,105 @@ class QQCommandPanelPlugin(Star):
         )
         yield event.plain_result("\n".join(lines))
 
+    @filter.command("qq_panel_show")
+    async def show_panel(self, event: AstrMessageEvent):
+        """查看单个面板的完整详情（含 scope / target_type / remark 等）"""
+        syncer = self._ready_syncer()
+        if not syncer:
+            yield event.plain_result(t("cmd.plugin_not_initialized"))
+            return
+
+        # 从事件纯文本中提取 panel_id 参数
+        raw_text = getattr(event, "message_str", None)
+        if not isinstance(raw_text, str):
+            try:
+                raw_text = str(event.message)
+            except Exception:
+                raw_text = ""
+        tokens = raw_text.strip().split(maxsplit=1)
+        panel_id = tokens[1].strip() if len(tokens) > 1 else ""
+        if not panel_id:
+            yield event.plain_result(t("cmd.show_panel_usage"))
+            return
+
+        clients = syncer.build_clients()
+        if not clients:
+            yield event.plain_result(t("cmd.no_platform_detected"))
+            return
+
+        lines: list[str] = []
+        found: bool = False
+        for pf_id, client in clients.items():
+            platform = getattr(client, "platform_label", "qq")
+            try:
+                detail = await client.get_panel(panel_id)
+            except Exception as exc:
+                # panel_id 不属于这个 appid 会报 "not found" 之类的错误,
+                # 属于正常情况, 不需要 warning 级别; 仅记录到 lines 供调试
+                lines.append(
+                    t(
+                        "cmd.show_platform_error",
+                        pf_id=pf_id,
+                        platform=platform,
+                        exc=exc,
+                    )
+                )
+                continue
+            # 查到就说明这个 panel_id 属于该 appid, 找到即停
+            found = True
+            lines.insert(
+                0,
+                t(
+                    "cmd.show_header",
+                    pf_id=pf_id,
+                    platform=platform,
+                    panel_id=panel_id,
+                ),
+            )
+            scope = detail.get("scope", t("label.unavailable"))
+            target_type = detail.get("target_type", t("label.unavailable"))
+            lines.append(t("cmd.show_field_line", key="scope", value=scope))
+            lines.append(t("cmd.show_field_line", key="target_type", value=target_type))
+            owned = PanelSyncer.is_owned_panel(detail)
+            lines.append(
+                t(
+                    "cmd.show_owned",
+                    owned=t("label.plugin_owned") if owned else t("label.other"),
+                )
+            )
+            panel_content = detail.get("panel")
+            if isinstance(panel_content, dict):
+                remark = panel_content.get("remark") or t("label.unavailable")
+                lines.append(t("cmd.show_field_line", key="remark", value=remark))
+                items = panel_content.get("items") or []
+            else:
+                items = detail.get("items") or []
+            items_count = len(items) if isinstance(items, list) else "?"
+            lines.append(t("cmd.show_items_header", count=items_count))
+            if isinstance(items, list):
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    lines.append(
+                        t(
+                            "cmd.show_item_line",
+                            name=it.get("name", "?"),
+                            desc=it.get("desc", ""),
+                        )
+                    )
+            break
+
+        if not found:
+            # 没找到时把每个平台的错误原因附在后面, 便于排错 (常见是 404 not_found)
+            output = [t("cmd.show_not_found", panel_id=panel_id)]
+            if lines:
+                output.append("")
+                output.extend(lines)
+            yield event.plain_result("\n".join(output))
+            return
+
+        yield event.plain_result("\n".join(lines))
+
     @filter.command("qq_panel_purge")
     async def purge_panels(self, event: AstrMessageEvent):
         """删除所有 QQ 平台上全部指令面板
