@@ -19,7 +19,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 2
+          # Need enough history to reach github.event.before (push range)
+          fetch-depth: 0
 
       - name: Detect version change
         id: version_check
@@ -30,10 +31,20 @@ jobs:
           NEW_VERSION=$(grep -E '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
           echo "Current metadata.yaml version: $NEW_VERSION"
 
+          # Use github.event.before (the SHA before the push) as the baseline,
+          # so multi-commit pushes where metadata.yaml is not touched in the
+          # last commit are still detected correctly.
+          BEFORE_SHA="${{ github.event.before }}"
           OLD_VERSION=""
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            OLD_VERSION=$(git show HEAD^:metadata.yaml 2>/dev/null | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
-            echo "Previous commit version: ${OLD_VERSION:-<not found>}"
+          if [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
+            && git rev-parse --verify "$BEFORE_SHA" >/dev/null 2>&1; then
+            OLD_VERSION=$(git show "${BEFORE_SHA}:metadata.yaml" 2>/dev/null \
+              | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+            echo "Push-baseline ($BEFORE_SHA) version: ${OLD_VERSION:-<not found>}"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            OLD_VERSION=$(git show HEAD^:metadata.yaml 2>/dev/null \
+              | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+            echo "Falling back to HEAD^, previous commit version: ${OLD_VERSION:-<not found>}"
           else
             echo "No previous commit found, first push."
           fi
@@ -95,8 +106,6 @@ jobs:
       - name: Push version tag
         if: steps.version_check.outputs.skip == 'false'
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           TAG="${{ steps.version_check.outputs.tag }}"
@@ -106,6 +115,8 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -a "$TAG" -m "Release $TAG"
+            # actions/checkout sets up a credential helper backed by
+            # GITHUB_TOKEN, so a plain `git push origin` just works.
             git push origin "$TAG"
             echo "Pushed tag $TAG to origin."
           fi
@@ -121,3 +132,47 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Always generate and commit CHANGELOG.md as part of this workflow.
+      - name: Generate CHANGELOG.md
+        if: steps.version_check.outputs.skip == 'false'
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          configuration: .github/changelog-configuration.json
+          outputFile: CHANGELOG.md
+          failOnError: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push CHANGELOG.md to default branch
+        if: steps.version_check.outputs.skip == 'false'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          # Make sure we are on the default branch, not detached from the push SHA.
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+          git pull --ff-only origin "$DEFAULT_BRANCH"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ ! -f CHANGELOG.md ]; then
+            echo "CHANGELOG.md was not generated, skipping commit."
+            exit 0
+          fi
+
+          if [ -z "$(git status --short -- CHANGELOG.md)" ]; then
+            echo "No changes to CHANGELOG.md, skipping commit."
+            exit 0
+          fi
+
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for release ${{ steps.version_check.outputs.tag }}"
+          # Bearer auth is reliable for the short-lived GITHUB_TOKEN.
+          git -c http.extraheader="Authorization: Bearer ${GITHUB_TOKEN}" \
+              push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${DEFAULT_BRANCH}"
