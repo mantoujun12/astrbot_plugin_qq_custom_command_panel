@@ -115,16 +115,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version_check.outputs.tag }}
-          name: Release ${{ steps.version_check.outputs.version }}
-          body: |
-            ## ${{ steps.version_check.outputs.version }}
-
-            Automated release triggered by `metadata.yaml` version bump.
-
-            **Plugin name:** QQ 自定义指令面板
-            **Version:** `${{ steps.version_check.outputs.version }}`
-
-            > Generated automatically by GitHub Actions.
+          name: ${{ steps.version_check.outputs.version }}
           files: |
             ${{ steps.build_package.outputs.zip_name }}
           generate_release_notes: true
