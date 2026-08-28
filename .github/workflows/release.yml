@@ -86,6 +86,7 @@ jobs:
           cp README.md "${BUILD_DIR}/" 2>/dev/null || true
           cp LICENSE "${BUILD_DIR}/" 2>/dev/null || true
           cp logo.png "${BUILD_DIR}/" 2>/dev/null || true
+          cp cover.png "${BUILD_DIR}/" 2>/dev/null || true
           cp _conf_schema.json "${BUILD_DIR}/" 2>/dev/null || true
           cp requirements.txt "${BUILD_DIR}/" 2>/dev/null || true
           cp pyproject.toml "${BUILD_DIR}/" 2>/dev/null || true
