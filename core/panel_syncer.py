@@ -95,8 +95,12 @@ class PanelSyncer:
             )
             return False
 
-    def _build_clients(self) -> dict[str, QQClient]:
-        """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端"""
+    def build_clients(self) -> dict[str, QQClient]:
+        """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端
+
+        公开方法, 供 main.py 调试指令与内部 sync/purge 流程共用,
+        不再让调用方直接访问 _ 前缀私有方法。
+        """
         clients: dict[str, QQClient] = {}
         platforms, _source = get_configured_platforms(self._config, self.context)
         for pf_id, info in platforms.items():
@@ -109,7 +113,7 @@ class PanelSyncer:
             clients[pf_id] = client
         return clients
 
-    async def _list_all_panels(
+    async def list_all_panels(
         self,
         client: QQClient,
     ) -> tuple[list[dict[str, Any]], set[str]]:
@@ -212,7 +216,7 @@ class PanelSyncer:
         platform = getattr(client, "platform_label", "qq")
         remark = f"{self.REMARK_PREFIX} {platform}/{pf_id}"
 
-        all_existing, failed_scopes = await self._list_all_panels(client)
+        all_existing, failed_scopes = await self.list_all_panels(client)
         # 任一场景查询失败时清单不完整, 直接中止协调 — 否则缺失场景会被
         # 误判为"无现有面板"而创建重复面板, 或跳过旧面板的清理。
         if failed_scopes:
@@ -278,12 +282,12 @@ class PanelSyncer:
 
         返回: {pf_id: {"remaining": N, "deleted": D}}
         """
-        clients = self._build_clients()
+        clients = self.build_clients()
         result: dict[str, dict[str, str]] = {}
         for pf_id, client in clients.items():
             # purge 路径容忍部分场景失败: 即使查询不完整, 已拿到的面板
             # 仍然可以删, 失败场景的面板留着等下次重试即可。
-            all_panels, _failed = await self._list_all_panels(client)
+            all_panels, _failed = await self.list_all_panels(client)
 
             deleted = 0
             for p in all_panels:
@@ -301,7 +305,7 @@ class PanelSyncer:
                     deleted += 1
 
             # 删除后复查剩余 (复查阶段同样容忍部分场景失败)
-            remaining_panels, post_failed = await self._list_all_panels(client)
+            remaining_panels, post_failed = await self.list_all_panels(client)
             if _failed or post_failed:
                 failed_scopes = _failed | post_failed
                 result[pf_id] = {
@@ -333,7 +337,7 @@ class PanelSyncer:
         # 直接读取用户在 schema 中自定义的指令条目, 不再扫描 AstrBot 已注册指令
         items = get_selected_commands(self._config)
 
-        clients = self._build_clients()
+        clients = self.build_clients()
         if not clients:
             logger.warning(f"{LOG_TAG} {t('log.no_platform_config')}")
             return {}
@@ -374,7 +378,7 @@ class PanelSyncer:
         """删除该平台下本插件之前创建的所有面板 (用于指令清空时的清理)"""
         # clear 路径容忍部分场景失败: 删少了一些面板不影响最终一致性,
         # 下次 sync 还会按 remark 重新识别并清理。
-        all_existing, _failed = await self._list_all_panels(client)
+        all_existing, _failed = await self.list_all_panels(client)
         for p in all_existing:
             if not self.is_owned_panel(p):
                 continue
