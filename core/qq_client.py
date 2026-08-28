@@ -180,7 +180,7 @@ class QQClient:
         panel_inner: dict[str, Any] = {}
         if items is not None:
             panel_inner["items"] = items
-        if remark:
+        if remark is not None:
             panel_inner["remark"] = remark[:255]
         if panel_inner:
             body["panel"] = panel_inner
