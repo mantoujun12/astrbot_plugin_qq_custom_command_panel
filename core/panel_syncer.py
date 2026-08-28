@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,10 @@ from .config import (
 from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
 from .qq_client import QQClient
 from .state import PanelStateStore
+
+# 面板操作的并发上限。QQ 官方 API 有限流 (HTTP 429),
+# 单个 appid 同时发太多请求会被短暂封禁, 这里留一个保守的默认值。
+DEFAULT_PANEL_OP_CONCURRENCY = 5
 
 
 class PanelSyncer:
@@ -94,6 +100,28 @@ class PanelSyncer:
                 f"{LOG_TAG} " + t("log.panel_action_failed", action=t(log_prefix), exc=exc)
             )
             return False
+
+    @staticmethod
+    async def _run_concurrent(
+        coros: list[Coroutine[Any, Any, Any]],
+        *,
+        limit: int = DEFAULT_PANEL_OP_CONCURRENCY,
+    ) -> list[Any]:
+        """并发执行一组协程, 带限流信号量, 返回与输入同序的结果列表
+
+        用于删除面板、场景同步、清理等独立操作的批量加速。
+        返回值保留原始结果(含 Exception), 由调用方决定是否处理异常。
+        """
+        if not coros:
+            return []
+
+        sem = asyncio.Semaphore(limit)
+
+        async def _wrap(coro: Coroutine[Any, Any, Any]) -> Any:
+            async with sem:
+                return await coro
+
+        return list(await asyncio.gather(*[_wrap(c) for c in coros], return_exceptions=True))
 
     def build_clients(self) -> dict[str, QQClient]:
         """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端
@@ -231,16 +259,58 @@ class PanelSyncer:
 
         # items 为空: 清掉本插件在所有场景上的旧面板, 不创建新面板
         if not items:
+            delete_coros: list[Coroutine[Any, Any, bool]] = []
             for scope, old in existing_by_scope.items():
                 old_id = old.get("panel_id")
                 if not old_id:
                     continue
-                await self._safe_delete_panel(client, old_id, scope)
+                delete_coros.append(self._safe_delete_panel(client, old_id, scope))
+            await self._run_concurrent(delete_coros)
             return {}
 
         total_panels = len(all_existing)
         saved: dict[str, str] = {}
+
+        # ---------- 场景同步: 分 update 并发 + create 串行 ----------
+        # 已有面板的 scope 走 update 路径: 不会修改 total_panels, 相互独立可并发
+        # 无面板的 scope 走 create 路径: 会递增 total_panels, 需要串行保证上限判断准确
+        update_scopes: list[str] = []
+        create_scopes: list[str] = []
         for scope in scenes:
+            if existing_by_scope.get(scope) is not None:
+                update_scopes.append(scope)
+            else:
+                create_scopes.append(scope)
+
+        # (1) update 路径并发: 每个 scope 独立 try/except, 失败不影响其他
+        async def _sync_update_scope(scope: str) -> tuple[str, str | None]:
+            """返回 (scope, saved_id_or_None), 异常时 saved_id 为 None 并打 error 日志"""
+            try:
+                saved_id, _ = await self._sync_scope_panel(
+                    client,
+                    pf_id,
+                    scope,
+                    items,
+                    remark,
+                    existing_by_scope.get(scope),
+                    total_panels,
+                )
+                return scope, saved_id
+            except Exception as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
+                )
+                return scope, None
+
+        update_coros: list[Coroutine[Any, Any, tuple[str, str | None]]] = [
+            _sync_update_scope(s) for s in update_scopes
+        ]
+        for scope, saved_id in await self._run_concurrent(update_coros):
+            if isinstance(scope, str) and saved_id is not None:
+                saved[scope] = saved_id
+
+        # (2) create 路径串行: 严格维护 total_panels, 避免超限创建
+        for scope in create_scopes:
             try:
                 saved_id, total_panels = await self._sync_scope_panel(
                     client,
@@ -248,7 +318,7 @@ class PanelSyncer:
                     scope,
                     items,
                     remark,
-                    existing_by_scope.get(scope),
+                    None,
                     total_panels,
                 )
                 if saved_id is not None:
@@ -258,19 +328,23 @@ class PanelSyncer:
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
                 )
 
-        # 仅清理本插件创建的、不再启用场景下的旧面板
+        # ---------- 清理 disabled scene 的旧面板 (并发) ----------
+        disabled_delete_coros: list[Coroutine[Any, Any, bool]] = []
         for scope, old in existing_by_scope.items():
             if scope in scenes:
                 continue
             old_id = old.get("panel_id")
             if not old_id:
                 continue
-            await self._safe_delete_panel(
-                client,
-                old_id,
-                scope,
-                log_prefix="log_prefix.remove_disabled_scene_panel",
+            disabled_delete_coros.append(
+                self._safe_delete_panel(
+                    client,
+                    old_id,
+                    scope,
+                    log_prefix="log_prefix.remove_disabled_scene_panel",
+                )
             )
+        await self._run_concurrent(disabled_delete_coros)
 
         return saved
 
@@ -289,20 +363,23 @@ class PanelSyncer:
             # 仍然可以删, 失败场景的面板留着等下次重试即可。
             all_panels, _failed = await self.list_all_panels(client)
 
-            deleted = 0
+            # 并发删除所有面板: 先构造协程列表, 再一次性跑
+            delete_coros: list[Coroutine[Any, Any, bool]] = []
             for p in all_panels:
                 panel_id = p.get("panel_id")
                 scope = p.get("scope", "?")
                 if not panel_id:
                     continue
-                ok = await self._safe_delete_panel(
-                    client,
-                    panel_id,
-                    scope,
-                    log_prefix="log_prefix.purge_delete_panel",
+                delete_coros.append(
+                    self._safe_delete_panel(
+                        client,
+                        panel_id,
+                        scope,
+                        log_prefix="log_prefix.purge_delete_panel",
+                    )
                 )
-                if ok:
-                    deleted += 1
+            results = await self._run_concurrent(delete_coros)
+            deleted = sum(1 for r in results if r is True)
 
             # 删除后复查剩余 (复查阶段同样容忍部分场景失败)
             remaining_panels, post_failed = await self.list_all_panels(client)
@@ -379,6 +456,7 @@ class PanelSyncer:
         # clear 路径容忍部分场景失败: 删少了一些面板不影响最终一致性,
         # 下次 sync 还会按 remark 重新识别并清理。
         all_existing, _failed = await self.list_all_panels(client)
+        delete_coros: list[Coroutine[Any, Any, bool]] = []
         for p in all_existing:
             if not self.is_owned_panel(p):
                 continue
@@ -386,7 +464,8 @@ class PanelSyncer:
             scope = p.get("scope", "?")
             if not panel_id:
                 continue
-            await self._safe_delete_panel(client, panel_id, scope)
+            delete_coros.append(self._safe_delete_panel(client, panel_id, scope))
+        await self._run_concurrent(delete_coros)
 
     def set_config(self, config: dict[str, Any]) -> None:
         """运行期刷新配置引用, 并同步刷新语言设置"""

@@ -38,6 +38,9 @@
   "qq.get_token_failed": "获取 access_token 失败: {data}",
   "qq.api_failed": "QQ API {method} {path} 失败 [{status}]: {data}",
   "qq.create_panel_no_id": "创建面板失败，未返回 panel_id: {data}",
+  "qq.get_panel_invalid_response": "查询面板详情失败，返回非 object: {data}",
+  "qq.update_panel_get_scope_failed": "更新面板 {panel_id} 时查询 scope 失败: {exc}",
+  "qq.update_panel_scope_unknown": "更新面板 {panel_id} 时识别到未知 scope: {scope}，无法映射 specific openids 键名",
 
   "panel.incomplete_list_retry": "查询面板列表不完整, 失败场景: {scopes}; 已中止本次同步以避免重复创建, 请稍后重试 /qq_panel_resync",
   "panel.incomplete_list_purged_partial": "查询面板列表不完整, 失败场景: {scopes}; 已删除已列出的面板, 请稍后重试",
@@ -66,6 +69,14 @@
   "cmd.reload_current_class_line": "当前类: {module}.{cls}",
   "cmd.reload_file_path_line": "文件路径: {path}",
   "cmd.reload_mtime_line": "文件修改时间: {mtime}",
+  "cmd.show_panel_usage": "用法: /qq_panel_show <panel_id>（panel_id 可通过 /qq_panel_fetch 查看）",
+  "cmd.show_not_found": "未在任何已配置平台上找到 panel_id={panel_id}。请确认 panel_id 正确。",
+  "cmd.show_header": "[{pf_id}] ({platform}) 面板详情 panel_id={panel_id}:",
+  "cmd.show_field_line": "  {key}: {value}",
+  "cmd.show_items_header": "  items ({count}):",
+  "cmd.show_item_line": "    • {name}: {desc}",
+  "cmd.show_owned": "  owned_by_plugin: {owned}",
+  "cmd.show_platform_error": "[{pf_id}] ({platform}) 查询失败: {exc}",
 
   "fallback.command_desc_default": "AstrBot 指令"
 }

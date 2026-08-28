@@ -38,6 +38,9 @@
   "qq.get_token_failed": "fetch access_token failed: {data}",
   "qq.api_failed": "QQ API {method} {path} failed [{status}]: {data}",
   "qq.create_panel_no_id": "create panel failed, no panel_id returned: {data}",
+  "qq.get_panel_invalid_response": "get_panel failed, response is not an object: {data}",
+  "qq.update_panel_get_scope_failed": "failed to resolve scope for update_panel {panel_id}: {exc}",
+  "qq.update_panel_scope_unknown": "unknown scope={scope} on update_panel {panel_id}, cannot map specific openids key",
 
   "panel.incomplete_list_retry": "panel list is incomplete, failed scopes: {scopes}; sync aborted to avoid duplicate creation, retry later with /qq_panel_resync",
   "panel.incomplete_list_purged_partial": "panel list is incomplete, failed scopes: {scopes}; listed panels have been deleted, retry later",
@@ -66,6 +69,14 @@
   "cmd.reload_current_class_line": "Current class: {module}.{cls}",
   "cmd.reload_file_path_line": "File path: {path}",
   "cmd.reload_mtime_line": "File mtime: {mtime}",
+  "cmd.show_panel_usage": "Usage: /qq_panel_show <panel_id> (panel_id can be found via /qq_panel_fetch)",
+  "cmd.show_not_found": "panel_id={panel_id} not found on any configured platform. Please verify the panel_id.",
+  "cmd.show_header": "[{pf_id}] ({platform}) panel detail panel_id={panel_id}:",
+  "cmd.show_field_line": "  {key}: {value}",
+  "cmd.show_items_header": "  items ({count}):",
+  "cmd.show_item_line": "    • {name}: {desc}",
+  "cmd.show_owned": "  owned_by_plugin: {owned}",
+  "cmd.show_platform_error": "[{pf_id}] ({platform}) lookup failed: {exc}",
 
   "fallback.command_desc_default": "AstrBot command"
 }
