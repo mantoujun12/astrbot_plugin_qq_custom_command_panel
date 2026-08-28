@@ -16,7 +16,8 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 1. **qq_platforms**: 添加 QQ 机器人, 填入 appid / clientSecret (留空则自动从 AstrBot 平台配置读取)
 2. **scenes**: 选择生效场景, 默认 `c2c + group`
 3. **selected_commands**: 添加要在 QQ 面板展示的指令条目, 每条 {name, desc}, name 最长 14 字符, desc 最长 30 字符, 最多 20 条
-4. **auto_sync_on_config_change**: 配置变更后自动同步到面板
+
+> 配置变更后需手动执行 `/qq_panel_resync` 触发同步, 或重启 AstrBot 时会自动同步一次。
 
 ## 调试指令
 

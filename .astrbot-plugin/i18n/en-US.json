@@ -61,10 +61,6 @@
           }
         }
       }
-    },
-    "auto_sync_on_config_change": {
-      "description": "Auto-sync when config changes",
-      "hint": "When enabled, config updates are auto-synced to the QQ command panel."
     }
   }
 }

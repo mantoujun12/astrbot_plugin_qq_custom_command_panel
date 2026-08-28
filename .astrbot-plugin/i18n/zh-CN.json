@@ -61,10 +61,6 @@
           }
         }
       }
-    },
-    "auto_sync_on_config_change": {
-      "description": "配置变更后自动同步",
-      "hint": "开启后, 当配置变更时会自动把变更同步到 QQ 面板。"
     }
   }
 }
