@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # Need enough history to reach github.event.before (push range)
           fetch-depth: 0
@@ -123,7 +123,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.version_check.outputs.skip == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version_check.outputs.tag }}
           name: ${{ steps.version_check.outputs.version }}
