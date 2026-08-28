@@ -143,7 +143,7 @@ class QQCommandPanelPlugin(Star):
         if not syncer:
             yield event.plain_result(t("cmd.plugin_not_initialized"))
             return
-        clients = syncer._build_clients()
+        clients = syncer.build_clients()
         if not clients:
             yield event.plain_result(t("cmd.no_platform_detected"))
             return
@@ -153,7 +153,7 @@ class QQCommandPanelPlugin(Star):
         for pf_id, client in clients.items():
             platform = getattr(client, "platform_label", "qq")
             try:
-                panels, failed_scopes = await syncer._list_all_panels(client)
+                panels, failed_scopes = await syncer.list_all_panels(client)
             except Exception as exc:
                 lines.append(
                     "\n"

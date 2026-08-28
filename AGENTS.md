@@ -23,7 +23,7 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 
 1. QQ API GET /v2/panels 必须带 scope 参数
 2. 面板同步中任一场景拉取失败要中止, 不许吞异常(否则会重复创建面板)
-3. PanelSyncer 应暴露公开方法；在公开等价方法提供前，fetch_panels 可调用 _build_clients / _list_all_panels 等私有方法
+3. PanelSyncer 通过 build_clients / list_all_panels 等公开方法暴露能力; 外部 (含 main.py 调试指令) 禁止直接访问 _ 前缀私有方法
 4. 配置解析逻辑整合到 core/config.py 的 helper 函数(get_platforms_from_schema / get_platforms_from_context / get_configured_platforms), 不要散落在 main.py
 5. 指令用 @filter.command 注册, 描述取 handler docstring 第一行(除非显式传 description)
 6. 异步一律 async/await, 不用回调风格
