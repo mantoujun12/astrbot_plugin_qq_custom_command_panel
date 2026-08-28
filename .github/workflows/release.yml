@@ -1,0 +1,178 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - metadata.yaml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release on Version Change
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          # Need enough history to reach github.event.before (push range)
+          fetch-depth: 0
+
+      - name: Detect version change
+        id: version_check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NEW_VERSION=$(grep -E '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          echo "Current metadata.yaml version: $NEW_VERSION"
+
+          # Use github.event.before (the SHA before the push) as the baseline,
+          # so multi-commit pushes where metadata.yaml is not touched in the
+          # last commit are still detected correctly.
+          BEFORE_SHA="${{ github.event.before }}"
+          OLD_VERSION=""
+          if [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
+            && git rev-parse --verify "$BEFORE_SHA" >/dev/null 2>&1; then
+            OLD_VERSION=$(git show "${BEFORE_SHA}:metadata.yaml" 2>/dev/null \
+              | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+            echo "Push-baseline ($BEFORE_SHA) version: ${OLD_VERSION:-<not found>}"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            OLD_VERSION=$(git show HEAD^:metadata.yaml 2>/dev/null \
+              | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+            echo "Falling back to HEAD^, previous commit version: ${OLD_VERSION:-<not found>}"
+          else
+            echo "No previous commit found, first push."
+          fi
+
+          if [[ -z "$NEW_VERSION" ]]; then
+            echo "Error: could not read version from metadata.yaml" >&2
+            exit 1
+          fi
+
+          if [[ "$NEW_VERSION" == "$OLD_VERSION" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged ($NEW_VERSION), skipping release."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+            TAG_NAME="$NEW_VERSION"
+            if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+              echo "Tag $TAG_NAME already exists locally, skipping tag creation (release should still go through via CLI)."
+            fi
+            echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+            echo "::notice::Detected version change: ${OLD_VERSION:-<none>} -> $NEW_VERSION, tag=$TAG_NAME"
+          fi
+
+      - name: Build plugin zip package
+        id: build_package
+        if: steps.version_check.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version_check.outputs.version }}"
+          PKG_NAME="astrbot_plugin_qq_custom_command_panel-${VERSION}"
+          BUILD_DIR="build/${PKG_NAME}"
+
+          mkdir -p "${BUILD_DIR}"
+
+          # Copy plugin source files (keep directory structure)
+          cp metadata.yaml "${BUILD_DIR}/"
+          cp main.py "${BUILD_DIR}/"
+          cp README.md "${BUILD_DIR}/" 2>/dev/null || true
+          cp LICENSE "${BUILD_DIR}/" 2>/dev/null || true
+          cp logo.png "${BUILD_DIR}/" 2>/dev/null || true
+          cp _conf_schema.json "${BUILD_DIR}/" 2>/dev/null || true
+          cp requirements.txt "${BUILD_DIR}/" 2>/dev/null || true
+          cp pyproject.toml "${BUILD_DIR}/" 2>/dev/null || true
+          if [ -d core ]; then cp -R core "${BUILD_DIR}/"; fi
+          if [ -d .astrbot-plugin ]; then cp -R .astrbot-plugin "${BUILD_DIR}/"; fi
+
+          # Create zip archive (at repo root so softprops action can find it easily)
+          ZIP_FILE="${PKG_NAME}.zip"
+          cd build
+          zip -r "../${ZIP_FILE}" "${PKG_NAME}" > /dev/null
+          cd ..
+          rm -rf build
+
+          echo "zip_path=${ZIP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Created plugin package: ${ZIP_FILE}"
+
+      - name: Push version tag
+        if: steps.version_check.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version_check.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on remote, skipping push."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            # actions/checkout sets up a credential helper backed by
+            # GITHUB_TOKEN, so a plain `git push origin` just works.
+            git push origin "$TAG"
+            echo "Pushed tag $TAG to origin."
+          fi
+
+      - name: Create GitHub Release
+        if: steps.version_check.outputs.skip == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version_check.outputs.tag }}
+          name: ${{ steps.version_check.outputs.version }}
+          files: |
+            ${{ steps.build_package.outputs.zip_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Always generate and commit CHANGELOG.md as part of this workflow.
+      - name: Generate CHANGELOG.md
+        if: steps.version_check.outputs.skip == 'false'
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          configuration: .github/changelog-configuration.json
+          outputFile: CHANGELOG.md
+          failOnError: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push CHANGELOG.md to default branch
+        if: steps.version_check.outputs.skip == 'false'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          # Make sure we are on the default branch, not detached from the push SHA.
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+          git pull --ff-only origin "$DEFAULT_BRANCH"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ ! -f CHANGELOG.md ]; then
+            echo "CHANGELOG.md was not generated, skipping commit."
+            exit 0
+          fi
+
+          if [ -z "$(git status --short -- CHANGELOG.md)" ]; then
+            echo "No changes to CHANGELOG.md, skipping commit."
+            exit 0
+          fi
+
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for release ${{ steps.version_check.outputs.tag }}"
+          # Bearer auth is reliable for the short-lived GITHUB_TOKEN.
+          git -c http.extraheader="Authorization: Bearer ${GITHUB_TOKEN}" \
+              push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${DEFAULT_BRANCH}"

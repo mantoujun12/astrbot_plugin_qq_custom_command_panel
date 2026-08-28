@@ -1,0 +1,65 @@
+{
+  "template": "#{{CHANGELOG}}",
+  "categories": [
+    {
+      "title": "## 🚀 Features",
+      "labels": ["feat", "feature", "enhancement"]
+    },
+    {
+      "title": "## 🐛 Bug Fixes",
+      "labels": ["fix", "bug", "bugfix"]
+    },
+    {
+      "title": "## 🔧 Refactor",
+      "labels": ["refactor", "refactoring"]
+    },
+    {
+      "title": "## 📚 Documentation",
+      "labels": ["docs", "documentation"]
+    },
+    {
+      "title": "## 🧹 Chores",
+      "labels": ["chore", "build", "ci"]
+    },
+    {
+      "title": "## Other Changes",
+      "labels": ["other"]
+    }
+  ],
+  "pr_template": "- #{{TITLE}} (#{{NUMBER}}) @#{{AUTHOR}}",
+  "empty_template": "- No changes in this category",
+  "label_extractor": [
+    {
+      "pattern": "^(feat|feature|enhancement)(\\([^)]*\\))?:",
+      "target": "feat",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^fix(\\([^)]*\\))?:",
+      "target": "fix",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^refactor(\\([^)]*\\))?:",
+      "target": "refactor",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^docs(\\([^)]*\\))?:",
+      "target": "docs",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^(chore|build|ci)(\\([^)]*\\))?:",
+      "target": "chore",
+      "on_property": "title"
+    }
+  ],
+  "transformers": [
+    {
+      "pattern": "^(feat|feature|enhancement|fix|refactor|docs|chore|build|ci)(\\([^)]*\\))?:\\s*(.+)$",
+      "target": "$3"
+    }
+  ],
+  "max_tags_to_fetch": 200
+}

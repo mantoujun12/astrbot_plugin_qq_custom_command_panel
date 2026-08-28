@@ -1,0 +1,40 @@
+# Dependabot configuration for the QQ command panel plugin.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Python dependencies managed via requirements.txt at the repository root.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "12:00"
+      timezone: "Asia/Shanghai"
+    # Cap concurrent PRs to keep review load manageable.
+    open-pull-requests-limit: 5
+    # Group minor + patch updates into a single PR to reduce noise;
+    # major version bumps still get an isolated PR.
+    groups:
+      minor-and-patch:
+        applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+    commit-message:
+      # Align with Conventional Commits (chore scope) so PR titles follow the
+      # repo's feat/fix/refactor/chore convention from AGENTS.md.
+      prefix: "chore(deps)"
+
+  # GitHub Actions used by workflows under .github/workflows/.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "12:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
