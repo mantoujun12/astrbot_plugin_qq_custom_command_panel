@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 README - 快速上手
+    url: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel#readme
+    about: 阅读项目说明、配置方式与已知限制。
