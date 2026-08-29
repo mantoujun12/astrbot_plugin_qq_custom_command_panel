@@ -10,7 +10,8 @@ from pathlib import Path
 
 import aiohttp
 from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.api.message_components import Plain
 from astrbot.api.star import Context, Star, register
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.star_handler import star_handlers_registry
@@ -22,6 +23,7 @@ from .core import (
     PANEL_MAX_ITEMS,
     SCENES,
     PanelSyncer,
+    ProgressCallback,
     collect_commands,
     get_configured_platforms,
     get_platforms_from_context,
@@ -119,22 +121,68 @@ class QQCommandPanelPlugin(Star):
             language = None
         get_instance().set_language(language)
 
+    @staticmethod
+    def _make_progress_pusher(event: AstrMessageEvent) -> ProgressCallback:
+        """构造一个进度推送回调, 用 event.send 即时推送消息
+
+        与 yield 不同, event.send 会在调用当下立即把消息发到会话,
+        不必等 handler 结束才一次性返回所有 yield 结果。
+        供 PanelSyncer.sync_all / purge_all 的 on_progress 参数使用。
+
+        回调内异常由 PanelSyncer._emit_progress 兜底捕获 (仅 warning),
+        这里不再重复 try/except, 避免双层吞错导致排查困难。
+        """
+
+        async def _push(msg: str) -> None:
+            await event.send(MessageChain([Plain(msg)]))
+
+        return _push
+
     # ------------------------------------------------------------------
     # 调试指令
     # ------------------------------------------------------------------
 
     @filter.command("qq_panel_resync")
     async def resync(self, event: AstrMessageEvent):
-        """手动触发面板同步"""
+        """手动触发面板同步
+
+        长任务指令: 通过 event.send 在每个平台完成时推送进度,
+        最后 yield 汇总结果。sync_all 内部对回调异常兜底, 不会影响主流程。
+        """
         syncer = self._ready_syncer()
         if not syncer:
             yield event.plain_result(t("cmd.plugin_not_initialized"))
             return
+        push = self._make_progress_pusher(event)
         try:
-            await syncer.sync_all()
-            yield event.plain_result(t("cmd.resync_success"))
+            result = await syncer.sync_all(on_progress=push)
         except Exception as exc:
             yield event.plain_result(t("cmd.sync_failed", exc=exc))
+            return
+        # sync_all 走清理路径 / 无场景 / 无平台时返回 {}, 此时退回通用成功文案
+        if not result:
+            yield event.plain_result(t("cmd.resync_success"))
+            return
+        # result 含成功 + 失败平台 (失败以 {"error": ...} 标记);
+        # 摘要必须区分两者, 否则失败平台会被静默排除, 用户误以为全部成功
+        total_platforms = len(result)
+        succeeded = sum(1 for v in result.values() if "error" not in v)
+        failed = total_platforms - succeeded
+        total_scenes = sum(len(scopes) for scopes in result.values() if "error" not in scopes)
+        if failed > 0:
+            yield event.plain_result(
+                t(
+                    "cmd.resync_partial",
+                    succeeded=succeeded,
+                    failed=failed,
+                    total=total_platforms,
+                    scenes=total_scenes,
+                )
+            )
+        else:
+            yield event.plain_result(
+                t("cmd.resync_summary", platforms=succeeded, scenes=total_scenes)
+            )
 
     @filter.command("qq_panel_fetch")
     async def fetch_panels(self, event: AstrMessageEvent):
@@ -150,14 +198,16 @@ class QQCommandPanelPlugin(Star):
 
         lines: list[str] = []
         total = 0
-        for pf_id, client in clients.items():
+        for idx, (pf_id, client) in enumerate(clients.items()):
             platform = getattr(client, "platform_label", "qq")
+            # 多平台输出之间用分隔线分段, 提升视觉层次
+            if idx > 0:
+                lines.append("─" * 36)
             try:
                 panels, failed_scopes = await syncer.list_all_panels(client)
             except Exception as exc:
                 lines.append(
-                    "\n"
-                    + t(
+                    t(
                         "cmd.fetch_platform_failed",
                         pf_id=pf_id,
                         platform=platform,
@@ -168,8 +218,7 @@ class QQCommandPanelPlugin(Star):
 
             if failed_scopes:
                 lines.append(
-                    "\n"
-                    + t(
+                    t(
                         "cmd.fetch_incomplete_warning",
                         pf_id=pf_id,
                         platform=platform,
@@ -177,8 +226,7 @@ class QQCommandPanelPlugin(Star):
                     )
                 )
             lines.append(
-                "\n"
-                + t(
+                t(
                     "cmd.fetch_platform_summary",
                     pf_id=pf_id,
                     platform=platform,
@@ -214,6 +262,7 @@ class QQCommandPanelPlugin(Star):
             0,
             t("cmd.fetch_total_summary", platforms=len(clients), items=total),
         )
+        lines.insert(1, "")
         yield event.plain_result("\n".join(lines))
 
     @filter.command("qq_panel_show")
@@ -321,14 +370,18 @@ class QQCommandPanelPlugin(Star):
 
         因为同一 appid 不会有其他插件共用 /v2/panels, 所以不按 remark 过滤,
         直接清空该 appid 下所有面板, 然后清空本地状态。
+
+        长任务指令: 通过 event.send 在每个平台完成时推送进度,
+        最后 yield 汇总结果。
         """
         syncer = self._ready_syncer()
         if not syncer:
             yield event.plain_result(t("cmd.plugin_not_initialized"))
             return
 
+        push = self._make_progress_pusher(event)
         try:
-            result = await syncer.purge_all()
+            result = await syncer.purge_all(on_progress=push)
         except Exception as exc:
             yield event.plain_result(t("cmd.purge_failed", exc=exc))
             return
@@ -336,19 +389,48 @@ class QQCommandPanelPlugin(Star):
         lines = [t("cmd.purge_done")]
         if not result:
             lines.append(t("cmd.no_platform_detected"))
-        for pf_id, info in result.items():
-            err = info.get("error")
-            if err:
-                lines.append(t("cmd.purge_platform_failed", pf_id=pf_id, err=err))
-            else:
+        else:
+            # 区分成功 / 部分失败平台 (purge_all 对部分场景查询失败的平台用
+            # {"error": ...} 标记)。合计行只累加成功平台, 若存在部分失败平台,
+            # 合计必须显式标注"仅成功平台", 否则用户会误以为是全平台总计。
+            total_deleted = 0
+            total_remaining = 0
+            succeeded = 0
+            partial = 0
+            for pf_id, info in result.items():
+                err = info.get("error")
+                if err:
+                    partial += 1
+                    lines.append(t("cmd.purge_platform_failed", pf_id=pf_id, err=err))
+                    continue
+                succeeded += 1
+                deleted = int(info["deleted"])
+                remaining = int(info["remaining"])
+                total_deleted += deleted
+                total_remaining += remaining
                 lines.append(
                     t(
                         "cmd.purge_platform_report",
                         pf_id=pf_id,
-                        deleted=info.get("deleted", "?"),
-                        remaining=info.get("remaining", "?"),
+                        deleted=deleted,
+                        remaining=remaining,
                     )
                 )
+            if len(result) > 1:
+                if partial > 0:
+                    lines.append(
+                        t(
+                            "cmd.purge_partial_total",
+                            deleted=total_deleted,
+                            remaining=total_remaining,
+                            succeeded=succeeded,
+                            partial=partial,
+                        )
+                    )
+                else:
+                    lines.append(
+                        t("cmd.purge_total", deleted=total_deleted, remaining=total_remaining)
+                    )
         yield event.plain_result("\n".join(lines))
 
     @filter.command("qq_panel_list")
