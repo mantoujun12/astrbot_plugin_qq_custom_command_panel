@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,11 @@ from .state import PanelStateStore
 # 面板操作的并发上限。QQ 官方 API 有限流 (HTTP 429),
 # 单个 appid 同时发太多请求会被短暂封禁, 这里留一个保守的默认值。
 DEFAULT_PANEL_OP_CONCURRENCY = 5
+
+# 进度回调: 接收一条格式化好的进度消息字符串, 由调用方决定如何展示
+# (例如 main.py 里用 event.send() 推送给用户)。
+# syncer 会在每个平台完成时调用; 回调内异常不影响主流程, 仅 warning。
+ProgressCallback = Callable[[str], Awaitable[None]]
 
 
 class PanelSyncer:
@@ -122,6 +127,23 @@ class PanelSyncer:
                 return await coro
 
         return list(await asyncio.gather(*[_wrap(c) for c in coros], return_exceptions=True))
+
+    @staticmethod
+    async def _emit_progress(
+        on_progress: ProgressCallback | None,
+        message: str,
+    ) -> None:
+        """安全触发进度回调, 异常仅记录 warning 不影响主流程
+
+        回调失败常见原因: 平台适配器不支持 event.send / 网络问题 / 用户会话已关闭。
+        这些都不应让正在进行的 sync/purge 中止, 因此吞掉异常仅记录。
+        """
+        if on_progress is None:
+            return
+        try:
+            await on_progress(message)
+        except Exception as exc:
+            logger.warning(f"{LOG_TAG} progress callback failed: {exc}")
 
     def build_clients(self) -> dict[str, QQClient]:
         """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端
@@ -348,17 +370,34 @@ class PanelSyncer:
 
         return saved
 
-    async def purge_all(self) -> dict[str, dict[str, str]]:
+    async def purge_all(
+        self,
+        on_progress: ProgressCallback | None = None,
+    ) -> dict[str, dict[str, str]]:
         """删除所有平台上**全部**指令面板, 并清空本地状态
 
         因为同一 appid 不会有其他插件共用 `/v2/panels`, 所以直接删除全部面板,
         而不仅限于 remark 带前缀的本插件面板。返回每个平台删除后的剩余面板数。
 
+        参数:
+            on_progress: 可选进度回调, 在开始/每个平台完成时触发。
+
         返回: {pf_id: {"remaining": N, "deleted": D}}
         """
         clients = self.build_clients()
+        if not clients:
+            await self._emit_progress(on_progress, t("progress.purge_no_platform"))
+            self._state.save({})
+            return {}
+
+        total = len(clients)
+        await self._emit_progress(
+            on_progress,
+            t("progress.purge_start", platforms=total),
+        )
+
         result: dict[str, dict[str, str]] = {}
-        for pf_id, client in clients.items():
+        for idx, (pf_id, client) in enumerate(clients.items(), start=1):
             # purge 路径容忍部分场景失败: 即使查询不完整, 已拿到的面板
             # 仍然可以删, 失败场景的面板留着等下次重试即可。
             all_panels, _failed = await self.list_all_panels(client)
@@ -391,24 +430,53 @@ class PanelSyncer:
                         scopes=sorted(failed_scopes),
                     )
                 }
+                await self._emit_progress(
+                    on_progress,
+                    t(
+                        "progress.platform_purge_partial",
+                        pf_id=pf_id,
+                        index=idx,
+                        total=total,
+                        deleted=deleted,
+                    ),
+                )
             else:
                 result[pf_id] = {
                     "deleted": str(deleted),
                     "remaining": str(len(remaining_panels)),
                 }
+                await self._emit_progress(
+                    on_progress,
+                    t(
+                        "progress.platform_purged",
+                        pf_id=pf_id,
+                        index=idx,
+                        total=total,
+                        deleted=deleted,
+                        remaining=len(remaining_panels),
+                    ),
+                )
 
         # 清空本地持久化的 panel_id 映射
         self._state.save({})
         return result
 
-    async def sync_all(self) -> dict[str, dict[str, str]]:
+    async def sync_all(
+        self,
+        on_progress: ProgressCallback | None = None,
+    ) -> dict[str, dict[str, str]]:
         """总入口: 把用户在 schema 中自定义的指令条目写入所有启用的 QQ 平台
+
+        参数:
+            on_progress: 可选进度回调, 在每个关键节点 (开始/平台完成/平台失败) 触发,
+                         传入格式化好的消息字符串。回调内异常不影响主流程。
 
         返回 {pf_id: {scope: panel_id}}
         """
         scenes = get_enabled_scenes(self._config)
         if not scenes:
             logger.info(f"{LOG_TAG} {t('log.no_scene_enabled')}")
+            await self._emit_progress(on_progress, t("progress.sync_no_scene"))
             return {}
 
         # 直接读取用户在 schema 中自定义的指令条目, 不再扫描 AstrBot 已注册指令
@@ -417,31 +485,74 @@ class PanelSyncer:
         clients = self.build_clients()
         if not clients:
             logger.warning(f"{LOG_TAG} {t('log.no_platform_config')}")
+            await self._emit_progress(on_progress, t("progress.sync_no_platform"))
             return {}
 
         if not items:
             logger.info(f"{LOG_TAG} {t('log.selected_commands_empty')}")
+            await self._emit_progress(
+                on_progress,
+                t("progress.sync_clearing_start", platforms=len(clients)),
+            )
             for pf_id, client in clients.items():
                 try:
                     await self.clear_for_platform(pf_id, client)
+                    await self._emit_progress(
+                        on_progress,
+                        t("progress.platform_cleared", pf_id=pf_id),
+                    )
                 except Exception as exc:
                     logger.error(
                         f"{LOG_TAG} " + t("log.clear_platform_failed", pf_id=pf_id, exc=exc),
                         exc_info=True,
                     )
+                    await self._emit_progress(
+                        on_progress,
+                        t("progress.platform_clear_failed", pf_id=pf_id, exc=exc),
+                    )
             self._state.save({})
             return {}
 
         logger.info(f"{LOG_TAG} " + t("log.prepare_write_items", count=len(items), scenes=scenes))
+        total = len(clients)
+        await self._emit_progress(
+            on_progress,
+            t(
+                "progress.sync_start",
+                platforms=total,
+                scenes=len(scenes),
+                items=len(items),
+            ),
+        )
 
         result: dict[str, dict[str, str]] = {}
-        for pf_id, client in clients.items():
+        for idx, (pf_id, client) in enumerate(clients.items(), start=1):
             try:
                 result[pf_id] = await self.sync_for_platform(pf_id, client, scenes, items)
+                await self._emit_progress(
+                    on_progress,
+                    t(
+                        "progress.platform_synced",
+                        pf_id=pf_id,
+                        index=idx,
+                        total=total,
+                        saved=len(result[pf_id]),
+                    ),
+                )
             except Exception as exc:
                 logger.error(
                     f"{LOG_TAG} " + t("log.sync_platform_failed", pf_id=pf_id, exc=exc),
                     exc_info=True,
+                )
+                await self._emit_progress(
+                    on_progress,
+                    t(
+                        "progress.platform_sync_failed",
+                        pf_id=pf_id,
+                        index=idx,
+                        total=total,
+                        exc=exc,
+                    ),
                 )
 
         self._state.save(result)
@@ -474,4 +585,4 @@ class PanelSyncer:
         self.translator.set_language(language)
 
 
-__all__ = ["PanelSyncer"]
+__all__ = ["PanelSyncer", "ProgressCallback"]

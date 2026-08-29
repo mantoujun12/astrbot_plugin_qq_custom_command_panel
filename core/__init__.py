@@ -22,7 +22,7 @@ from .i18n import (
     initialize,
     t,
 )
-from .panel_syncer import PanelSyncer
+from .panel_syncer import PanelSyncer, ProgressCallback
 from .qq_client import QQClient
 from .state import STATE_FILENAME, PanelStateStore
 
@@ -38,6 +38,7 @@ __all__ = [
     "SUPPORTED_LANGUAGES",
     "PanelStateStore",
     "PanelSyncer",
+    "ProgressCallback",
     "QQClient",
     "Translator",
     "collect_commands",
