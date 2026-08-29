@@ -59,7 +59,7 @@
   "cmd.purge_platform_failed": "- [{pf_id}] failed: {err}",
   "cmd.purge_platform_report": "- [{pf_id}] deleted {deleted}, {remaining} remaining",
   "cmd.list_no_commands": "No commands found",
-  "cmd.list_header": "Registered commands (showing up to {limit}):",
+  "cmd.list_header": "Registered commands ({count} total):",
   "cmd.list_hint": "Note: this list is for reference only. Actual panel content is controlled by selected_commands in schema.",
   "cmd.platforms_active_source": "Active source: {source}",
   "cmd.platforms_active_count": "Active platforms: {count}",
