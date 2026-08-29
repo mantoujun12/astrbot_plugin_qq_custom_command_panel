@@ -4,15 +4,16 @@
 
 <!-- Badge -->
 
-![GitHub License](https://img.shields.io/github/license/mantoujun12/astrbot_plugin_qq_custom_command_panel?style=for-the-badge)
+[![GitHub License](https://img.shields.io/github/license/mantoujun12/astrbot_plugin_qq_custom_command_panel?style=for-the-badge)](LICENSE)
 ![GitHub Release](https://img.shields.io/github/v/release/mantoujun12/astrbot_plugin_qq_custom_command_panel?sort=date&display_name=tag&style=for-the-badge)
 ![GitHub Repo stars](https://img.shields.io/github/stars/mantoujun12/astrbot_plugin_qq_custom_command_panel?style=for-the-badge)
+[![AstrBot](https://img.shields.io/badge/AstrBot-%234984b9?style=for-the-badge&logo=Github)](https://github.com/AstrBotDevs/AstrBot)
 
 <!-- Badge -->
 
 QQ 官方机器人指令面板内容自定义插件
 
-在 AstrBot WebUI 中配置要展示的指令条目, 插件会把它们写入 QQ 官方机器人的指令面板,
+在 **AstrBot WebUI** 中配置要展示的指令条目, 插件会把它们写入 QQ 官方机器人的指令面板,
 
 用户在 QQ 输入 `/` 即可看到面板内容。
 
