@@ -471,7 +471,9 @@ class PanelSyncer:
             on_progress: 可选进度回调, 在每个关键节点 (开始/平台完成/平台失败) 触发,
                          传入格式化好的消息字符串。回调内异常不影响主流程。
 
-        返回 {pf_id: {scope: panel_id}}
+        返回 {pf_id: {scope: panel_id} | {"error": str}}
+        失败的平台以 {"error": ...} 形式出现在返回值中, 与 purge_all 一致,
+        便于调用方区分成功/失败平台做完整摘要。本地 state 只持久化成功平台。
         """
         scenes = get_enabled_scenes(self._config)
         if not scenes:
@@ -544,6 +546,9 @@ class PanelSyncer:
                     f"{LOG_TAG} " + t("log.sync_platform_failed", pf_id=pf_id, exc=exc),
                     exc_info=True,
                 )
+                # 失败平台也进 result (用 error 标记), 便于调用方做完整摘要;
+                # 与 purge_all 的部分完成表示方式保持一致 (conceptual integrity)。
+                result[pf_id] = {"error": str(exc)}
                 await self._emit_progress(
                     on_progress,
                     t(
@@ -555,7 +560,10 @@ class PanelSyncer:
                     ),
                 )
 
-        self._state.save(result)
+        # state 只持久化成功的平台映射, 避免污染下次 fetch/show
+        self._state.save(
+            {pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes}
+        )
         return result
 
     async def clear_for_platform(

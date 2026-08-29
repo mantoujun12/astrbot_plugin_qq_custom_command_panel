@@ -163,10 +163,26 @@ class QQCommandPanelPlugin(Star):
         if not result:
             yield event.plain_result(t("cmd.resync_success"))
             return
-        total_scenes = sum(len(scopes) for scopes in result.values())
-        yield event.plain_result(
-            t("cmd.resync_summary", platforms=len(result), scenes=total_scenes)
-        )
+        # result 含成功 + 失败平台 (失败以 {"error": ...} 标记);
+        # 摘要必须区分两者, 否则失败平台会被静默排除, 用户误以为全部成功
+        total_platforms = len(result)
+        succeeded = sum(1 for v in result.values() if "error" not in v)
+        failed = total_platforms - succeeded
+        total_scenes = sum(len(scopes) for scopes in result.values() if "error" not in scopes)
+        if failed > 0:
+            yield event.plain_result(
+                t(
+                    "cmd.resync_partial",
+                    succeeded=succeeded,
+                    failed=failed,
+                    total=total_platforms,
+                    scenes=total_scenes,
+                )
+            )
+        else:
+            yield event.plain_result(
+                t("cmd.resync_summary", platforms=succeeded, scenes=total_scenes)
+            )
 
     @filter.command("qq_panel_fetch")
     async def fetch_panels(self, event: AstrMessageEvent):
@@ -374,15 +390,24 @@ class QQCommandPanelPlugin(Star):
         if not result:
             lines.append(t("cmd.no_platform_detected"))
         else:
+            # 区分成功 / 部分失败平台 (purge_all 对部分场景查询失败的平台用
+            # {"error": ...} 标记)。合计行只累加成功平台, 若存在部分失败平台,
+            # 合计必须显式标注"仅成功平台", 否则用户会误以为是全平台总计。
             total_deleted = 0
             total_remaining = 0
+            succeeded = 0
+            partial = 0
             for pf_id, info in result.items():
                 err = info.get("error")
                 if err:
+                    partial += 1
                     lines.append(t("cmd.purge_platform_failed", pf_id=pf_id, err=err))
                     continue
-                deleted = info.get("deleted", "?")
-                remaining = info.get("remaining", "?")
+                succeeded += 1
+                deleted = int(info["deleted"])
+                remaining = int(info["remaining"])
+                total_deleted += deleted
+                total_remaining += remaining
                 lines.append(
                     t(
                         "cmd.purge_platform_report",
@@ -391,13 +416,21 @@ class QQCommandPanelPlugin(Star):
                         remaining=remaining,
                     )
                 )
-                try:
-                    total_deleted += int(deleted)
-                    total_remaining += int(remaining)
-                except (TypeError, ValueError):
-                    pass
             if len(result) > 1:
-                lines.append(t("cmd.purge_total", deleted=total_deleted, remaining=total_remaining))
+                if partial > 0:
+                    lines.append(
+                        t(
+                            "cmd.purge_partial_total",
+                            deleted=total_deleted,
+                            remaining=total_remaining,
+                            succeeded=succeeded,
+                            partial=partial,
+                        )
+                    )
+                else:
+                    lines.append(
+                        t("cmd.purge_total", deleted=total_deleted, remaining=total_remaining)
+                    )
         yield event.plain_result("\n".join(lines))
 
     @filter.command("qq_panel_list")
