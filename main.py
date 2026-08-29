@@ -363,8 +363,8 @@ class QQCommandPanelPlugin(Star):
         if not cmds:
             yield event.plain_result(t("cmd.list_no_commands"))
             return
-        lines = [t("cmd.list_header", limit=PANEL_MAX_ITEMS)]
-        for c in cmds[:PANEL_MAX_ITEMS]:
+        lines = [t("cmd.list_header", count=len(cmds))]
+        for c in cmds:
             lines.append(f"- {c['name']}: {c['desc']}")
         lines.append("")
         lines.append(t("cmd.list_hint"))

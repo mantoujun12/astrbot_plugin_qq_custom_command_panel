@@ -59,7 +59,7 @@
   "cmd.purge_platform_failed": "- [{pf_id}] 失败: {err}",
   "cmd.purge_platform_report": "- [{pf_id}] 删除 {deleted} 个, 剩余 {remaining} 个",
   "cmd.list_no_commands": "未找到任何指令",
-  "cmd.list_header": "已注册指令 (最多展示 {limit} 个):",
+  "cmd.list_header": "已注册指令 (共 {count} 个):",
   "cmd.list_hint": "提示: 该列表仅作参考, 面板内容由 schema 的 selected_commands 配置决定。",
   "cmd.platforms_active_source": "生效来源: {source}",
   "cmd.platforms_active_count": "生效平台数: {count}",
