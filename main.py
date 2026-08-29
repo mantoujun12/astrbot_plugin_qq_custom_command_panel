@@ -36,7 +36,7 @@ from .core.i18n import LOG_TAG, get_instance, t
     "astrbot_plugin_qq_custom_command_panel",
     "mantoujun12",
     "用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容",
-    "v0.3.0",
+    "v0.4.0",
     "https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel",
 )
 class QQCommandPanelPlugin(Star):

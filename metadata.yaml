@@ -2,7 +2,7 @@ name: astrbot_plugin_qq_custom_command_panel
 display_name: QQ 自定义指令面板
 desc: 在 QQ 官方机器人指令面板里展示用户在 AstrBot WebUI 中自定义配置的指令条目。用户添加要展示的指令，插件原样写入面板。支持私聊、群聊、子频道、频道私信四种场景。
 short_desc: 用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容
-version: v0.3.0
+version: v0.4.0
 author: mantoujun12
 social_link: https://github.com/mantoujun12
 repo: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel
