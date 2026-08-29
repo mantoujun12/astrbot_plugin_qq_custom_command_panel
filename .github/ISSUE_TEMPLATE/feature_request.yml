@@ -1,0 +1,56 @@
+name: ✨ 功能请求
+description: 提出新功能建议或改进想法
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提交功能建议！在提交前，请先：
+        - 确认已查阅 [README](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel#readme) 的「下一步计划」章节，避免重复
+        - 在 [Issue 列表](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/issues) 中搜索过相似建议
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: 前置确认
+      options:
+        - label: 我已查阅 README 的「下一步计划」章节
+          required: true
+        - label: 我已搜索现有 Issues / Discussions，未找到相似想法
+          required: true
+        - label: 这是明确的功能建议（若是头脑风暴，请发到 Discussions）
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你希望这个功能解决什么问题？
+      description: 请先描述你遇到的痛点或使用场景，而不是直接说"希望加一个 XX 功能"。
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 你期望的实现方式
+      description: 描述你理想中的方案，包括交互、配置项、预期行为
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 贡献意愿
+      description: 非常欢迎贡献！如有需要可以在此说明。
+      options:
+        - label: 我愿意提交 PR 实现此功能
+        - label: 我可以提供 QQ 测试环境协助验证
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充信息
+      description: 其他参考信息 例如API 链接、截图或草图等
+    validations:
+      required: false
