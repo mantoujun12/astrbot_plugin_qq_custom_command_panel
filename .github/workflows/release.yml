@@ -86,7 +86,6 @@ jobs:
           cp README.md "${BUILD_DIR}/" 2>/dev/null || true
           cp LICENSE "${BUILD_DIR}/" 2>/dev/null || true
           cp logo.png "${BUILD_DIR}/" 2>/dev/null || true
-          cp cover.png "${BUILD_DIR}/" 2>/dev/null || true
           cp _conf_schema.json "${BUILD_DIR}/" 2>/dev/null || true
           cp requirements.txt "${BUILD_DIR}/" 2>/dev/null || true
           cp pyproject.toml "${BUILD_DIR}/" 2>/dev/null || true
@@ -133,47 +132,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Always generate and commit CHANGELOG.md as part of this workflow.
-      - name: Generate CHANGELOG.md
-        if: steps.version_check.outputs.skip == 'false'
-        uses: mikepenz/release-changelog-builder-action@v6
-        with:
-          configuration: .github/changelog-configuration.json
-          outputFile: CHANGELOG.md
-          failOnError: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push CHANGELOG.md to default branch
-        if: steps.version_check.outputs.skip == 'false'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-
-          # Make sure we are on the default branch, not detached from the push SHA.
-          git fetch origin "$DEFAULT_BRANCH"
-          git checkout "$DEFAULT_BRANCH"
-          git pull --ff-only origin "$DEFAULT_BRANCH"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ ! -f CHANGELOG.md ]; then
-            echo "CHANGELOG.md was not generated, skipping commit."
-            exit 0
-          fi
-
-          if [ -z "$(git status --short -- CHANGELOG.md)" ]; then
-            echo "No changes to CHANGELOG.md, skipping commit."
-            exit 0
-          fi
-
-          git add CHANGELOG.md
-          git commit -m "docs: update CHANGELOG.md for release ${{ steps.version_check.outputs.tag }}"
-          # Bearer auth is reliable for the short-lived GITHUB_TOKEN.
-          git -c http.extraheader="Authorization: Bearer ${GITHUB_TOKEN}" \
-              push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${DEFAULT_BRANCH}"
