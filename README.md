@@ -1,6 +1,6 @@
-![astrbot_plugin_qq_custom_command_panel](cover.png)
-
 <div align="center">
+
+# astrbot_plugin_qq_custom_command_panel
 
 <!-- Badge -->
 
@@ -73,11 +73,6 @@ QQ 官方机器人指令面板的 API 限制:
 - [QQ 机器人开放平台 - 开发文档 v2](https://bot.qq.com/wiki/develop/api-v2/) - 指令面板 / 消息收发 / API 鉴权等官方接口规范
 - [AstrBot 插件开发指南](https://docs.astrbot.app/dev/star/plugin-new.html) - Star / filter / schema / 插件 Pages 等开发参考
 - [AstrBot Plugin Pages](https://docs.astrbot.app/dev/star/guides/plugin-pages.html) - 自建 WebUI 的 bridge / Web API 规范 (对应下一步计划中的 Web UI)
-
-## Cover 使用的素材
-
-- 字体: Outfit, Inter, Jetbrains Mono
-- 颜色: #4984b9 #080a41 #0099ff #000000
 
 ## 许可证
 
