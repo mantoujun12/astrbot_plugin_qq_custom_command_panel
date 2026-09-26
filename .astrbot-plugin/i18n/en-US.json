@@ -6,8 +6,8 @@
   },
   "config": {
     "language": {
-      "description": "Language for plugin logs and debug command output",
-      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output and /qq_panel_* replies; user-authored selected_commands entries are NOT translated.",
+      "description": "Language for plugin logs",
+      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated.",
       "labels": ["简体中文", "English"]
     },
     "scenes": {
