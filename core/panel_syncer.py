@@ -62,7 +62,7 @@ class PanelSyncer:
     def is_owned_panel(panel: dict[str, Any]) -> bool:
         """判定一个面板是否由本插件创建 (依据 remark 前缀)
 
-        公开方法, 供 main.py 调试指令与 sync 内部共用, 避免"本插件面板"
+        公开方法, 供 sync / clear / purge 内部共用, 避免"本插件面板"
         判定逻辑在多处各自实现导致策略漂移。
         """
         panel_content = panel.get("panel")
@@ -148,7 +148,7 @@ class PanelSyncer:
     def build_clients(self) -> dict[str, QQClient]:
         """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端
 
-        公开方法, 供 main.py 调试指令与内部 sync/purge 流程共用,
+        公开方法, 供 sync / clear / purge 流程共用,
         不再让调用方直接访问 _ 前缀私有方法。
         """
         clients: dict[str, QQClient] = {}

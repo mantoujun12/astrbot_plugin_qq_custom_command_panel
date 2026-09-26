@@ -1,6 +1,5 @@
 """初始化插件"""
 
-from .command_collector import collect_commands
 from .config import (
     DEFAULT_SCENES,
     PANEL_ITEM_DESC_MAX,
@@ -41,7 +40,6 @@ __all__ = [
     "ProgressCallback",
     "QQClient",
     "Translator",
-    "collect_commands",
     "get_configured_platforms",
     "get_enabled_scenes",
     "get_instance",

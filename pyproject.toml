@@ -19,7 +19,7 @@ select = ["E", "W", "F", "I", "UP", "B", "S"]
 ignore = ["BLE001"]
 
 [tool.ruff.lint.per-file-ignores]
-# 入口与调试指令里需要在最外层兜底 exceptions, 集中提示用户即可
+# 入口需要在最外层兜底 exceptions, 集中提示用户即可
 "main.py" = ["BLE001"]
 
 [tool.ruff.format]

@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         感谢提交 Bug 反馈！在提交前，请先：
-        - 确认已查阅 [README](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel#readme) 的「已知限制」和「调试指令」章节
+        - 确认已查阅 [README](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel#readme) 的「已知限制」章节
         - 在 [Issue 列表](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/issues) 中搜索过相似问题
 
   - type: checkboxes
@@ -16,7 +16,7 @@ body:
       label: 前置确认
       description: 请确认以下条件全部满足后再提交
       options:
-        - label: 我已查阅 README 文档，包括已知限制和调试指令
+        - label: 我已查阅 README 文档，包括已知限制
           required: true
         - label: 我已搜索现有 Issues，未找到相似问题
           required: true
