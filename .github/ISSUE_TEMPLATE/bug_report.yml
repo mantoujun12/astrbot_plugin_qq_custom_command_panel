@@ -1,7 +1,7 @@
 name: 🐛 Bug 反馈
 description: 报告使用插件过程中遇到的 Bug 或异常行为
 title: "[Bug] "
-labels: ["bug"]
+labels: ["type:fix"]
 body:
   - type: markdown
     attributes:
