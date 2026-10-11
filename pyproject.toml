@@ -4,6 +4,16 @@ testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 
+[tool.coverage.run]
+# 只统计插件生产代码 (core 包 + 装配入口 main.py) 的行/分支覆盖,
+# 用 omit 排除测试文件, 避免 tests/* 被计入覆盖率统计
+source = ["."]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+# 未被执行到的生产代码 (如 main.py 的装配分支) 需要在报告里体现出来
+show_missing = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
