@@ -5,11 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.4.3] - 2026-10-11
 
 ### 修复
 
-- 修复面板状态文件 `panel_state.yaml` 未落到 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/` 目录, 而是回退到工作目录 `data/` 的问题
+- 修复面板状态文件 `panel_state.yaml` 未落到 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/` 目录, 而是回退到工作目录 `data/` 的问题 (#30)
+- 插件数据目录解析改为按 `StarTools.get_data_dir` → `context.get_data_dir` → `context.data_dir` → AstrBot 官方路径工具的优先级, 兜底仍锚定 AstrBot 配置的数据根, 兼容桌面打包版与 `ASTRBOT_ROOT` (#30)
 
 ## [v0.4.2] - 2026-10-11
 
@@ -87,6 +88,7 @@
 
 - 首次发布: QQ 官方机器人指令面板同步功能 (#1)
 
+[v0.4.3]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.2...v0.4.3
 [v0.4.2]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.1...v0.4.2
 [v0.4.1]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.3.0...v0.4.0
