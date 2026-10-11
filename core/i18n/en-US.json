@@ -1,5 +1,6 @@
 {
   "log.data_dir_resolve_failed": "failed to resolve plugin data dir ({source}): {exc}",
+  "log.data_dir_fallback_used": "cannot resolve plugin data dir via AstrBot APIs, falling back to {path} using the data root rules",
   "log.startup_sync_failed": "startup sync failed: {exc}",
   "log.load_state_failed": "failed to load panel state: {exc}",
   "log.save_state_failed": "failed to save panel state: {exc}",

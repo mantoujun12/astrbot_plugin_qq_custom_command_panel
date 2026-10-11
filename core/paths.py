@@ -5,13 +5,15 @@ AstrBot 约定: 插件运行期产生的数据应存放于 `<AstrBot data>/plugi
 前者会随 AstrBot 一起迁移/备份/审计, 后者散落在仓库根目录, 容易丢失或被误提交。
 
 解析结果必须落在 AstrBot 配置的数据根 (data root) 之内: 数据根不一定是进程
-工作目录 (桌面打包版在 ~/.astrbot, 可被 ASTRBOT_ROOT 覆盖), 因此兜底优先用
-AstrBot 官方路径工具解析; 相对路径只在宿主连路径工具都不存在时作为最后手段
-(源码部署下数据根恰为 CWD/data)。
+工作目录 (桌面打包版在 ~/.astrbot, 可被 ASTRBOT_ROOT 覆盖), 因此优先用
+AstrBot 官方路径工具解析。即使官方 API 完全不可导入, 最后兜底也会按 AstrBot
+的数据根规则定位 (`ASTRBOT_ROOT` > 桌面版 `~/.astrbot` > 工作目录), 而不是
+无条件使用进程工作目录。
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterator
 from importlib import import_module
 from pathlib import Path
@@ -46,6 +48,22 @@ def _find_path_helper(func_name: str) -> Any:
     """定位 astrbot.core.utils.astrbot_path 下的路径辅助函数"""
     mod = _import_optional("astrbot.core.utils.astrbot_path")
     return getattr(mod, func_name, None) if mod is not None else None
+
+
+def _fallback_data_root() -> Path:
+    """官方路径 API 完全不可用时, 按 AstrBot 的规则复刻本机数据根。
+
+    与 `astrbot.core.utils.astrbot_path.get_astrbot_root()` 一致:
+    `ASTRBOT_ROOT` > 桌面打包版 (`~/.astrbot`) > 进程工作目录。
+    仅在 `get_astrbot_data_path()` 也无法导入时才会用到, 作为最后手段,
+    目的是即使退化到该分支也不会把状态写到 AstrBot 数据根之外。
+    """
+    env_root = os.environ.get("ASTRBOT_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+    if os.environ.get("ASTRBOT_DESKTOP_CLIENT") == "1":
+        return (Path.home() / ".astrbot").resolve()
+    return Path.cwd().resolve()
 
 
 def _iter_data_dir_sources(
@@ -113,8 +131,9 @@ def resolve_plugin_data_dir(
     """解析插件数据目录, 返回 `<AstrBot data>/plugin_data/<plugin_name>/`。
 
     按优先级尝试: StarTools / context.get_data_dir → context.data_dir →
-    官方路径工具; 全部不可用时回退到相对 AstrBot 运行根的
-    `data/plugin_data/<plugin_name>` (仍遵守同一约定, 不再写回裸 `data/`)。
+    官方路径工具; 全部不可用时按 AstrBot 的数据根规则
+    (`ASTRBOT_ROOT` > 桌面版 `~/.astrbot` > 工作目录) 定位到
+    `<data_root>/plugin_data/<plugin_name>`, 不会写到数据根之外。
 
     这里只负责解析路径, 不强制创建目录 — 具体存储层 (如 `PanelStateStore`)
     会在写入前 `mkdir(parents=True, exist_ok=True)`。
@@ -127,8 +146,12 @@ def resolve_plugin_data_dir(
             continue
         if path is not None:
             return Path(path)
-    # 最后兜底: 相对进程工作目录 (源码部署下与 AstrBot 数据根一致)
-    return Path("data") / "plugin_data" / plugin_name
+
+    # 最后兜底: 官方路径 API 全部不可用 (正常 AstrBot 下不会发生),
+    # 按 AstrBot 的数据根规则定位, 避免写到数据根之外
+    fallback = _fallback_data_root() / "data" / "plugin_data" / plugin_name
+    logger.warning(f"{LOG_TAG} " + t("log.data_dir_fallback_used", path=fallback))
+    return fallback
 
 
 __all__ = ["PLUGIN_NAME", "resolve_plugin_data_dir"]

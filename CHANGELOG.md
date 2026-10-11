@@ -10,7 +10,7 @@
 ### 修复
 
 - 修复面板状态文件 `panel_state.yaml` 未落到 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/` 目录, 而是回退到工作目录 `data/` 的问题 (#30)
-- 插件数据目录解析改为按 `StarTools.get_data_dir` → `context.get_data_dir` → `context.data_dir` → AstrBot 官方路径工具的优先级, 兜底仍锚定 AstrBot 配置的数据根, 兼容桌面打包版与 `ASTRBOT_ROOT` (#30)
+- 插件数据目录解析改为按 `StarTools.get_data_dir` → `context.get_data_dir` → `context.data_dir` → AstrBot 官方路径工具的优先级; 即使官方路径工具不可用, 最后兜底也按 AstrBot 的数据根规则 (`ASTRBOT_ROOT` > 桌面版 `~/.astrbot` > 工作目录) 定位, 不会写到数据根之外 (#30)
 
 ## [v0.4.2] - 2026-10-11
 
