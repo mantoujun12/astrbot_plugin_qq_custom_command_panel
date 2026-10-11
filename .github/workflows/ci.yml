@@ -1,5 +1,7 @@
 name: CI
 
+# Ruff lint/format 已迁移至 .pre-commit-config.yaml (pre-commit.ci 在 PR 上运行)
+
 on:
   push:
     branches:
@@ -11,29 +13,6 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Ruff
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
-
-      - name: Ruff lint
-        run: ruff check .
-
-      - name: Ruff format
-        run: ruff format --check .
-
   test:
     name: Pytest (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
