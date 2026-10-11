@@ -1,5 +1,6 @@
 {
   "log.data_dir_resolve_failed": "解析插件数据目录失败 ({source}): {exc}",
+  "log.data_dir_fallback_used": "无法通过 AstrBot API 解析插件数据目录, 按数据根规则回退到 {path}",
   "log.startup_sync_failed": "启动同步失败: {exc}",
   "log.load_state_failed": "读取面板状态失败: {exc}",
   "log.save_state_failed": "保存面板状态失败: {exc}",
