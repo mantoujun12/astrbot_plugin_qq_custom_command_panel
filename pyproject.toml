@@ -17,8 +17,9 @@ show_missing = true
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# AstrBot 插件运行时会把 panel_state.yaml 写到 data/,
-# 排除掉避免 ruff 去 lint 这个运行时生成的目录
+# AstrBot 插件运行时会把 panel_state.yaml 写到
+# <AstrBot data>/plugin_data/astrbot_plugin_qq_custom_command_panel/,
+# 兜底路径下才会落到工作目录的 data/, 排除掉避免 ruff 去 lint 这个运行时生成的目录
 extend-exclude = ["data"]
 
 [tool.ruff.lint]
