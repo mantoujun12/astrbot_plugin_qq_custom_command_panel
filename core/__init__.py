@@ -22,6 +22,7 @@ from .i18n import (
     t,
 )
 from .panel_syncer import PanelSyncer, ProgressCallback
+from .paths import PLUGIN_NAME, resolve_plugin_data_dir
 from .qq_client import QQClient
 from .state import STATE_FILENAME, PanelStateStore
 
@@ -32,6 +33,7 @@ __all__ = [
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
     "PANEL_MAX_ITEMS",
+    "PLUGIN_NAME",
     "SCENES",
     "STATE_FILENAME",
     "SUPPORTED_LANGUAGES",
@@ -47,5 +49,6 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "initialize",
+    "resolve_plugin_data_dir",
     "t",
 ]

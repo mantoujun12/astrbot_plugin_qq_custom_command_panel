@@ -7,7 +7,7 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 - Python 3.10+(代码里有 X | None、from __future__ import annotations)
 - aiohttp(HTTP 客户端, 10s 超时)
 - AstrBot Star 插件体系(@register / @filter.command / Context / AstrBotConfig)
-- 无第三方数据库,本地状态存 data_dir
+- 无第三方数据库,本地状态存 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/`
 
 #### 开发命令
 

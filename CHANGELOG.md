@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复面板状态文件 `panel_state.yaml` 未落到 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/` 目录, 而是回退到工作目录 `data/` 的问题
+
 ## [v0.4.2] - 2026-10-11
 
 ### 新增

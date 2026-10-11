@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import aiohttp
 from astrbot.api import logger
 from astrbot.api.star import Context, Star, register
@@ -18,14 +16,16 @@ from .core import (
     PANEL_ITEM_DESC_MAX,
     PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
+    PLUGIN_NAME,
     SCENES,
     PanelSyncer,
+    resolve_plugin_data_dir,
 )
 from .core.i18n import LOG_TAG, t
 
 
 @register(
-    "astrbot_plugin_qq_custom_command_panel",
+    PLUGIN_NAME,
     "mantoujun12",
     "用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容",
     "v0.4.2",
@@ -37,25 +37,11 @@ class QQCommandPanelPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        # 持久化目录：AstrBot 提供的 data_dir
-        # 各 AstrBot 版本可能字段名不同，做兼容处理
-        self.data_dir = self._resolve_data_dir(context)
+        # 持久化目录: AstrBot 的 data/plugin_data/<plugin_name>/,
+        # 由 core.paths.resolve_plugin_data_dir 兼容不同 AstrBot 版本的获取方式
+        self.data_dir = resolve_plugin_data_dir(context, PLUGIN_NAME)
         self._http: aiohttp.ClientSession | None = None
         self._syncer: PanelSyncer | None = None
-
-    @staticmethod
-    def _resolve_data_dir(context: Context) -> Path:
-        """兼容不同 AstrBot 版本获取 data_dir 的方式"""
-        for attr in ("get_data_dir", "data_dir"):
-            getter = getattr(context, attr, None)
-            if callable(getter):
-                try:
-                    return Path(getter())
-                except Exception as exc:
-                    logger.debug(f"{LOG_TAG} {t('log.attr_call_failed', attr=attr, exc=exc)}")
-            elif getter:
-                return Path(getter)
-        return Path("data")
 
     async def initialize(self) -> None:
         """插件初始化: 启动时同步一次面板"""
@@ -87,6 +73,7 @@ __all__ = [
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
     "PANEL_MAX_ITEMS",
+    "PLUGIN_NAME",
     "SCENES",
     "QQCommandPanelPlugin",
 ]
