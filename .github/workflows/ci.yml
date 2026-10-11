@@ -54,5 +54,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run tests
-        run: pytest -q
+      - name: Run tests with coverage
+        run: pytest --cov --cov-branch --cov-report=xml
+
+      # 只在单个矩阵任务上传, 避免同一 commit 多次提交覆盖率报告
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.python-version == '3.12' }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
