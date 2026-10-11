@@ -1,6 +1,6 @@
 <div align="center">
 
-# astrbot_plugin_qq_custom_command_panel
+<img src="https://socialify.git.ci/mantoujun12/astrbot_plugin_qq_custom_command_panel/image?description=1&language=1&name=1&pattern=Circuit+Board&theme=Auto" alt="astrbot_plugin_qq_custom_command_panel" width="640" height="320" />
 
 <!-- Badge -->
 
