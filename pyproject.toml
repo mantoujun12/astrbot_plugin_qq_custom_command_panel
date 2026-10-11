@@ -1,3 +1,9 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 仓库根加入 sys.path, 使测试可以 import core.* (包内相对导入正常工作)
+pythonpath = ["."]
+asyncio_mode = "auto"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -21,6 +27,8 @@ ignore = ["BLE001"]
 [tool.ruff.lint.per-file-ignores]
 # 入口需要在最外层兜底 exceptions, 集中提示用户即可
 "main.py" = ["BLE001"]
+# 测试: assert 语句 (S101) 是测试的本职; 假凭证字符串触发 S105/S106/S107
+"tests/*" = ["S101", "S105", "S106", "S107"]
 
 [tool.ruff.format]
 quote-style = "double"

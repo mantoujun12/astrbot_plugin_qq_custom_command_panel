@@ -1,0 +1,29 @@
+# pre-commit.ci 在每个 PR 上自动运行, CI (ci.yml) 对 push 到 main/master 兜底运行同一套 hooks
+# 本地: pip install pre-commit && pre-commit run --all-files
+ci:
+  autofix_commit_msg: "style: pre-commit autofix"
+  autoupdate_commit_msg: "chore: pre-commit autoupdate"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: fix-byte-order-marker
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: debug-statements
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      # 顺序要求: --fix 在 format 之前
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format

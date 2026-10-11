@@ -11,13 +11,26 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 
 #### 开发命令
 
-不需要，插件通过 AstrBot 加载，测试均需要在运行的 AstrBot 实例下运行。
+插件通过 AstrBot 加载，功能性测试仍需要在运行的 AstrBot 实例下进行；
+业务逻辑可跑离线 pytest 套件(无需安装 AstrBot，tests/conftest.py 会注入 astrbot stub)。
 
-但是为了规范性，建议使用 Ruff 修复和格式化。
+安装运行 + 开发依赖：
+
+`pip install -r requirements.txt -r requirements-dev.txt`
+
+运行离线测试：
+
+`pytest -q`
+
+规范性检查建议使用 Ruff 修复和格式化：
 
 `ruff check . --fix`
 
 `ruff format --check .`
+
+或安装 pre-commit 后跑同一套 hooks(与 pre-commit.ci / CI 一致)：
+
+`pre-commit run --all-files`
 
 #### 架构约定
 
