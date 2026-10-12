@@ -62,5 +62,11 @@
         }
       }
     }
+  },
+  "views": {
+    "dashboard": {
+      "title": "指令面板",
+      "description": "可视化配置要写入 QQ 官方机器人指令面板的条目。"
+    }
   }
 }
