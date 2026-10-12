@@ -12,8 +12,12 @@ repos:
       - id: check-json
       - id: check-toml
       - id: fix-byte-order-marker
+      # pages/ 下是前端构建产物, 由 Vite 生成, 不参与空白符修复
+      # (否则每次 pnpm build 后工作区都会变脏)
       - id: end-of-file-fixer
+        exclude: ^pages/
       - id: trailing-whitespace
+        exclude: ^pages/
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-case-conflict
