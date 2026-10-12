@@ -2,6 +2,13 @@
 
 插件 `astrbot_plugin_qq_custom_command_panel` 的 AstrBot WebUI 可视化视图（Vue 3 + TypeScript + Vite）。
 
+## 前置要求
+
+- **Node.js `^20.19.0 || >=22.12.0`** —— Vite 8 的硬性要求，版本过低时 `pnpm build` 会在打包前直接失败。可在
+  `package.json` 的 `engines` 字段查看。
+- **pnpm** —— lockfile 为 `lockfileVersion: 9.0`，pnpm 9+ 均可安装；CI 固定用 **pnpm 12** 构建
+  （见 `.github/workflows/ci.yml`）。
+
 ## 构建
 
 ```bash
