@@ -62,5 +62,11 @@
         }
       }
     }
+  },
+  "views": {
+    "dashboard": {
+      "title": "Command Panel",
+      "description": "Visually configure the entries written to the QQ Official bot command panel."
+    }
   }
 }
