@@ -91,6 +91,8 @@ jobs:
           cp pyproject.toml "${BUILD_DIR}/" 2>/dev/null || true
           if [ -d core ]; then cp -R core "${BUILD_DIR}/"; fi
           if [ -d .astrbot-plugin ]; then cp -R .astrbot-plugin "${BUILD_DIR}/"; fi
+          # 可视化视图 (pages/ 是 views/ 的兼容别名), AstrBot 直接从插件目录读取
+          if [ -d pages ]; then cp -R pages "${BUILD_DIR}/"; fi
 
           # Create zip archive (at repo root so softprops action can find it easily)
           ZIP_FILE="${PKG_NAME}.zip"
