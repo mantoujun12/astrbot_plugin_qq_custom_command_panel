@@ -66,3 +66,42 @@ jobs:
           flags: unittests
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  dashboard:
+    name: Dashboard (build + freshness)
+    # AstrBot 直接读取提交进仓库的 pages/dashboard/, 所以这里既要确认能构建,
+    # 也要确认提交的产物和源码一致 (源码改了但忘记重新 build 会让 CI 变红)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/dashboard/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web/dashboard
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dashboard
+        working-directory: web/dashboard
+        run: pnpm build
+
+      - name: Check committed bundle is up to date
+        run: |
+          if [ -n "$(git status --porcelain -- pages/dashboard)" ]; then
+            echo "::error::pages/dashboard is out of date. Run 'pnpm build' in web/dashboard and commit the result."
+            git --no-pager status --porcelain -- pages/dashboard
+            git --no-pager diff --stat -- pages/dashboard
+            exit 1
+          fi
+          echo "pages/dashboard is up to date."
