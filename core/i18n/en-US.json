@@ -19,6 +19,8 @@
   "log.clear_platform_failed": "failed to clear panels for platform {pf_id}: {exc}",
   "log.prepare_write_items": "about to write {count} custom command entries to scenes {scenes}",
   "log.sync_platform_failed": "sync failed for platform {pf_id}: {exc}",
+  "log.status_platform_failed": "failed to query panel status for platform {pf_id}: {exc}",
+  "log.web_api_unavailable": "cannot register plugin view Web API (unsupported AstrBot version): {exc}",
 
   "log_prefix.clean_panel": "Clean panel",
   "log_prefix.remove_disabled_scene_panel": "Remove disabled-scene panel",
@@ -39,6 +41,8 @@
 
   "panel.incomplete_list_retry": "panel list is incomplete, failed scopes: {scopes}; sync aborted to avoid duplicate creation, please retry later",
   "panel.incomplete_list_purged_partial": "panel list is incomplete, failed scopes: {scopes}; listed panels have been deleted, retry later",
+
+  "web.not_ready": "plugin is not initialized yet, please retry later",
 
   "progress.sync_no_scene": "⚠️ No scenes enabled, nothing to sync",
   "progress.sync_no_platform": "⚠️ No QQ platform configured, cannot sync",

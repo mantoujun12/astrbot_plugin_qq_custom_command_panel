@@ -22,9 +22,16 @@ from .i18n import (
     t,
 )
 from .panel_syncer import PanelSyncer, ProgressCallback
-from .paths import PLUGIN_NAME, resolve_plugin_data_dir
+from .paths import PLUGIN_NAME, PLUGIN_VERSION, resolve_plugin_data_dir
 from .qq_client import QQClient
 from .state import STATE_FILENAME, PanelStateStore
+from .web_api import (
+    STATUS_ROUTE_SUFFIX,
+    build_status,
+    mask_appid,
+    panel_items_count,
+    register_status_api,
+)
 
 __all__ = [
     "DEFAULT_LANGUAGE",
@@ -34,14 +41,17 @@ __all__ = [
     "PANEL_ITEM_NAME_MAX",
     "PANEL_MAX_ITEMS",
     "PLUGIN_NAME",
+    "PLUGIN_VERSION",
     "SCENES",
     "STATE_FILENAME",
+    "STATUS_ROUTE_SUFFIX",
     "SUPPORTED_LANGUAGES",
     "PanelStateStore",
     "PanelSyncer",
     "ProgressCallback",
     "QQClient",
     "Translator",
+    "build_status",
     "get_configured_platforms",
     "get_enabled_scenes",
     "get_instance",
@@ -49,6 +59,9 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "initialize",
+    "mask_appid",
+    "panel_items_count",
+    "register_status_api",
     "resolve_plugin_data_dir",
     "t",
 ]

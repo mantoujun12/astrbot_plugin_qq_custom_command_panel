@@ -17,8 +17,10 @@ from .core import (
     PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
     PLUGIN_NAME,
+    PLUGIN_VERSION,
     SCENES,
     PanelSyncer,
+    register_status_api,
     resolve_plugin_data_dir,
 )
 from .core.i18n import LOG_TAG, t
@@ -28,7 +30,7 @@ from .core.i18n import LOG_TAG, t
     PLUGIN_NAME,
     "mantoujun12",
     "用户在 AstrBot WebUI 自定义 QQ 官方机器人指令面板内容",
-    "v0.4.4",
+    PLUGIN_VERSION,
     "https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel",
 )
 class QQCommandPanelPlugin(Star):
@@ -42,6 +44,14 @@ class QQCommandPanelPlugin(Star):
         self.data_dir = resolve_plugin_data_dir(context, PLUGIN_NAME)
         self._http: aiohttp.ClientSession | None = None
         self._syncer: PanelSyncer | None = None
+        # 注册视图 (Dashboard) 的只读状态接口。路由在构造期注册, handler 在
+        # 每次请求时再通过 provider 取最新的 syncer / config (syncer 到
+        # initialize() 才创建)。
+        register_status_api(
+            self.context,
+            lambda: self._syncer,
+            lambda: dict(self.config),
+        )
 
     async def initialize(self) -> None:
         """插件初始化: 启动时同步一次面板"""
@@ -74,6 +84,7 @@ __all__ = [
     "PANEL_ITEM_NAME_MAX",
     "PANEL_MAX_ITEMS",
     "PLUGIN_NAME",
+    "PLUGIN_VERSION",
     "SCENES",
     "QQCommandPanelPlugin",
 ]

@@ -191,11 +191,15 @@ class PanelSyncer:
                 failed_scopes.add(scope)
         return all_panels, failed_scopes
 
-    def _owned_panels_by_scope(
+    def owned_panels_by_scope(
         self,
         all_panels: list[dict[str, Any]],
     ) -> dict[str, dict[str, Any]]:
-        """把本插件 owned 的面板按 scope 分组, 供 sync_for_platform 比对使用"""
+        """把本插件 owned 的面板按 scope 分组, 同名 scope 保留第一条
+
+        公开方法: sync_for_platform 比对现有面板, 以及视图状态接口
+        (core/web_api.py) 判断各场景是否已同步, 都复用这里的同一份判定。
+        """
         grouped: dict[str, dict[str, Any]] = {}
         for p in all_panels:
             if not self.is_owned_panel(p):
@@ -277,7 +281,7 @@ class PanelSyncer:
                 )
             )
 
-        existing_by_scope = self._owned_panels_by_scope(all_existing)
+        existing_by_scope = self.owned_panels_by_scope(all_existing)
 
         # items 为空: 清掉本插件在所有场景上的旧面板, 不创建新面板
         if not items:
