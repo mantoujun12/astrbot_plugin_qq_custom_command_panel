@@ -8,7 +8,7 @@
 import type { StatusResponse } from '../types/dashboard'
 
 export const MOCK_STATUS: StatusResponse = {
-  plugin: { name: 'astrbot_plugin_qq_custom_command_panel', version: 'v0.4.4' },
+  plugin: { name: 'astrbot_plugin_qq_custom_command_panel', version: 'v0.5.0' },
   scenes: ['c2c', 'group'],
   items: { count: 3, max: 20 },
   panels: { total: 5, max: 40, partial: true },
