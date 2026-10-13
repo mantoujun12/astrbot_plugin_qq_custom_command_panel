@@ -64,6 +64,12 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 
 要点：类型注解齐全、from __future__ import annotations、Path 而非字符串拼路径、__all__ 导出公开 API。
 
+#### 文案与标点
+
+- 中文文案（文档、注释、docstring、`zh-CN` i18n、`_conf_schema.json`）统一使用全角标点：`，。：；？！（）“”`；中文句读处不得用半角逗号 `,` 代替 `，`，也不得用半角冒号 `:` 代替 `：`。
+- 英文文案、代码、`en-US` locale 文件保持半角标点：`, . : ; ( )`。
+- 只调整注释、docstring 与字符串字面量里的标点；代码位置的标点属于语法，不得改动。改动前端 fallback 文案后需重新 `pnpm build` 并提交 `pages/dashboard/` 产物。
+
 #### 提交规范
 
 要点：Conventional Commits + 单一职责。
