@@ -20,13 +20,15 @@ const STATUS_ENDPOINT = 'status'
  * 拉取状态概览。
  *
  * 后端该接口默认查询线上, 属于慢请求, 调用方需要自己处理 loading / 错误态。
- * 本地 `pnpm dev` 没有 bridge, 退回 mock 数据; 真实环境下 bridge 请求失败会
- * 直接抛出, 由视图展示错误, 不静默兜底 (否则用户会误以为线上真的没问题)。
+ * 后端对重复请求有短期缓存, `options.refresh` 为 true 时带 refresh=1 跳过缓存
+ * (用于视图手动刷新)。本地 `pnpm dev` 没有 bridge, 退回 mock 数据; 真实环境下
+ * bridge 请求失败会直接抛出, 由视图展示错误, 不静默兜底。
  */
-export async function fetchStatus(): Promise<StatusResponse> {
+export async function fetchStatus(options: { refresh?: boolean } = {}): Promise<StatusResponse> {
   const bridge = getBridge()
   if (!bridge) {
     return MOCK_STATUS
   }
-  return (await bridge.apiGet(STATUS_ENDPOINT)) as StatusResponse
+  const params = options.refresh ? { refresh: 1 } : undefined
+  return (await bridge.apiGet(STATUS_ENDPOINT, params)) as StatusResponse
 }

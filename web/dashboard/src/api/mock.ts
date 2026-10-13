@@ -12,7 +12,7 @@ export const MOCK_STATUS: StatusResponse = {
   plugin: { name: 'astrbot_plugin_qq_custom_command_panel', version: 'v0.4.4' },
   scenes: ['c2c', 'group'],
   items: { count: 3, max: 20 },
-  panels: { total: 5, max: 20 },
+  panels: { total: 5, max: 40, partial: true },
   platforms: [
     {
       pf_id: '主机器人',
@@ -21,7 +21,7 @@ export const MOCK_STATUS: StatusResponse = {
       platform: 'qq_official',
       scenes: [
         { scope: 'c2c', state: 'synced', panel_id: 'panel_1a2b3c', items_count: 3 },
-        { scope: 'group', state: 'synced', panel_id: 'panel_4d5e6f', items_count: 3 },
+        { scope: 'group', state: 'duplicate', panel_id: 'panel_4d5e6f', items_count: 3 },
       ],
     },
     {

@@ -23,28 +23,38 @@ const status = ref<StatusResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
 
+// 请求代次: 初始加载与手动刷新可能重叠, 只允许最新一次请求写回状态,
+// 否则先发的旧请求后返回会覆盖新数据, 其 finally 也会误关 loading。
+let loadSeq = 0
+
 /**
- * 后端 /status 默认查询线上 (每个平台 4 次 QQ API), 属于慢请求,
+ * 后端 /status 默认查询线上 (每个平台所有场景各一次 QQ API), 属于慢请求,
  * 因此只在进入页面和用户点刷新时调用, 不做轮询。
+ * refresh=true 时请求带 refresh=1, 绕过后端短期缓存。
  */
-async function load(): Promise<void> {
+async function load(options: { refresh?: boolean } = {}): Promise<void> {
+  const seq = ++loadSeq
   loading.value = true
   error.value = ''
   try {
-    status.value = await fetchStatus()
+    const next = await fetchStatus(options)
+    if (seq !== loadSeq) return
+    status.value = next
   } catch (err) {
+    if (seq !== loadSeq) return
     status.value = null
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
 // bridge 注入是异步的 (见 composables/useBridge.ts 的 bootstrap)。必须等 ready
 // 之后再请求, 否则真实环境会因拿不到 bridge 而退回 mock 数据。
+// 一并监听 hasBackend: 万一 bridge 在 ready 之后才补上, 也能重新拉取真实数据。
 watch(
-  ready,
-  (isReady) => {
+  [ready, hasBackend],
+  ([isReady]) => {
     if (isReady) {
       void load()
     }
@@ -81,7 +91,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
           color="primary"
           :loading="loading"
           :prepend-icon="mdiRefresh"
-          @click="load"
+          @click="load({ refresh: true })"
         >
           {{ t('views.dashboard.status.refresh', '刷新') }}
         </v-btn>
@@ -147,7 +157,12 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
             :icon="mdiViewGridOutline"
             :title="t('views.dashboard.status.cards.panels', '线上面板')"
             :value="status.panels.total"
-            :max="status.panels.max"
+            :max="status.panels.partial ? undefined : status.panels.max"
+            :note="
+              status.panels.partial
+                ? t('views.dashboard.status.panelsPartial', '部分场景查询失败, 该值为下限')
+                : undefined
+            "
             emphasize-at-limit
           />
         </v-col>

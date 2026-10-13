@@ -21,8 +21,8 @@ export type Scene = (typeof SCENES)[number]
 /** 平台凭证来源: 插件 schema 的 qq_platforms, 或 AstrBot 平台配置 */
 export type PlatformSource = 'schema' | 'context'
 
-/** synced=线上有本插件的面板, missing=该场景线上没有, failed=查询该场景失败 */
-export type SceneState = 'synced' | 'missing' | 'failed'
+/** synced=线上恰有一条本插件面板, duplicate=同场景有多条, missing=该场景线上没有, failed=查询该场景失败 */
+export type SceneState = 'synced' | 'duplicate' | 'missing' | 'failed'
 
 export interface ScenePanelStatus {
   scope: Scene
@@ -51,5 +51,11 @@ export interface StatusResponse {
   scenes: Scene[]
   /** max 为 QQ 侧上限 (超长由后端截断, 见 core/config.py) */
   items: { count: number; max: number }
-  panels: { total: number; max: number }
+  panels: {
+    total: number
+    /** 聚合上限 (单机器人上限 × 机器人数); 没有平台时后端省略该字段 */
+    max?: number
+    /** 有场景查询失败时 total 只是下限, 不能当作精确值展示 */
+    partial: boolean
+  }
 }

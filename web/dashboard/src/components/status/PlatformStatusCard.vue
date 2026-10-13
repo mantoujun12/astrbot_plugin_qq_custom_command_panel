@@ -17,6 +17,7 @@ const sourceLabel = computed(() =>
 // scope 直接展示 QQ API 的原始取值 (c2c/group/...), 不做二次翻译
 const STATE_META: Record<SceneState, { color: string; fallback: string }> = {
   synced: { color: 'success', fallback: '已同步' },
+  duplicate: { color: 'error', fallback: '重复面板' },
   missing: { color: 'warning', fallback: '线上缺失' },
   failed: { color: 'error', fallback: '查询失败' },
 }
