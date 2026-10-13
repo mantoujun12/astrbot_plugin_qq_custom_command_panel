@@ -19,6 +19,8 @@
   "log.clear_platform_failed": "清理平台 {pf_id} 面板失败: {exc}",
   "log.prepare_write_items": "准备写入 {count} 个自定义指令条目到场景 {scenes}",
   "log.sync_platform_failed": "同步平台 {pf_id} 失败: {exc}",
+  "log.status_platform_failed": "查询平台 {pf_id} 面板状态失败: {exc}",
+  "log.web_api_unavailable": "无法注册插件视图 Web API (当前 AstrBot 版本不支持): {exc}",
 
   "log_prefix.clean_panel": "清理面板",
   "log_prefix.remove_disabled_scene_panel": "删除已停用场景面板",
@@ -39,6 +41,8 @@
 
   "panel.incomplete_list_retry": "查询面板列表不完整, 失败场景: {scopes}; 已中止本次同步以避免重复创建, 请稍后重试",
   "panel.incomplete_list_purged_partial": "查询面板列表不完整, 失败场景: {scopes}; 已删除已列出的面板, 请稍后重试",
+
+  "web.not_ready": "插件尚未初始化完成, 请稍后重试",
 
   "progress.sync_no_scene": "⚠️ 未启用任何场景, 无需同步",
   "progress.sync_no_platform": "⚠️ 未识别到 QQ 平台配置, 无法同步",

@@ -296,3 +296,73 @@ def test_set_config_updates_reference() -> None:
     syncer.set_config({"qq_platforms": [{"appid": "x", "secret": "y"}]})
     clients = syncer.build_clients()
     assert set(clients) == {"x"}
+
+
+# ---------------------------------------------------------------------------
+# build_clients: 显式 config 参数
+# ---------------------------------------------------------------------------
+
+
+def test_build_clients_accepts_explicit_config() -> None:
+    """传入当前配置时应按它构建, 而不是用 syncer 内部可能过期的配置"""
+    syncer = make_syncer(config={"qq_platforms": [{"name": "old", "appid": "a1", "secret": "s"}]})
+    clients = syncer.build_clients(
+        {"qq_platforms": [{"name": "new", "appid": "a2", "secret": "s"}]}
+    )
+    assert set(clients) == {"new"}
+    assert clients["new"].appid == "a2"
+
+
+# ---------------------------------------------------------------------------
+# owned_panels_by_scope: 保留全部记录
+# ---------------------------------------------------------------------------
+
+
+def test_owned_panels_by_scope_keeps_all_records_in_order() -> None:
+    syncer = make_syncer()
+    grouped = syncer.owned_panels_by_scope(
+        [
+            owned_panel("c2c", "p1"),
+            foreign_panel("c2c", "x"),
+            owned_panel("c2c", "p2"),
+            owned_panel("group", "g1"),
+        ]
+    )
+    assert [p["panel_id"] for p in grouped["c2c"]] == ["p1", "p2"]
+    assert [p["panel_id"] for p in grouped["group"]] == ["g1"]
+
+
+def test_owned_panels_by_scope_skips_panels_without_scope() -> None:
+    syncer = make_syncer()
+    panel = owned_panel("c2c", "p1")
+    panel.pop("scope")
+    assert syncer.owned_panels_by_scope([panel]) == {}
+
+
+# ---------------------------------------------------------------------------
+# 重复 owned 面板的同步行为
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sync_updates_first_owned_panel_when_duplicated() -> None:
+    """同一 scope 有多条 owned 面板时只更新第一条 (不再被后一条覆盖)"""
+    syncer = make_syncer()
+    client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
+    items = [{"name": "a", "type": "command", "desc": ""}]
+
+    saved = await syncer.sync_for_platform("pf1", client, ["c2c"], items)
+
+    assert saved == {"c2c": "p1"}
+    assert client.updated == [("p1", items)]
+
+
+@pytest.mark.asyncio
+async def test_sync_empty_items_deletes_all_duplicate_owned_panels() -> None:
+    """清空指令时同 scope 的重复面板要一并删除, 不能只删一条"""
+    syncer = make_syncer()
+    client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
+
+    await syncer.sync_for_platform("pf1", client, ["c2c"], [])
+
+    assert sorted(client.deleted) == ["p1", "p2"]

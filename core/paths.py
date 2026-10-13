@@ -24,6 +24,8 @@ from astrbot.api import logger
 from .i18n import LOG_TAG, t
 
 PLUGIN_NAME = "astrbot_plugin_qq_custom_command_panel"
+# 插件版本, 与 metadata.yaml 的 version 保持一致; 供 @register 与视图状态接口共用
+PLUGIN_VERSION = "v0.4.4"
 
 
 def _import_optional(module_name: str) -> Any:
@@ -154,4 +156,4 @@ def resolve_plugin_data_dir(
     return fallback
 
 
-__all__ = ["PLUGIN_NAME", "resolve_plugin_data_dir"]
+__all__ = ["PLUGIN_NAME", "PLUGIN_VERSION", "resolve_plugin_data_dir"]

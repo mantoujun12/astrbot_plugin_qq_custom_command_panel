@@ -66,7 +66,56 @@
   "views": {
     "dashboard": {
       "title": "Command Panel",
-      "description": "Visually configure the entries written to the QQ Official bot command panel."
+      "description": "Visually configure the entries written to the QQ Official bot command panel.",
+      "nav": {
+        "status": "Overview",
+        "settings": "Settings",
+        "collapse": "Collapse sidebar",
+        "expand": "Expand sidebar",
+        "openDrawer": "Open sidebar",
+        "closeDrawer": "Close sidebar"
+      },
+      "status": {
+        "title": "Overview",
+        "subtitle": "Check the current state of each QQ platform and its on-line command panel.",
+        "refresh": "Refresh",
+        "loadFailed": "Failed to load status",
+        "mockHint": "Local dev environment: showing mock data, not connected to the AstrBot backend.",
+        "panelsPartial": "Some scenes failed to query; this value is a lower bound.",
+        "itemsUnit": "items",
+        "limit": "limit",
+        "cards": {
+          "platforms": "QQ platforms",
+          "scenes": "Active scenes",
+          "commands": "Command entries",
+          "panels": "Online panels"
+        },
+        "source": {
+          "schema": "Plugin config",
+          "context": "AstrBot platform config"
+        },
+        "state": {
+          "synced": "Synced",
+          "duplicate": "Duplicate panels",
+          "missing": "Missing online",
+          "failed": "Query failed"
+        },
+        "empty": {
+          "platforms": {
+            "title": "No QQ platform available yet",
+            "description": "Fill in appid / ClientSecret under qq_platforms in the plugin config, or enable a qq_official adapter in the AstrBot platform settings."
+          },
+          "commands": {
+            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands in the plugin config."
+          }
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "subtitle": "Panel entries and platform credentials are kept on the plugin config page.",
+        "placeholderTitle": "Configuration still lives on the plugin config page",
+        "placeholder": "This page is not implemented yet. Change the current options on the plugin config page of the AstrBot WebUI and reload the plugin to apply them."
+      }
     }
   }
 }

@@ -145,14 +145,19 @@ class PanelSyncer:
         except Exception as exc:
             logger.warning(f"{LOG_TAG} progress callback failed: {exc}")
 
-    def build_clients(self) -> dict[str, QQClient]:
+    def build_clients(
+        self,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, QQClient]:
         """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端
 
-        公开方法, 供 sync / clear / purge 流程共用,
-        不再让调用方直接访问 _ 前缀私有方法。
+        公开方法, 供 sync / clear / purge 流程共用。`config` 用于按调用方提供的
+        配置构建, 不传时用 syncer 当前持有的配置; 视图状态接口会传入当前插件配置,
+        保证客户端与响应里的平台元数据同源。
         """
+        source_config = self._config if config is None else config
         clients: dict[str, QQClient] = {}
-        platforms, _source = get_configured_platforms(self._config, self.context)
+        platforms, _source = get_configured_platforms(source_config, self.context)
         for pf_id, info in platforms.items():
             client = QQClient(
                 appid=info["appid"],
@@ -191,18 +196,23 @@ class PanelSyncer:
                 failed_scopes.add(scope)
         return all_panels, failed_scopes
 
-    def _owned_panels_by_scope(
+    def owned_panels_by_scope(
         self,
         all_panels: list[dict[str, Any]],
-    ) -> dict[str, dict[str, Any]]:
-        """把本插件 owned 的面板按 scope 分组, 供 sync_for_platform 比对使用"""
-        grouped: dict[str, dict[str, Any]] = {}
+    ) -> dict[str, list[dict[str, Any]]]:
+        """把本插件 owned 的面板按 scope 分组, 每个 scope 保留全部记录 (维持原顺序)
+
+        公开方法: sync_for_platform 用每个 scope 的第一条做 update 判断, 视图状态
+        接口据此识别「同一场景存在多条本插件面板」的重复情况。保留全部而非只留一条,
+        否则重复面板会被静默吞掉, 调用方也无从发现配置异常。
+        """
+        grouped: dict[str, list[dict[str, Any]]] = {}
         for p in all_panels:
             if not self.is_owned_panel(p):
                 continue
             scope = p.get("scope")
             if scope:
-                grouped[scope] = p
+                grouped.setdefault(scope, []).append(p)
         return grouped
 
     async def _sync_scope_panel(
@@ -277,16 +287,17 @@ class PanelSyncer:
                 )
             )
 
-        existing_by_scope = self._owned_panels_by_scope(all_existing)
+        existing_by_scope = self.owned_panels_by_scope(all_existing)
 
-        # items 为空: 清掉本插件在所有场景上的旧面板, 不创建新面板
+        # items 为空: 清掉本插件在所有场景上的旧面板 (含同 scope 的重复面板)
         if not items:
             delete_coros: list[Coroutine[Any, Any, bool]] = []
-            for scope, old in existing_by_scope.items():
-                old_id = old.get("panel_id")
-                if not old_id:
-                    continue
-                delete_coros.append(self._safe_delete_panel(client, old_id, scope))
+            for scope, owned in existing_by_scope.items():
+                for old in owned:
+                    old_id = old.get("panel_id")
+                    if not old_id:
+                        continue
+                    delete_coros.append(self._safe_delete_panel(client, old_id, scope))
             await self._run_concurrent(delete_coros)
             return {}
 
@@ -299,7 +310,7 @@ class PanelSyncer:
         update_scopes: list[str] = []
         create_scopes: list[str] = []
         for scope in scenes:
-            if existing_by_scope.get(scope) is not None:
+            if existing_by_scope.get(scope):
                 update_scopes.append(scope)
             else:
                 create_scopes.append(scope)
@@ -308,13 +319,14 @@ class PanelSyncer:
         async def _sync_update_scope(scope: str) -> tuple[str, str | None]:
             """返回 (scope, saved_id_or_None), 异常时 saved_id 为 None 并打 error 日志"""
             try:
+                # 同一 scope 有多条 owned 面板时只更新第一条, 多余的由视图标记为 duplicate
                 saved_id, _ = await self._sync_scope_panel(
                     client,
                     pf_id,
                     scope,
                     items,
                     remark,
-                    existing_by_scope.get(scope),
+                    existing_by_scope[scope][0],
                     total_panels,
                 )
                 return scope, saved_id
@@ -350,22 +362,23 @@ class PanelSyncer:
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
                 )
 
-        # ---------- 清理 disabled scene 的旧面板 (并发) ----------
+        # ---------- 清理 disabled scene 的旧面板 (并发, 含重复面板) ----------
         disabled_delete_coros: list[Coroutine[Any, Any, bool]] = []
-        for scope, old in existing_by_scope.items():
+        for scope, owned in existing_by_scope.items():
             if scope in scenes:
                 continue
-            old_id = old.get("panel_id")
-            if not old_id:
-                continue
-            disabled_delete_coros.append(
-                self._safe_delete_panel(
-                    client,
-                    old_id,
-                    scope,
-                    log_prefix="log_prefix.remove_disabled_scene_panel",
+            for old in owned:
+                old_id = old.get("panel_id")
+                if not old_id:
+                    continue
+                disabled_delete_coros.append(
+                    self._safe_delete_panel(
+                        client,
+                        old_id,
+                        scope,
+                        log_prefix="log_prefix.remove_disabled_scene_panel",
+                    )
                 )
-            )
         await self._run_concurrent(disabled_delete_coros)
 
         return saved

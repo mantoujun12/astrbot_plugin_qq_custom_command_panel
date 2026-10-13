@@ -7,6 +7,7 @@
 stub 只伪造代码里实际用到的最小接口面:
 - astrbot.api.logger            (i18n / state / panel_syncer 使用)
 - astrbot.api.star.Context / Star / register (仅导入期绑定, 运行时几乎不碰)
+- astrbot.api.web               (core/web_api.py 的响应 helper)
 - astrbot.core.config.astrbot_config.AstrBotConfig (仅 main.py)
 
 注意: main.py 使用 `from .core import ...` 相对导入, 而仓库根不是包,
@@ -68,6 +69,37 @@ def _install_astrbot_stub() -> None:
     # 父子属性链接, 保证 `import astrbot.api.star` 与
     # `astrbot.api.star.Context` 两种写法都能工作
     api.star = sys.modules["astrbot.api.star"]
+
+    # astrbot.api.web 占位实现: 只保留 payload, 供离线测试断言 handler 返回内容
+    def json_response(data=None, **kwargs):  # noqa: ANN001, ANN202 - stub
+        return {"__json__": True, "data": data}
+
+    def error_response(message="", status_code=400, **kwargs):  # noqa: ANN001, ANN202 - stub
+        return {"__error__": True, "message": message, "status_code": status_code}
+
+    def stream_response(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202 - stub
+        return {"__stream__": True}
+
+    class _FakeQuery:
+        """假 query 参数容器: 与真实 request.query 的 get(key, default, type) 对齐"""
+
+        def get(self, key, default=None, **kwargs):  # noqa: ANN001, ANN003, ANN201 - stub
+            return default
+
+        def getlist(self, key):  # noqa: ANN001, ANN201 - stub
+            return []
+
+    class _FakeRequest:
+        query = _FakeQuery()
+
+    web = _mod(
+        "astrbot.api.web",
+        json_response=json_response,
+        error_response=error_response,
+        stream_response=stream_response,
+        request=_FakeRequest(),
+    )
+    api.web = web
 
     _mod("astrbot.core")
     _mod("astrbot.core.config")
