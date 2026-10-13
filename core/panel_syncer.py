@@ -151,12 +151,9 @@ class PanelSyncer:
     ) -> dict[str, QQClient]:
         """根据配置 (schema 优先, 否则 context) 构建所有 QQ 客户端
 
-        公开方法, 供 sync / clear / purge 流程共用,
-        不再让调用方直接访问 _ 前缀私有方法。
-
-        `config` 用于按调用方提供的配置构建; 不传时用 syncer 当前持有的配置。
-        视图状态接口会传入当前插件配置, 保证客户端与响应里的平台元数据同源,
-        避免 syncer 内部配置过期时出现"新设置配旧客户端"。
+        公开方法, 供 sync / clear / purge 流程共用。`config` 用于按调用方提供的
+        配置构建, 不传时用 syncer 当前持有的配置; 视图状态接口会传入当前插件配置,
+        保证客户端与响应里的平台元数据同源。
         """
         source_config = self._config if config is None else config
         clients: dict[str, QQClient] = {}
@@ -203,14 +200,11 @@ class PanelSyncer:
         self,
         all_panels: list[dict[str, Any]],
     ) -> dict[str, list[dict[str, Any]]]:
-        """把本插件 owned 的面板按 scope 分组, 每个 scope 保留全部记录 (保持原顺序)
+        """把本插件 owned 的面板按 scope 分组, 每个 scope 保留全部记录 (维持原顺序)
 
-        公开方法: sync_for_platform 用每个 scope 的第一条做 update 判断, 视图
-        状态接口 (core/web_api.py) 据此识别「同一场景存在多条本插件面板」的
-        重复情况, 都复用这里的同一份判定。
-
-        保留全部而非只留一条: 同一 scope 出现多条 owned 面板时, 只留一条会把
-        重复面板静默吞掉, 调用方也就无从发现配置异常。
+        公开方法: sync_for_platform 用每个 scope 的第一条做 update 判断, 视图状态
+        接口据此识别「同一场景存在多条本插件面板」的重复情况。保留全部而非只留一条,
+        否则重复面板会被静默吞掉, 调用方也无从发现配置异常。
         """
         grouped: dict[str, list[dict[str, Any]]] = {}
         for p in all_panels:
@@ -325,8 +319,7 @@ class PanelSyncer:
         async def _sync_update_scope(scope: str) -> tuple[str, str | None]:
             """返回 (scope, saved_id_or_None), 异常时 saved_id 为 None 并打 error 日志"""
             try:
-                # 同一 scope 有多条 owned 面板时只更新第一条, 不会碰其他重复项;
-                # 多余的重复面板会由视图状态接口标记为 duplicate, 提示用户清理。
+                # 同一 scope 有多条 owned 面板时只更新第一条, 多余的由视图标记为 duplicate
                 saved_id, _ = await self._sync_scope_panel(
                     client,
                     pf_id,

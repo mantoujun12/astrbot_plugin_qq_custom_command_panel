@@ -28,9 +28,8 @@ const error = ref('')
 let loadSeq = 0
 
 /**
- * 后端 /status 默认查询线上 (每个平台所有场景各一次 QQ API), 属于慢请求,
- * 因此只在进入页面和用户点刷新时调用, 不做轮询。
- * refresh=true 时请求带 refresh=1, 绕过后端短期缓存。
+ * 后端 /status 默认查询线上, 属慢请求, 因此只在进入页面和手动刷新时调用, 不做
+ * 轮询; refresh=true 时带 refresh=1 绕过后端短期缓存。
  */
 async function load(options: { refresh?: boolean } = {}): Promise<void> {
   const seq = ++loadSeq
@@ -49,9 +48,8 @@ async function load(options: { refresh?: boolean } = {}): Promise<void> {
   }
 }
 
-// bridge 注入是异步的 (见 composables/useBridge.ts 的 bootstrap)。必须等 ready
-// 之后再请求, 否则真实环境会因拿不到 bridge 而退回 mock 数据。
-// 一并监听 hasBackend: 万一 bridge 在 ready 之后才补上, 也能重新拉取真实数据。
+// bridge 注入是异步的, 必须等 ready 后再请求, 否则真实环境会退回 mock;
+// 一并监听 hasBackend, 万一 bridge 在 ready 之后才补上也能重新拉取真实数据。
 watch(
   [ready, hasBackend],
   ([isReady]) => {
@@ -65,8 +63,8 @@ watch(
 const hasPlatforms = computed(() => (status.value?.platforms.length ?? 0) > 0)
 const hasItems = computed(() => (status.value?.items.count ?? 0) > 0)
 
-// 本地 `pnpm dev` 没有 bridge, fetchStatus 会退回 mock 数据, 这里显式标注,
-// 避免把假数据当成真实线上状态; ready 之前不显示, 免得首屏闪一下。
+// 本地 `pnpm dev` 没有 bridge, fetchStatus 会退回 mock; 这里显式标注避免把假数据
+// 当成真实状态, ready 之前不显示以防首屏闪烁。
 const mockMode = computed(() => ready.value && !hasBackend.value)
 </script>
 

@@ -1,10 +1,8 @@
 """core.web_api 的单元测试
 
-覆盖视图状态接口 (GET /<plugin>/status) 的组装逻辑:
-- build_status 的字段契约 (对应 types/dashboard.ts 的 StatusResponse)
-- appid / pf_id 脱敏、条目计数、重复面板标记、计数不完整标记
-- StatusCache 的缓存与单飞
-- register_status_api 的路由注册与降级 (老版本 AstrBot 无 register_web_api)
+覆盖视图状态接口 (GET /<plugin>/status) 的组装逻辑: 字段契约、脱敏、条目计数、
+重复面板标记、计数不完整标记, StatusCache 缓存, 以及 register_status_api 的
+路由注册与降级。
 """
 
 from __future__ import annotations

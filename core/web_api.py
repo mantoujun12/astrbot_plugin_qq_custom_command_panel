@@ -1,16 +1,8 @@
 """插件可视化视图 (Dashboard) 的后端 Web API。
 
-只实现视图当前需要的只读接口:
-
-    GET /<plugin_name>/status    状态概览
-
-视图端 (web/dashboard) 通过 `bridge.apiGet("status")` 调用, endpoint 不含插件名
-前缀, 由 Dashboard 转发到本路由 (见 AGENTS.md 第 8 条)。返回结构与
-`web/dashboard/src/types/dashboard.ts` 的 StatusResponse 一一对应。
-
-数据全部取自 core 的公开能力, 视图层不重复业务逻辑:
-    PanelSyncer.build_clients / list_all_panels / owned_panels_by_scope
-    config.get_configured_platforms / get_enabled_scenes / get_selected_commands
+只提供视图当前需要的只读接口 `GET /<plugin_name>/status`, 返回结构与
+`web/dashboard/src/types/dashboard.ts` 的 StatusResponse 对应。数据取自 core 的
+公开能力, 视图层不重复业务逻辑。
 """
 
 from __future__ import annotations
@@ -36,17 +28,12 @@ from .paths import PLUGIN_NAME, PLUGIN_VERSION
 # 视图状态接口的路由后缀; 完整路由为 /<PLUGIN_NAME>/status
 STATUS_ROUTE_SUFFIX = "status"
 
-# 状态结果的缓存时长 (秒)。面板查询是慢请求且消耗 QQ 配额, 短期内的重复/并发
-# 请求复用同一份结果, 避免刷爆 token 与面板接口。视图手动刷新时带 refresh=1 跳过。
+# 状态结果缓存时长 (秒): 面板查询慢且消耗 QQ 配额, 重复/并发请求复用同一结果
 STATUS_CACHE_TTL = 5.0
 
 
 def mask_appid(appid: Any) -> str:
-    """appid 脱敏: 保留前 3 位与后 2 位, 中间用 * 代替
-
-    appid 会展示在视图卡片上, 脱敏避免截图时泄露完整机器人标识。
-    过短的 appid 无法保留首尾, 整体打码。
-    """
+    """appid 脱敏: 保留前 3 位与后 2 位, 中间打码; 过短则整体打码"""
     text = str(appid or "")
     if len(text) <= 6:
         return "*" * len(text)
@@ -54,10 +41,7 @@ def mask_appid(appid: Any) -> str:
 
 
 def panel_items_count(panel: dict[str, Any]) -> int:
-    """统计一个面板 record 的指令条目数, 结构异常时返回 0
-
-    QQ 返回的面板把 items 嵌在 panel 对象里; 兼容旧接口/测试数据里的扁平结构。
-    """
+    """统计面板 record 的指令条目数, 结构异常时返回 0 (兼容 items 嵌套或扁平)"""
     content = panel.get("panel")
     items = content.get("items") if isinstance(content, dict) else panel.get("items")
     return len(items) if isinstance(items, list) else 0
@@ -71,20 +55,14 @@ async def _platform_status(
     source: str,
     scenes: list[str],
 ) -> tuple[dict[str, Any], int, bool]:
-    """构造单个平台的状态
+    """构造单个平台的状态, 返回 (payload, 线上已知面板数, 计数是否完整)
 
-    返回 (payload, 该平台线上已知面板数, 计数是否完整)。
     计数不完整 (有场景查询失败) 时, 调用方不应把它当作精确的在线总数。
-
-    场景状态取值:
-        synced    - 该场景线上恰好有一条本插件面板
-        duplicate - 同一场景存在多条本插件面板 (配置异常, 需要清理)
-        missing   - 该场景线上没有本插件面板
-        failed    - 该场景查询失败
+    场景状态: synced=线上恰有一条本插件面板, duplicate=同场景存在多条,
+    missing=该场景无本插件面板, failed=查询该场景失败。
     """
     raw_appid = info.get("appid")
-    # pf_id 在配置未提供备注名时会回退成 appid, 此时同样要脱敏, 否则完整
-    # 机器人标识会绕过脱敏直接展示在卡片标题上
+    # 未配备注名时 pf_id 会回退成 appid, 同样需要脱敏
     display_pf_id = mask_appid(raw_appid) if raw_appid and str(raw_appid) == pf_id else pf_id
 
     payload: dict[str, Any] = {
@@ -98,8 +76,7 @@ async def _platform_status(
     try:
         panels, failed_scopes = await syncer.list_all_panels(client)
     except Exception as exc:
-        # list_all_panels 内部已逐场景兜底, 这里只防意外;
-        # 单个平台失败不能让整个状态接口 500, 用 error 字段反馈给视图。
+        # list_all_panels 已逐场景兜底, 这里只防意外; 单平台失败不能让整个接口 500
         logger.error(
             f"{LOG_TAG} " + t("log.status_platform_failed", pf_id=pf_id, exc=exc),
             exc_info=True,
@@ -138,18 +115,16 @@ async def build_status(
 ) -> dict[str, Any]:
     """组装状态概览响应体 (对应 types/dashboard.ts 的 StatusResponse)
 
-    该接口默认查询线上, 每个平台会对所有场景各调一次 QQ API, 属于慢请求,
+    该接口默认查询线上, 每个平台对所有场景各调一次 QQ API, 属慢请求,
     视图只在进入页面/手动刷新时调用。
     """
     platforms, source = get_configured_platforms(config, syncer.context)
     scenes = get_enabled_scenes(config)
     items = get_selected_commands(config)
-    # 用当前配置构建客户端, 与上面读到的平台元数据同源; 不依赖 syncer 可能过期的
-    # 内部配置, 否则响应会混入旧客户端/旧凭据
+    # 用当前配置构建客户端, 与上面的平台元数据同源, 避免 syncer 内部配置过期
     clients = syncer.build_clients(config)
 
-    # 各平台互不依赖, 并发查询缩短整体耗时; list_all_panels 自身不抛异常,
-    # 单个平台失败只影响它自己的 payload。
+    # 各平台互不依赖, 并发查询缩短耗时; 单平台失败只影响它自己的 payload
     results = await asyncio.gather(
         *(
             _platform_status(syncer, pf_id, client, platforms.get(pf_id, {}), source, scenes)
@@ -177,12 +152,10 @@ async def build_status(
 
 
 class StatusCache:
-    """状态结果的单飞 (single-flight) + 短期缓存
+    """状态结果的单飞 (single-flight) 加短期缓存
 
-    - 并发请求: 后到的请求在锁上等待, 复用正在计算或刚算完的结果, 不会各发一轮
-      QQ API
-    - 短期缓存: TTL 内的重复请求直接命中, 不打 QQ 接口
-    - force=True (视图手动刷新) 时跳过缓存重新计算
+    并发请求复用正在计算或刚算完的结果, TTL 内命中缓存, 不重复打 QQ API;
+    force=True (视图手动刷新) 时跳过缓存。
     """
 
     def __init__(self, ttl: float = STATUS_CACHE_TTL) -> None:
@@ -231,11 +204,9 @@ def register_status_api(
 ) -> bool:
     """注册视图用的只读 Web API 路由, 成功返回 True
 
-    参数为 provider 而非具体实例: syncer 要到 initialize() 才创建, config 也会
-    在运行期刷新, 用回调在每次请求时取最新值。
-
-    老版本 AstrBot 可能没有 astrbot.api.web 或 context.register_web_api,
-    此时只记录 warning 并跳过注册, 不影响插件核心的面板同步功能。
+    syncer 到 initialize() 才创建, config 也会在运行期刷新, 因此用 provider
+    回调在每次请求时取最新值。老版本 AstrBot 缺少 astrbot.api.web 或
+    register_web_api 时只记 warning 并跳过, 不影响面板同步。
     """
     try:
         from astrbot.api.web import error_response, json_response, request
@@ -255,8 +226,7 @@ def register_status_api(
         syncer = get_syncer()
         if syncer is None:
             return error_response(t("web.not_ready"), status_code=503)
-        # 视图手动刷新时带 refresh=1, 跳过缓存拉最新; 其余重复/并发请求复用缓存,
-        # 避免重复打 QQ API 消耗配额
+        # 视图手动刷新带 refresh=1 时跳过缓存
         raw_refresh = request.query.get("refresh", "")
         force = str(raw_refresh).strip().lower() in ("1", "true", "yes")
         payload = await cache.get(

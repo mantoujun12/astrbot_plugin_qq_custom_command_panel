@@ -4,8 +4,7 @@ import { useBridge } from '../composables/useBridge'
 
 const { t } = useBridge()
 
-// 设置页尚未实现: 现有配置项都在插件配置 (schema) 页面, 这里先做占位说明,
-// 列出用户需要去那边修改的字段名, 减少来回找。
+// 设置页占位: 现有配置项都在插件配置 (schema) 页, 这里只列出字段名方便定位
 const configFields = ['language', 'scenes', 'qq_platforms', 'selected_commands']
 </script>
 

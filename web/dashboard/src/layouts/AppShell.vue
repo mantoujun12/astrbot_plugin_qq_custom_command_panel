@@ -83,7 +83,7 @@ const title = computed(
       />
     </v-navigation-drawer>
 
-    <!-- 窄屏时抽屉是临时的, 标题随抽屉收起, 所以这里保留一个打开入口和标题 -->
+    <!-- 窄屏抽屉是临时的, 收起后需要一个打开入口 + 标题 -->
     <v-app-bar v-if="mobile" flat border>
       <v-app-bar-nav-icon
         :icon="mdiMenu"

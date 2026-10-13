@@ -17,10 +17,8 @@ const routes: RouteRecordRaw[] = [
 ]
 
 /**
- * 固定使用 hash 路由。
- *
- * AstrBot 按真实文件路径解析视图静态资源, history 路由刷新时后端没有对应
- * 文件会 404; 官方文档也建议 SPA 使用 hash routing (README 里同样有这条约定)。
+ * 固定使用 hash 路由: AstrBot 按真实文件路径解析视图资源, history 路由刷新会
+ * 404; 官方文档也建议 SPA 用 hash routing。
  */
 export const router = createRouter({
   history: createWebHashHistory(),

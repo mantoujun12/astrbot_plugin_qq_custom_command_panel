@@ -1,16 +1,7 @@
 /**
- * 状态概览 (/status) 的数据契约。
+ * 状态概览 (/status) 的数据契约, 与后端 build_status 的返回一一对应。
  *
- * 插件后端目前还没有注册任何 Web API, 这里先把契约固定下来, 后续在
- * main.py 里用 `context.register_web_api` 按同样字段返回。字段都能从 core
- * 现有的公开方法得到, 不需要改核心逻辑:
- *
- *   build_clients()         -> platforms / source
- *   get_enabled_scenes()    -> scenes
- *   get_selected_commands() -> items
- *   list_all_panels()       -> 各场景线上状态 (含失败场景)
- *
- * 注意: 该接口默认查询线上, 每个平台会对 4 个场景各调一次 QQ API, 属于慢请求。
+ * 该接口默认查询线上, 每个平台对所有场景各调一次 QQ API, 属慢请求。
  */
 
 export const SCENES = ['c2c', 'group', 'channel', 'dm'] as const

@@ -1,12 +1,9 @@
 /**
- * 页面层样式。
+ * 页面层样式: 写法对齐 AstrBot 宿主的 src/styles/dashboard-shell.css, 从 Vuetify
+ * 主题变量派生辅助色, 亮暗主题自动适配。
  *
- * 写法对齐 AstrBot 宿主的 src/styles/dashboard-shell.css: 从 Vuetify 主题变量
- * 派生辅助色, 亮暗主题自动适配, 不写死颜色。这里只保留本视图用到的部分,
- * 没有搬宿主那份文件的全部类。
- *
- * 我们不做 SCSS 定制层, 所以宿主靠 $border-radius-root 得到的值 (卡片 16px)
- * 在这里直接写具体数值 —— 宿主页面层也是同样写 16px。
+ * 不做 SCSS 定制层, 因此宿主靠 $border-radius-root 得到的卡片 16px 圆角
+ * 在这里直接写具体数值。
  */
 
 .qc-page {

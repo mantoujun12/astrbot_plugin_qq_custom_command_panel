@@ -1,9 +1,8 @@
 /**
  * 本地 `pnpm dev` 用的假数据。
  *
- * dev 环境既没有 AstrBot 注入的 bridge, 也连不上真实后端, 这里给一份覆盖
- * 「已同步 / 线上缺失 / 查询失败」三种状态的数据, 让布局和状态展示可以离线验证。
- * 生产环境不会走到这里, 见 api/dashboard.ts 的 fetchStatus。
+ * 覆盖「已同步 / 线上缺失 / 查询失败」三种状态, 便于离线验证布局; 生产环境不会
+ * 走到这里 (见 api/dashboard.ts 的 fetchStatus)。
  */
 
 import type { StatusResponse } from '../types/dashboard'

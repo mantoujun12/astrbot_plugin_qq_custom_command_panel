@@ -70,8 +70,7 @@ def _install_astrbot_stub() -> None:
     # `astrbot.api.star.Context` 两种写法都能工作
     api.star = sys.modules["astrbot.api.star"]
 
-    # astrbot.api.web: 响应 helper 的占位实现。真实实现返回框架 Response 对象,
-    # 这里只保留 payload, 让离线测试能断言 handler 的返回内容。
+    # astrbot.api.web 占位实现: 只保留 payload, 供离线测试断言 handler 返回内容
     def json_response(data=None, **kwargs):  # noqa: ANN001, ANN202 - stub
         return {"__json__": True, "data": data}
 

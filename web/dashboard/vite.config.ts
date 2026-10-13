@@ -17,12 +17,9 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        // 去掉文件名里的内容哈希。
-        // 视图资源由 AstrBot 下发, 且响应头固定带 Cache-Control: no-store
-        // (astrbot/dashboard/services/plugin_page_service.py 的
-        // build_security_headers), 浏览器不会缓存, 哈希起不到 cache busting
-        // 的作用; 去掉后产物文件名稳定, 重新 build 不会让仓库里已提交的产物
-        // 整体改名, diff 和合并都干净得多。
+        // 去掉文件名里的内容哈希: 视图资源由 AstrBot 固定带
+        // Cache-Control: no-store 下发, 哈希起不到 cache busting 作用;
+        // 固定文件名后重新 build 不会让已提交产物整体改名。
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name][extname]',

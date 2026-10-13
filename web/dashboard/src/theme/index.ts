@@ -1,12 +1,8 @@
 /**
- * 主题调色板。
+ * 主题调色板: 色值对齐 AstrBot 宿主 dashboard 的 LightTheme / DarkTheme,
+ * 只保留本视图用得到的键。
  *
- * 色值对齐 AstrBot 宿主 dashboard 的 PurpleTheme / PurpleThemeDark
- * (AstrBot/dashboard/src/theme/{LightTheme,DarkTheme}.ts), 只保留本视图用得到的键;
- * 宿主里那些业务色 (chatMessageBubble / mcpCardBg / facebook ...) 不搬。
- *
- * 插件视图跑在受限 iframe 里, 宿主的 --v-theme-* 不会继承进来, 所以必须自带
- * 一份, 否则观感会和宿主对不上。
+ * 插件视图跑在受限 iframe 里, 宿主的 --v-theme-* 不会继承进来, 必须自带一份。
  */
 
 import type { ThemeDefinition } from 'vuetify'

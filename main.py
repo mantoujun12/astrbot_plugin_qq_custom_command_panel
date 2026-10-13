@@ -44,9 +44,8 @@ class QQCommandPanelPlugin(Star):
         self.data_dir = resolve_plugin_data_dir(context, PLUGIN_NAME)
         self._http: aiohttp.ClientSession | None = None
         self._syncer: PanelSyncer | None = None
-        # 注册视图 (Dashboard) 的只读状态接口。路由在构造期注册, handler 在
-        # 每次请求时再通过 provider 取最新的 syncer / config (syncer 到
-        # initialize() 才创建)。
+        # 注册视图 (Dashboard) 的只读状态接口; syncer 到 initialize() 才创建,
+        # 因此 handler 在每次请求时再取最新的 syncer / config
         register_status_api(
             self.context,
             lambda: self._syncer,

@@ -1,9 +1,8 @@
 /**
  * 视图与 AstrBot bridge 的接口: 主题 (isDark)、语言 (locale)、翻译 (t)。
  *
- * bridge 和上下文全局只有一份, 导航和视图共享。本地开发没有 bridge,
- * 此时 t() 退回调用方传入的 fallback 文案, isDark 跟随系统偏好, 保证
- * `pnpm dev` 下界面依然完整可读。
+ * bridge 与上下文全局只有一份, 导航和视图共享; 本地开发没有 bridge, 此时 t()
+ * 退回 fallback 文案, isDark 跟随系统偏好。
  */
 
 import { computed, ref, shallowRef } from 'vue'
@@ -27,8 +26,7 @@ const isDark = ref(initialIsDark())
 
 let started = false
 
-// 首轮超时后的兜底重试: 宿主可能延迟注入 bridge, 不能只等一次就永久判定「无后端」。
-// 生产环境才等, dev 一定没有 bridge, 无需空转。
+// 首轮超时后的兜底重试: 宿主可能延迟注入 bridge; 生产环境才等, dev 无需空转
 const LATE_BRIDGE_TIMEOUT_MS = 30_000
 const LATE_BRIDGE_POLL_MS = 500
 
@@ -51,8 +49,7 @@ async function attachBridge(found: PluginViewBridge): Promise<void> {
   })
   try {
     const initial = await found.ready()
-    // ready() 解析后优先用 getContext() 的最新值: 等待期间监听器可能已应用了
-    // 更新的上下文 (主题/语言/标题), 不能被这里的旧快照覆盖
+    // ready() 解析后优先用 getContext() 最新值, 避免被旧快照覆盖
     applyContext(found.getContext() ?? initial)
   } catch (err) {
     // 上下文拉取失败不应阻塞视图: bridge 已经可用, 按默认主题/语言继续渲染
@@ -80,9 +77,8 @@ async function bootstrap(): Promise<void> {
     return
   }
 
-  // 生产环境首轮超时不代表真的没有后端 (宿主可能延迟注入 bridge)。继续重试,
-  // 期间先不放行视图, 免得先渲染一批 mock 数据再被真实数据替换; 重试仍失败才
-  // 退回「无后端」, 至少不会整个会话卡在模拟模式。
+  // 生产环境首轮超时不代表真无后端: 继续重试, 期间不放行视图, 免得先渲染
+  // mock 数据再被真实数据替换
   const late = await waitForBridge(LATE_BRIDGE_TIMEOUT_MS, LATE_BRIDGE_POLL_MS)
   if (late) {
     await attachBridge(late)
@@ -99,10 +95,8 @@ export function useBridge() {
   const locale = computed(() => context.value?.locale ?? 'zh-CN')
 
   /**
-   * 是否已连上 AstrBot 后端。
-   *
-   * bridge 由宿主异步注入: 只有 ready 后 bridge 非空, 视图才真的能调到插件
-   * 后端; 本地 `pnpm dev` 没有 bridge, 恒为 false (调用方据此退回 mock)。
+   * 是否已连上 AstrBot 后端: ready 后 bridge 非空才为 true; 本地 `pnpm dev` 恒为
+   * false (调用方据此退回 mock)。
    */
   const hasBackend = computed(() => bridge.value !== null)
 
