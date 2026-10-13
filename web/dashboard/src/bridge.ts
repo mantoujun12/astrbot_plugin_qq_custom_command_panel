@@ -45,8 +45,12 @@ export function getBridge(): PluginViewBridge | null {
  *
  * SDK 与视图 HTML 一起返回, 但脚本执行时机不保证, 所以轮询等待一段时间;
  * 超时返回 null (本地开发, 或 SDK 注入失败) 交给调用方降级。
+ * `intervalMs` 用于首次超时后的后台重试, 拉长轮询间隔降低空转开销。
  */
-export function waitForBridge(timeoutMs: number): Promise<PluginViewBridge | null> {
+export function waitForBridge(
+  timeoutMs: number,
+  intervalMs = 50,
+): Promise<PluginViewBridge | null> {
   const existing = getBridge()
   if (existing) {
     return Promise.resolve(existing)
@@ -64,7 +68,7 @@ export function waitForBridge(timeoutMs: number): Promise<PluginViewBridge | nul
         resolve(null)
         return
       }
-      setTimeout(tick, 50)
+      setTimeout(tick, intervalMs)
     }
     tick()
   })

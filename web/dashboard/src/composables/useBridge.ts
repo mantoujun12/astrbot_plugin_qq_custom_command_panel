@@ -27,6 +27,11 @@ const isDark = ref(initialIsDark())
 
 let started = false
 
+// 首轮超时后的兜底重试: 宿主可能延迟注入 bridge, 不能只等一次就永久判定「无后端」。
+// 生产环境才等, dev 一定没有 bridge, 无需空转。
+const LATE_BRIDGE_TIMEOUT_MS = 30_000
+const LATE_BRIDGE_POLL_MS = 500
+
 function applyContext(next: PluginViewContext): void {
   context.value = next
   if (typeof next.isDark === 'boolean') {
@@ -34,14 +39,8 @@ function applyContext(next: PluginViewContext): void {
   }
 }
 
-async function bootstrap(): Promise<void> {
-  // dev 下不会出现 bridge, 少等一会, 避免白屏
-  const found = await waitForBridge(import.meta.env.DEV ? 300 : 3000)
-  if (!found) {
-    ready.value = true
-    return
-  }
-
+/** 连上 bridge: 订阅上下文变化, 拉取初始上下文 */
+async function attachBridge(found: PluginViewBridge): Promise<void> {
   bridge.value = found
   // 先订阅上下文变化, 再拉取初始上下文: 即使初始拉取失败, 后续变化仍能生效
   found.onContext(() => {
@@ -51,10 +50,42 @@ async function bootstrap(): Promise<void> {
     }
   })
   try {
-    applyContext(await found.ready())
+    const initial = await found.ready()
+    // ready() 解析后优先用 getContext() 的最新值: 等待期间监听器可能已应用了
+    // 更新的上下文 (主题/语言/标题), 不能被这里的旧快照覆盖
+    applyContext(found.getContext() ?? initial)
   } catch (err) {
     // 上下文拉取失败不应阻塞视图: bridge 已经可用, 按默认主题/语言继续渲染
     console.warn('[qq-command-panel] bridge ready() failed', err)
+    const latest = found.getContext()
+    if (latest) {
+      applyContext(latest)
+    }
+  }
+}
+
+async function bootstrap(): Promise<void> {
+  const dev = import.meta.env.DEV
+  // dev 下不会出现 bridge, 少等一会, 避免白屏
+  const found = await waitForBridge(dev ? 300 : 3000)
+  if (found) {
+    await attachBridge(found)
+    ready.value = true
+    return
+  }
+
+  if (dev) {
+    // 本地 dev 确定没有 bridge, 直接按 mock 渲染
+    ready.value = true
+    return
+  }
+
+  // 生产环境首轮超时不代表真的没有后端 (宿主可能延迟注入 bridge)。继续重试,
+  // 期间先不放行视图, 免得先渲染一批 mock 数据再被真实数据替换; 重试仍失败才
+  // 退回「无后端」, 至少不会整个会话卡在模拟模式。
+  const late = await waitForBridge(LATE_BRIDGE_TIMEOUT_MS, LATE_BRIDGE_POLL_MS)
+  if (late) {
+    await attachBridge(late)
   }
   ready.value = true
 }
