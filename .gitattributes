@@ -1,0 +1,7 @@
+# 生成文件: 由 `pnpm build` (web/dashboard) 写入, 不要手工编辑。
+#
+# 合并用内置的 merge=binary: 冲突时保留当前分支的版本, 不往 JS/CSS 里注入冲突
+# 标记, 但仍标记为冲突, 逼你重新构建而不是手工合并产物。
+# 不要改成 merge=ours —— 那个 driver 默认没有配置, 会静默退化成普通文本合并,
+# 直接把冲突标记写进 bundle。正确解法: 冲突后 `pnpm build` 重新生成再 `git add`。
+pages/dashboard/** merge=binary linguist-generated=true
