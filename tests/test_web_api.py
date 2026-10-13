@@ -1,7 +1,7 @@
 """core.web_api 的单元测试
 
-覆盖视图状态接口 (GET /<plugin>/status) 的组装逻辑: 字段契约、脱敏、条目计数、
-重复面板标记、计数不完整标记, StatusCache 缓存, 以及 register_status_api 的
+覆盖视图状态接口 (GET /<plugin>/status) 的组装逻辑：字段契约、脱敏、条目计数、
+重复面板标记、计数不完整标记，StatusCache 缓存，以及 register_status_api 的
 路由注册与降级。
 """
 
@@ -45,7 +45,7 @@ def owned_panel(
 
 
 def make_syncer(config: dict[str, Any] | None = None) -> PanelSyncer:
-    """构造 PanelSyncer, context 用 SimpleNamespace 代替 (无平台配置时回退 context)"""
+    """构造 PanelSyncer, context 用 SimpleNamespace 代替（无平台配置时回退 context）"""
     return PanelSyncer(
         SimpleNamespace(),  # type: ignore[arg-type]
         http=None,
@@ -55,7 +55,7 @@ def make_syncer(config: dict[str, Any] | None = None) -> PanelSyncer:
 
 
 def stub_clients(syncer: PanelSyncer, clients: dict[str, FakeQQClient]) -> PanelSyncer:
-    """把 build_clients 替换为固定返回值, 避免真实构造 QQClient"""
+    """把 build_clients 替换为固定返回值，避免真实构造 QQClient"""
     syncer.build_clients = lambda config=None: clients  # type: ignore[method-assign]
     return syncer
 
@@ -71,7 +71,7 @@ def schema_config(**overrides: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 纯函数: mask_appid / panel_items_count
+# 纯函数：mask_appid / panel_items_count
 # ---------------------------------------------------------------------------
 
 
@@ -122,7 +122,7 @@ async def test_build_status_reports_scene_states() -> None:
     assert payload["plugin"]["version"] == PLUGIN_VERSION
     assert payload["scenes"] == ["c2c", "group", "channel"]
     assert payload["items"] == {"count": 1, "max": PANEL_MAX_ITEMS}
-    # channel 查询失败 => 计数不完整, partial 为 True; max = 单机上 20 × 1 台
+    # channel 查询失败 => 计数不完整，partial 为 True；max = 单机上 20 × 1 台
     assert payload["panels"] == {"total": 1, "max": PANEL_MAX_ITEMS, "partial": True}
 
     platform = payload["platforms"][0]
@@ -142,7 +142,7 @@ async def test_build_status_reports_scene_states() -> None:
 
 @pytest.mark.asyncio
 async def test_build_status_marks_incomplete_total_on_platform_failure() -> None:
-    """平台级异常时计数为下限, partial 必须置位"""
+    """平台级异常时计数为下限，partial 必须置位"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
 
@@ -151,7 +151,7 @@ async def test_build_status_marks_incomplete_total_on_platform_failure() -> None
             raise RuntimeError("boom")
 
     client = BoomClient()
-    # list_all_panels 会逐场景兜底, 不会抛; 所有场景都进 failed_scopes
+    # list_all_panels 会逐场景兜底，不会抛；所有场景都进 failed_scopes
     stub_clients(syncer, {"pf1": client})
 
     payload = await build_status(syncer, config)
@@ -162,7 +162,7 @@ async def test_build_status_marks_incomplete_total_on_platform_failure() -> None
 
 @pytest.mark.asyncio
 async def test_build_status_flags_duplicate_owned_panels() -> None:
-    """同一 scope 出现多条本插件面板时标记为 duplicate, 而非正常 synced"""
+    """同一 scope 出现多条本插件面板时标记为 duplicate，而非正常 synced"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
@@ -172,7 +172,7 @@ async def test_build_status_flags_duplicate_owned_panels() -> None:
 
     scene = payload["platforms"][0]["scenes"][0]
     assert scene["state"] == "duplicate"
-    assert scene["panel_id"] == "p1"  # 取第一条, 不再被后面的覆盖
+    assert scene["panel_id"] == "p1"  # 取第一条，不再被后面的覆盖
     assert payload["panels"] == {"total": 2, "max": PANEL_MAX_ITEMS, "partial": False}
 
 
@@ -200,7 +200,7 @@ async def test_build_status_without_platforms() -> None:
 
     assert payload["platforms"] == []
     assert payload["items"]["count"] == 0
-    # 没有平台时不应给出聚合上限 (避免 0/0 被当作「已达上限」)
+    # 没有平台时不应给出聚合上限（避免 0/0 被当作「已达上限」）
     assert payload["panels"] == {"total": 0, "partial": False}
 
 
@@ -231,7 +231,7 @@ async def test_build_status_summarizes_multiple_platforms() -> None:
 
 @pytest.mark.asyncio
 async def test_build_status_masks_pf_id_when_it_falls_back_to_appid() -> None:
-    """未配备注名时 pf_id 回退成 appid, 展示值必须同样脱敏"""
+    """未配备注名时 pf_id 回退成 appid，展示值必须同样脱敏"""
     config = schema_config(
         scenes=["c2c"],
         qq_platforms=[{"appid": "1112223334", "secret": "s"}],
@@ -248,7 +248,7 @@ async def test_build_status_masks_pf_id_when_it_falls_back_to_appid() -> None:
 
 @pytest.mark.asyncio
 async def test_build_status_uses_current_config_for_clients() -> None:
-    """客户端必须按当前请求的 config 构建, 而不是 syncer 内部可能过期的配置"""
+    """客户端必须按当前请求的 config 构建，而不是 syncer 内部可能过期的配置"""
     stale = schema_config(
         scenes=["c2c"],
         qq_platforms=[{"name": "old", "appid": "0000000000", "secret": "s"}],
@@ -314,7 +314,7 @@ async def test_status_cache_force_recomputes() -> None:
 
 @pytest.mark.asyncio
 async def test_status_cache_coalesces_concurrent_calls() -> None:
-    """并发请求只计算一次 (single-flight), 不会各发一轮 QQ API"""
+    """并发请求只计算一次 (single-flight)，不会各发一轮 QQ API"""
     cache = StatusCache(ttl=60)
     calls = 0
     started = asyncio.Event()
@@ -374,7 +374,7 @@ async def test_register_status_api_registers_and_serves() -> None:
 
 @pytest.mark.asyncio
 async def test_status_handler_caches_between_calls() -> None:
-    """重复请求复用缓存, 不会重复打 QQ API"""
+    """重复请求复用缓存，不会重复打 QQ API"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
 
@@ -397,7 +397,7 @@ async def test_status_handler_caches_between_calls() -> None:
     second = await handler()
 
     assert first["data"] == second["data"]
-    # 每轮状态查询对 SCENES 各查一次; 缓存命中后第二次不再查询
+    # 每轮状态查询对 SCENES 各查一次；缓存命中后第二次不再查询
     assert client.list_calls == len(SCENES)
 
 
@@ -414,5 +414,5 @@ async def test_status_handler_reports_not_ready() -> None:
 
 
 def test_register_status_api_skips_without_host_method() -> None:
-    """老版本 AstrBot 的 context 没有 register_web_api 时应降级, 不抛异常"""
+    """老版本 AstrBot 的 context 没有 register_web_api 时应降级，不抛异常"""
     assert register_status_api(SimpleNamespace(), lambda: None, lambda: {}) is False

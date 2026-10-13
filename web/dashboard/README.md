@@ -20,11 +20,11 @@ pnpm build
 
 ```
 pages/dashboard/
-├─ index.html          # 视图入口, AstrBot 只扫描该文件
+├─ index.html          # 视图入口，AstrBot 只扫描该文件
 └─ assets/
    ├─ index.js
    ├─ index.css
-   └─ <chunk>.js / <chunk>.css   # 懒加载路由与共享 chunk, 同样不带哈希
+   └─ <chunk>.js / <chunk>.css   # 懒加载路由与共享 chunk，同样不带哈希
 ```
 
 要点：

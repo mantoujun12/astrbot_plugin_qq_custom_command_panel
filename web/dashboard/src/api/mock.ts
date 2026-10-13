@@ -1,8 +1,8 @@
 /**
  * 本地 `pnpm dev` 用的假数据。
  *
- * 覆盖「已同步 / 线上缺失 / 查询失败」三种状态, 便于离线验证布局; 生产环境不会
- * 走到这里 (见 api/dashboard.ts 的 fetchStatus)。
+ * 覆盖「已同步 / 线上缺失 / 查询失败」三种状态，便于离线验证布局；生产环境不会
+ * 走到这里（见 api/dashboard.ts 的 fetchStatus）。
  */
 
 import type { StatusResponse } from '../types/dashboard'

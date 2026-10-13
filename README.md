@@ -22,7 +22,7 @@
 
 QQ 官方机器人指令面板内容自定义插件
 
-在 **AstrBot WebUI** 中配置要展示的指令条目, 插件会把它们写入 QQ 官方机器人的指令面板,
+在 **AstrBot WebUI** 中配置要展示的指令条目，插件会把它们写入 QQ 官方机器人的指令面板，
 
 用户在 QQ 输入 `/` 即可看到面板内容。
 
@@ -30,31 +30,31 @@ QQ 官方机器人指令面板内容自定义插件
 
 ## 核心特性
 
-- 用户在 **AstrBot WebUI** 中通过 schema 的 `selected_commands` 字段手动添加指令条目 (name + desc), 面板内容完全由用户决定
-- 支持 c2c (单聊)、group (群聊)、channel (文字子频道)、dm (频道私信) 四种场景
-- 可直接在 schema 的 `qq_platforms` 里填写 appid + clientSecret, 不依赖 AstrBot 后台是否配置了 qq_official 适配器
-- 配置变更后重启 AstrBot 即会自动同步, 无需任何指令操作
+- 用户在 **AstrBot WebUI** 中通过 schema 的 `selected_commands` 字段手动添加指令条目 (name + desc)，面板内容完全由用户决定
+- 支持 c2c（单聊）、group（群聊）、channel（文字子频道）、dm（频道私信）四种场景
+- 可直接在 schema 的 `qq_platforms` 里填写 appid + clientSecret，不依赖 AstrBot 后台是否配置了 qq_official 适配器
+- 配置变更后重启 AstrBot 即会自动同步，无需任何指令操作
 
 ## 配置说明
 
-在 AstrBot WebUI -> 插件配置 -> `astrbot_plugin_qq_custom_command_panel` 中:
+在 AstrBot WebUI -> 插件配置 -> `astrbot_plugin_qq_custom_command_panel` 中：
 
-1. **qq_platforms**: 添加 QQ 机器人, 填入 appid / clientSecret (留空则自动从 AstrBot 平台配置读取)
-2. **scenes**: 选择生效场景, 默认 `c2c + group` (单聊 + 群聊)
-3. **selected_commands**: 添加要在 QQ 面板展示的指令条目, 每条 {name, desc}, name 最长 14 字符, desc 最长 30 字符, 最多 20 条
+1. **qq_platforms**: 添加 QQ 机器人，填入 appid / clientSecret（留空则自动从 AstrBot 平台配置读取）
+2. **scenes**: 选择生效场景，默认 `c2c + group`（单聊 + 群聊）
+3. **selected_commands**: 添加要在 QQ 面板展示的指令条目，每条 {name, desc}，name 最长 14 字符，desc 最长 30 字符，最多 20 条
 
-> 插件启动时会自动同步一次面板; 修改配置后重启插件即可生效。
+> 插件启动时会自动同步一次面板；修改配置后重启插件即可生效。
 
 ## 已知限制
 
-QQ 官方机器人指令面板的 API 限制:
+QQ 官方机器人指令面板的 API 限制：
 
 - 每个面板最多 20 个元素
-- 元素 name 最长 14 字符, desc 最长 30 字符
+- 元素 name 最长 14 字符，desc 最长 30 字符
 - 每机器人最多 20 个面板
 - `channel` / `dm` 场景仅支持 `target_type=all`
 
-目前项目限制:
+目前项目限制：
 
 - 多个机器人共享相同的面板配置项，但会根据各自的 appid 接收独立的面板
 
@@ -70,8 +70,8 @@ QQ 官方机器人指令面板的 API 限制:
 
 - [QQ 机器人开放平台 - 开发文档 v2](https://bot.qq.com/wiki/develop/api-v2/) - 指令面板 / 消息收发 / API 鉴权等官方接口规范
 - [AstrBot 插件开发指南](https://docs.astrbot.app/dev/star/plugin-new.html) - Star / filter / schema / 插件 Pages 等开发参考
-- [AstrBot Plugin Pages](https://docs.astrbot.app/dev/star/guides/plugin-pages.html) - 自建 WebUI 的 bridge / Web API 规范 (对应下一步计划中的 Web UI)
+- [AstrBot Plugin Pages](https://docs.astrbot.app/dev/star/guides/plugin-pages.html) - 自建 WebUI 的 bridge / Web API 规范（对应下一步计划中的 Web UI）
 
 ## 许可证
 
-本项目使用 AGPLv3 协议开源, 详见 [LICENSE](LICENSE) 文件。
+本项目使用 AGPLv3 协议开源，详见 [LICENSE](LICENSE) 文件。

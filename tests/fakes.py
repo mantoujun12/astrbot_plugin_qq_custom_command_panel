@@ -1,6 +1,6 @@
 """测试通用假件 (fakes): FakeQQClient / FakeSession
 
-只实现被测代码实际调用的方法, 未实现的方法调用会直接 AttributeError,
+只实现被测代码实际调用的方法，未实现的方法调用会直接 AttributeError，
 避免 fakes 默默偏离真实接口。
 """
 
@@ -45,9 +45,9 @@ class FakeResponse:
 class FakeSession:
     """假 aiohttp.ClientSession: 按 (method, url) 路由返回预置响应
 
-    - 记录所有请求 (method, url, kwargs), 供断言
-    - 未匹配到路由时返回 500 + {"raw": ...}, 不抛异常,
-      与真实 aiohttp 行为对齐 (HTTP 错误也是正常响应)
+    - 记录所有请求 (method, url, kwargs)，供断言
+    - 未匹配到路由时返回 500 + {"raw": ...}，不抛异常，
+      与真实 aiohttp 行为对齐（HTTP 错误也是正常响应）
     """
 
     def __init__(self) -> None:
@@ -74,7 +74,7 @@ class FakeSession:
         url: str,
         **kwargs: Any,
     ) -> FakeResponse:
-        """与真实 aiohttp 对齐: 同步返回 async context manager, 由调用方 `async with`"""
+        """与真实 aiohttp 对齐：同步返回 async context manager，由调用方 `async with`"""
         self.requests.append({"method": method, "url": url, "kwargs": kwargs})
         return self._match(method, url)
 
@@ -83,14 +83,14 @@ class FakeSession:
         url: str,
         **kwargs: Any,
     ) -> FakeResponse:
-        """与真实 aiohttp 对齐: 同步返回 async context manager, 由调用方 `async with`"""
+        """与真实 aiohttp 对齐：同步返回 async context manager，由调用方 `async with`"""
         self.requests.append({"method": "POST", "url": url, "kwargs": kwargs})
         return self._match("POST", url)
 
     def closed(self) -> bool:
         return False
 
-    # ---- 便捷构造器: 面板 API 路由 ----
+    # ---- 便捷构造器：面板 API 路由 ----
 
     def route_token(self, payload: dict[str, Any], status: int = 200) -> None:
         self.route(
@@ -121,9 +121,9 @@ class FakeSession:
 
 
 class FakeQQClient:
-    """假 QQClient: 可编程各场景 list_panels 成败, 记录写操作
+    """假 QQClient: 可编程各场景 list_panels 成败，记录写操作
 
-    用作 PanelSyncer.sync_for_platform / clear_for_platform 的 client 参数,
+    用作 PanelSyncer.sync_for_platform / clear_for_platform 的 client 参数，
     覆盖 AGENTS.md 中 "任一场景拉取失败要中止" 等关键约定的测试。
     """
 
@@ -136,7 +136,7 @@ class FakeQQClient:
     ) -> None:
         self.platform_label = platform_label
         self.failing_scopes = failing_scopes or set()
-        # scope -> 面板列表 (seed 数据, create/delete/update 会修改它)
+        # scope -> 面板列表（seed 数据，create/delete/update 会修改它）
         self._panels: dict[str, list[dict[str, Any]]] = existing or {}
         # 记录所有写操作
         self.created: list[tuple[str, list[dict[str, Any]]]] = []

@@ -1,4 +1,4 @@
-"""core.qq_client.QQClient 的单元测试 (注入 FakeSession, 无真实网络)"""
+"""core.qq_client.QQClient 的单元测试（注入 FakeSession，无真实网络）"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ async def test_token_expires_and_refetches() -> None:
     client = make_client(session)
 
     await client._ensure_token()
-    # 模拟过期: token 过期时间回到过去
+    # 模拟过期：token 过期时间回到过去
     client._token_expire_at = 0.0
     await client._ensure_token()
 
@@ -141,7 +141,7 @@ async def test_list_panels_backfills_scope() -> None:
 
     assert records[0]["scope"] == "c2c"  # 缺失的 scope 被回填
     assert records[1]["scope"] == "other"  # 已有 scope 不覆盖
-    # scope 参数必须带上 (QQ API 约定)
+    # scope 参数必须带上（QQ API 约定）
     panel_calls = [r for r in session.requests if "/v2/panels" in r["url"]]
     assert panel_calls[0]["kwargs"]["params"] == {"scope": "c2c"}
 

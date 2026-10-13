@@ -1,8 +1,8 @@
 name: Auto Release
 
-# 发布入口:
+# 发布入口：
 # - push 到 master 且改动了 metadata.yaml: 版本号变了就自动发布
-# - workflow_dispatch: 手动补发/重试 (push 事件没触发, 或上次发布中途失败时用)
+# - workflow_dispatch: 手动补发/重试（push 事件没触发，或上次发布中途失败时用）
 on:
   push:
     branches:
@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write
 
-# 串行化发布: 两次推送同时到达时不重复打 tag / 建 release, 也不取消正在进行的发布
+# 串行化发布：两次推送同时到达时不重复打 tag / 建 release，也不取消正在进行的发布
 concurrency:
   group: auto-release
   cancel-in-progress: false
@@ -37,8 +37,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # metadata.yaml 是唯一版本源: 插件运行时 (core/paths.py) 与视图
-          # (web/dashboard/package.json) 的版本都必须跟它一致, 否则打出来的 tag
+          # metadata.yaml 是唯一版本源：插件运行时 (core/paths.py) 与视图
+          # (web/dashboard/package.json) 的版本都必须跟它一致，否则打出来的 tag
           # 会和插件实际报告的版本对不上
           VERSION=$(grep -E '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
           if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -73,8 +73,8 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.version_check.outputs.tag }}"
 
-          # 用「tag 和 release 是否都已存在」判断, 而不是比较 metadata.yaml 的前后改动:
-          # 这样发布是幂等的 —— 重跑一次不会重复发布, 上次中途失败留下的半成品也能补上,
+          # 用「tag 和 release 是否都已存在」判断，而不是比较 metadata.yaml 的前后改动：
+          # 这样发布是幂等的 —— 重跑一次不会重复发布，上次中途失败留下的半成品也能补上，
           # 手动 workflow_dispatch 也不需要依赖 push 事件的历史
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1 \
             && gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" >/dev/null 2>&1; then
@@ -108,7 +108,7 @@ jobs:
           cp pyproject.toml "${BUILD_DIR}/" 2>/dev/null || true
           if [ -d core ]; then cp -R core "${BUILD_DIR}/"; fi
           if [ -d .astrbot-plugin ]; then cp -R .astrbot-plugin "${BUILD_DIR}/"; fi
-          # 可视化视图 (pages/ 是 views/ 的兼容别名), AstrBot 直接从插件目录读取
+          # 可视化视图（pages/ 是 views/ 的兼容别名），AstrBot 直接从插件目录读取
           if [ -d pages ]; then cp -R pages "${BUILD_DIR}/"; fi
 
           # Create zip archive (at repo root so softprops action can find it easily)
@@ -129,7 +129,7 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.version_check.outputs.tag }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            # tag 已存在 (例如上次发布只完成了打 tag): 保留它, 只补 release
+            # tag 已存在（例如上次发布只完成了打 tag）：保留它，只补 release
             echo "Tag $TAG already exists on remote, keeping it."
           else
             git config user.name "github-actions[bot]"
@@ -148,7 +148,7 @@ jobs:
           tag_name: ${{ steps.version_check.outputs.tag }}
           name: ${{ steps.version_check.outputs.version }}
           generate_release_notes: true
-          # 资源没匹配上时直接失败, 免得发出一个没有附件的 release
+          # 资源没匹配上时直接失败，免得发出一个没有附件的 release
           fail_on_unmatched_files: true
           files: |
             ${{ steps.build_package.outputs.zip_name }}

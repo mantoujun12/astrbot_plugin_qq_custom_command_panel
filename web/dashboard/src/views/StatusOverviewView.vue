@@ -23,13 +23,13 @@ const status = ref<StatusResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
 
-// 请求代次: 初始加载与手动刷新可能重叠, 只允许最新一次请求写回状态,
-// 否则先发的旧请求后返回会覆盖新数据, 其 finally 也会误关 loading。
+// 请求代次：初始加载与手动刷新可能重叠，只允许最新一次请求写回状态，
+// 否则先发的旧请求后返回会覆盖新数据，其 finally 也会误关 loading。
 let loadSeq = 0
 
 /**
- * 后端 /status 默认查询线上, 属慢请求, 因此只在进入页面和手动刷新时调用, 不做
- * 轮询; refresh=true 时带 refresh=1 绕过后端短期缓存。
+ * 后端 /status 默认查询线上，属慢请求，因此只在进入页面和手动刷新时调用，不做
+ * 轮询；refresh=true 时带 refresh=1 绕过后端短期缓存。
  */
 async function load(options: { refresh?: boolean } = {}): Promise<void> {
   const seq = ++loadSeq
@@ -48,8 +48,8 @@ async function load(options: { refresh?: boolean } = {}): Promise<void> {
   }
 }
 
-// bridge 注入是异步的, 必须等 ready 后再请求, 否则真实环境会退回 mock;
-// 一并监听 hasBackend, 万一 bridge 在 ready 之后才补上也能重新拉取真实数据。
+// bridge 注入是异步的，必须等 ready 后再请求，否则真实环境会退回 mock；
+// 一并监听 hasBackend，万一 bridge 在 ready 之后才补上也能重新拉取真实数据。
 watch(
   [ready, hasBackend],
   ([isReady]) => {
@@ -63,8 +63,8 @@ watch(
 const hasPlatforms = computed(() => (status.value?.platforms.length ?? 0) > 0)
 const hasItems = computed(() => (status.value?.items.count ?? 0) > 0)
 
-// 本地 `pnpm dev` 没有 bridge, fetchStatus 会退回 mock; 这里显式标注避免把假数据
-// 当成真实状态, ready 之前不显示以防首屏闪烁。
+// 本地 `pnpm dev` 没有 bridge，fetchStatus 会退回 mock；这里显式标注避免把假数据
+// 当成真实状态，ready 之前不显示以防首屏闪烁。
 const mockMode = computed(() => ready.value && !hasBackend.value)
 </script>
 
@@ -109,7 +109,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
       {{
         t(
           'views.dashboard.status.mockHint',
-          '本地开发环境: 展示的是 mock 数据, 未连接 AstrBot 后端。',
+          '本地开发环境：展示的是 mock 数据，未连接 AstrBot 后端。',
         )
       }}
     </v-alert>
@@ -158,7 +158,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
             :max="status.panels.partial ? undefined : status.panels.max"
             :note="
               status.panels.partial
-                ? t('views.dashboard.status.panelsPartial', '部分场景查询失败, 该值为下限')
+                ? t('views.dashboard.status.panelsPartial', '部分场景查询失败，该值为下限')
                 : undefined
             "
             emphasize-at-limit
@@ -173,7 +173,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
         :description="
           t(
             'views.dashboard.status.empty.platforms.description',
-            '在插件配置的 qq_platforms 里填写 appid / ClientSecret, 或在 AstrBot 平台配置里启用 qq_official 适配器。',
+            '在插件配置的 qq_platforms 里填写 appid / ClientSecret，或在 AstrBot 平台配置里启用 qq_official 适配器。',
           )
         "
       />
@@ -189,7 +189,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
           {{
             t(
               'views.dashboard.status.empty.commands.description',
-              '尚未配置指令条目, 同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。',
+              '尚未配置指令条目，同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。',
             )
           }}
         </v-alert>

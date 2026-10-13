@@ -9,7 +9,7 @@ import { THEME_DARK, THEME_LIGHT } from '../theme'
 const { mobile } = useDisplay()
 const { context, isDark, t } = useBridge()
 
-// 窄屏: 抽屉是临时抽屉, 开关的是它; 宽屏: 抽屉常驻, 开关的是折叠 (rail)
+// 窄屏：抽屉是临时抽屉，开关的是它；宽屏：抽屉常驻，开关的是折叠 (rail)
 const drawer = ref(!mobile.value)
 const rail = ref(false)
 
@@ -28,13 +28,13 @@ function toggleSidebar(): void {
 }
 
 function onDrawerUpdate(value: boolean): void {
-  // 宽屏时抽屉常驻, 只由我们自己的开关控制
+  // 宽屏时抽屉常驻，只由我们自己的开关控制
   if (mobile.value) {
     drawer.value = value
   }
 }
 
-// 侧边栏 brand 行里的按钮: 宽屏折叠/展开, 窄屏关闭抽屉
+// 侧边栏 brand 行里的按钮：宽屏折叠/展开，窄屏关闭抽屉
 const sidebarToggleIcon = computed(() => {
   if (mobile.value) return mdiClose
   return railActive.value ? mdiMenuOpen : mdiMenuClose
@@ -49,7 +49,7 @@ const sidebarToggleLabel = computed(() => {
     : t('views.dashboard.nav.collapse', '收起侧边栏')
 })
 
-// pageTitle 是视图标题 (views.dashboard.title), displayName 是插件名
+// pageTitle 是视图标题 (views.dashboard.title)，displayName 是插件名
 const title = computed(
   () =>
     context.value?.pageTitle ??
@@ -59,7 +59,7 @@ const title = computed(
 </script>
 
 <template>
-  <!-- 主题跟随宿主: v-app 的 theme prop 会提供到整棵子树 -->
+  <!-- 主题跟随宿主：v-app 的 theme prop 会提供到整棵子树 -->
   <v-app :theme="isDark ? THEME_DARK : THEME_LIGHT">
     <v-navigation-drawer
       :model-value="drawer"
@@ -83,7 +83,7 @@ const title = computed(
       />
     </v-navigation-drawer>
 
-    <!-- 窄屏抽屉是临时的, 收起后需要一个打开入口 + 标题 -->
+    <!-- 窄屏抽屉是临时的，收起后需要一个打开入口 + 标题 -->
     <v-app-bar v-if="mobile" flat border>
       <v-app-bar-nav-icon
         :icon="mdiMenu"

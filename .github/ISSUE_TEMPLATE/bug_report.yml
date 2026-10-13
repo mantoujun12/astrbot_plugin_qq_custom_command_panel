@@ -54,10 +54,10 @@ body:
       description: Bug 出现在哪些面板场景中（可多选）
       multiple: true
       options:
-        - c2c (单聊)
-        - group (群聊)
-        - channel (文字子频道)
-        - dm (频道私信)
+        - c2c（单聊）
+        - group（群聊）
+        - channel（文字子频道）
+        - dm（频道私信）
         - 与场景无关
     validations:
       required: true

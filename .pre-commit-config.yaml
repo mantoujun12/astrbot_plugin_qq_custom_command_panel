@@ -1,5 +1,5 @@
-# pre-commit.ci 在每个 PR 上自动运行, CI (ci.yml) 对 push 到 main/master 兜底运行同一套 hooks
-# 本地: pip install pre-commit && pre-commit run --all-files
+# pre-commit.ci 在每个 PR 上自动运行，CI (ci.yml) 对 push 到 main/master 兜底运行同一套 hooks
+# 本地：pip install pre-commit && pre-commit run --all-files
 ci:
   autofix_commit_msg: "style: pre-commit autofix"
   autoupdate_commit_msg: "chore: pre-commit autoupdate"
@@ -12,8 +12,8 @@ repos:
       - id: check-json
       - id: check-toml
       - id: fix-byte-order-marker
-      # pages/ 下是前端构建产物, 由 Vite 生成, 不参与空白符修复
-      # (否则每次 pnpm build 后工作区都会变脏)
+      # pages/ 下是前端构建产物，由 Vite 生成，不参与空白符修复
+      #（否则每次 pnpm build 后工作区都会变脏）
       - id: end-of-file-fixer
         exclude: ^pages/
       - id: trailing-whitespace
@@ -27,7 +27,7 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.0
     hooks:
-      # 顺序要求: --fix 在 format 之前
+      # 顺序要求：--fix 在 format 之前
       - id: ruff-check
         args: [--fix]
       - id: ruff-format

@@ -7,12 +7,12 @@
   "config": {
     "language": {
       "description": "插件日志输出语言",
-      "hint": "zh-CN=简体中文, en-US=English。影响 logger 输出, 不影响 selected_commands 用户自定义条目。",
+      "hint": "zh-CN=简体中文，en-US=English。影响 logger 输出，不影响 selected_commands 用户自定义条目。",
       "labels": ["简体中文", "English"]
     },
     "scenes": {
-      "description": "生效场景 (选择哪些场景下要显示 QQ 指令面板)",
-      "hint": "c2c=单聊, group=群聊, channel=文字子频道, dm=频道私信。channel/dm 仅支持全局配置。",
+      "description": "生效场景（选择哪些场景下要显示 QQ 指令面板）",
+      "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。",
       "labels": ["单聊", "群聊", "文字子频道", "频道私信"]
     },
     "qq_platforms": {
@@ -23,8 +23,8 @@
           "name": "QQ 机器人",
           "items": {
             "name": {
-              "description": "备注名 (可选)",
-              "hint": "仅用于在面板里区分多条配置, 可留空"
+              "description": "备注名（可选）",
+              "hint": "仅用于在面板里区分多条配置，可留空"
             },
             "appid": {
               "description": "AppID",
@@ -32,7 +32,7 @@
             },
             "secret": {
               "description": "ClientSecret (AppSecret)",
-              "hint": "⚠️ 会明文保存, 请勿截图分享此页面"
+              "hint": "⚠️ 会明文保存，请勿截图分享此页面"
             },
             "platform": {
               "description": "平台类型",
@@ -45,18 +45,18 @@
     },
     "selected_commands": {
       "description": "要在 QQ 指令面板展示的自定义指令条目",
-      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板, 不依赖 AstrBot 已注册的指令。最多 20 条, name 最长 14 字符, desc 最长 30 字符。",
+      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。",
       "templates": {
         "command": {
           "name": "指令条目",
           "items": {
             "name": {
               "description": "指令名",
-              "hint": "用户将在 QQ 面板里看到的指令名, 例如 /foo, 不带 / 也可"
+              "hint": "用户将在 QQ 面板里看到的指令名，例如 /foo，不带 / 也可"
             },
             "desc": {
               "description": "指令描述",
-              "hint": "最长 30 字符, 会显示在 QQ 面板上"
+              "hint": "最长 30 字符，会显示在 QQ 面板上"
             }
           }
         }
@@ -80,8 +80,8 @@
         "subtitle": "查看各 QQ 平台与线上指令面板的当前状态。",
         "refresh": "刷新",
         "loadFailed": "获取状态失败",
-        "mockHint": "本地开发环境: 展示的是 mock 数据, 未连接 AstrBot 后端。",
-        "panelsPartial": "部分场景查询失败, 该值为下限",
+        "mockHint": "本地开发环境：展示的是 mock 数据，未连接 AstrBot 后端。",
+        "panelsPartial": "部分场景查询失败，该值为下限",
         "itemsUnit": "条",
         "limit": "上限",
         "cards": {
@@ -103,10 +103,10 @@
         "empty": {
           "platforms": {
             "title": "还没有可用的 QQ 平台",
-            "description": "在插件配置的 qq_platforms 里填写 appid / ClientSecret, 或在 AstrBot 平台配置里启用 qq_official 适配器。"
+            "description": "在插件配置的 qq_platforms 里填写 appid / ClientSecret，或在 AstrBot 平台配置里启用 qq_official 适配器。"
           },
           "commands": {
-            "description": "尚未配置指令条目, 同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。"
+            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。"
           }
         }
       },
@@ -114,7 +114,7 @@
         "title": "设置",
         "subtitle": "面板内容与平台凭证都在插件配置页维护。",
         "placeholderTitle": "配置仍在插件配置页",
-        "placeholder": "本页尚未实现。目前的配置项请到 AstrBot WebUI 的插件配置页修改, 改完重载插件生效。"
+        "placeholder": "本页尚未实现。目前的配置项请到 AstrBot WebUI 的插件配置页修改，改完重载插件生效。"
       }
     }
   }

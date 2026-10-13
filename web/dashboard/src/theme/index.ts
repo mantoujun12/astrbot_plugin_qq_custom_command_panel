@@ -1,8 +1,8 @@
 /**
- * 主题调色板: 色值对齐 AstrBot 宿主 dashboard 的 LightTheme / DarkTheme,
+ * 主题调色板：色值对齐 AstrBot 宿主 dashboard 的 LightTheme / DarkTheme，
  * 只保留本视图用得到的键。
  *
- * 插件视图跑在受限 iframe 里, 宿主的 --v-theme-* 不会继承进来, 必须自带一份。
+ * 插件视图跑在受限 iframe 里，宿主的 --v-theme-* 不会继承进来，必须自带一份。
  */
 
 import type { ThemeDefinition } from 'vuetify'
