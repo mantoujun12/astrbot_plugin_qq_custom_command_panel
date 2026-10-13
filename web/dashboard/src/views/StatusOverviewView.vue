@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   mdiAlertCircleOutline,
   mdiFormatListBulleted,
@@ -10,14 +10,14 @@ import {
   mdiTuneVariant,
   mdiViewGridOutline,
 } from '@mdi/js'
-import { fetchStatus, hasBackend } from '../api/dashboard'
+import { fetchStatus } from '../api/dashboard'
 import PlatformStatusCard from '../components/status/PlatformStatusCard.vue'
 import SetupGuide from '../components/status/SetupGuide.vue'
 import StatCard from '../components/status/StatCard.vue'
 import { useBridge } from '../composables/useBridge'
 import type { StatusResponse } from '../types/dashboard'
 
-const { t } = useBridge()
+const { t, ready, hasBackend } = useBridge()
 
 const status = ref<StatusResponse | null>(null)
 const loading = ref(false)
@@ -40,14 +40,24 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+// bridge 注入是异步的 (见 composables/useBridge.ts 的 bootstrap)。必须等 ready
+// 之后再请求, 否则真实环境会因拿不到 bridge 而退回 mock 数据。
+watch(
+  ready,
+  (isReady) => {
+    if (isReady) {
+      void load()
+    }
+  },
+  { immediate: true },
+)
 
 const hasPlatforms = computed(() => (status.value?.platforms.length ?? 0) > 0)
 const hasItems = computed(() => (status.value?.items.count ?? 0) > 0)
 
 // 本地 `pnpm dev` 没有 bridge, fetchStatus 会退回 mock 数据, 这里显式标注,
-// 避免把假数据当成真实线上状态
-const mockMode = !hasBackend()
+// 避免把假数据当成真实线上状态; ready 之前不显示, 免得首屏闪一下。
+const mockMode = computed(() => ready.value && !hasBackend.value)
 </script>
 
 <template>

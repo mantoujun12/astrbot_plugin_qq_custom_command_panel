@@ -43,13 +43,19 @@ async function bootstrap(): Promise<void> {
   }
 
   bridge.value = found
-  applyContext(await found.ready())
+  // 先订阅上下文变化, 再拉取初始上下文: 即使初始拉取失败, 后续变化仍能生效
   found.onContext(() => {
     const next = found.getContext()
     if (next) {
       applyContext(next)
     }
   })
+  try {
+    applyContext(await found.ready())
+  } catch (err) {
+    // 上下文拉取失败不应阻塞视图: bridge 已经可用, 按默认主题/语言继续渲染
+    console.warn('[qq-command-panel] bridge ready() failed', err)
+  }
   ready.value = true
 }
 
@@ -61,11 +67,19 @@ export function useBridge() {
 
   const locale = computed(() => context.value?.locale ?? 'zh-CN')
 
+  /**
+   * 是否已连上 AstrBot 后端。
+   *
+   * bridge 由宿主异步注入: 只有 ready 后 bridge 非空, 视图才真的能调到插件
+   * 后端; 本地 `pnpm dev` 没有 bridge, 恒为 false (调用方据此退回 mock)。
+   */
+  const hasBackend = computed(() => bridge.value !== null)
+
   function t(key: string, fallback?: string): string {
     // 读一下 locale, 让调用方在语言切换 (context 变化) 时重新求值
     void locale.value
     return bridge.value ? bridge.value.t(key, fallback) : (fallback ?? key)
   }
 
-  return { bridge, context, ready, isDark, locale, t }
+  return { bridge, context, ready, hasBackend, isDark, locale, t }
 }
