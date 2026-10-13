@@ -81,11 +81,24 @@ def _install_astrbot_stub() -> None:
     def stream_response(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202 - stub
         return {"__stream__": True}
 
+    class _FakeQuery:
+        """假 query 参数容器: 与真实 request.query 的 get(key, default, type) 对齐"""
+
+        def get(self, key, default=None, **kwargs):  # noqa: ANN001, ANN003, ANN201 - stub
+            return default
+
+        def getlist(self, key):  # noqa: ANN001, ANN201 - stub
+            return []
+
+    class _FakeRequest:
+        query = _FakeQuery()
+
     web = _mod(
         "astrbot.api.web",
         json_response=json_response,
         error_response=error_response,
         stream_response=stream_response,
+        request=_FakeRequest(),
     )
     api.web = web
 

@@ -16,7 +16,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from astrbot.api import logger
@@ -34,6 +35,10 @@ from .paths import PLUGIN_NAME, PLUGIN_VERSION
 
 # 视图状态接口的路由后缀; 完整路由为 /<PLUGIN_NAME>/status
 STATUS_ROUTE_SUFFIX = "status"
+
+# 状态结果的缓存时长 (秒)。面板查询是慢请求且消耗 QQ 配额, 短期内的重复/并发
+# 请求复用同一份结果, 避免刷爆 token 与面板接口。视图手动刷新时带 refresh=1 跳过。
+STATUS_CACHE_TTL = 5.0
 
 
 def mask_appid(appid: Any) -> str:
@@ -65,11 +70,26 @@ async def _platform_status(
     info: dict[str, str],
     source: str,
     scenes: list[str],
-) -> tuple[dict[str, Any], int]:
-    """构造单个平台的状态, 返回 (payload, 该平台线上面板总数)"""
+) -> tuple[dict[str, Any], int, bool]:
+    """构造单个平台的状态
+
+    返回 (payload, 该平台线上已知面板数, 计数是否完整)。
+    计数不完整 (有场景查询失败) 时, 调用方不应把它当作精确的在线总数。
+
+    场景状态取值:
+        synced    - 该场景线上恰好有一条本插件面板
+        duplicate - 同一场景存在多条本插件面板 (配置异常, 需要清理)
+        missing   - 该场景线上没有本插件面板
+        failed    - 该场景查询失败
+    """
+    raw_appid = info.get("appid")
+    # pf_id 在配置未提供备注名时会回退成 appid, 此时同样要脱敏, 否则完整
+    # 机器人标识会绕过脱敏直接展示在卡片标题上
+    display_pf_id = mask_appid(raw_appid) if raw_appid and str(raw_appid) == pf_id else pf_id
+
     payload: dict[str, Any] = {
-        "pf_id": pf_id,
-        "appid": mask_appid(info.get("appid")),
+        "pf_id": display_pf_id,
+        "appid": mask_appid(raw_appid),
         "source": source,
         "platform": info.get("platform") or getattr(client, "platform_label", "qq"),
         "scenes": [],
@@ -86,7 +106,7 @@ async def _platform_status(
         )
         payload["scenes"] = [{"scope": scope, "state": "failed"} for scope in scenes]
         payload["error"] = str(exc)
-        return payload, 0
+        return payload, 0, False
 
     owned = syncer.owned_panels_by_scope(panels)
     for scope in scenes:
@@ -94,20 +114,21 @@ async def _platform_status(
             payload["scenes"].append({"scope": scope, "state": "failed"})
             continue
 
-        panel = owned.get(scope)
-        if panel is None:
+        owned_list = owned.get(scope, [])
+        if not owned_list:
             payload["scenes"].append({"scope": scope, "state": "missing"})
             continue
 
+        first = owned_list[0]
         payload["scenes"].append(
             {
                 "scope": scope,
-                "state": "synced",
-                "panel_id": str(panel.get("panel_id", "")),
-                "items_count": panel_items_count(panel),
+                "state": "duplicate" if len(owned_list) > 1 else "synced",
+                "panel_id": str(first.get("panel_id", "")),
+                "items_count": panel_items_count(first),
             }
         )
-    return payload, len(panels)
+    return payload, len(panels), not failed_scopes
 
 
 async def build_status(
@@ -123,7 +144,9 @@ async def build_status(
     platforms, source = get_configured_platforms(config, syncer.context)
     scenes = get_enabled_scenes(config)
     items = get_selected_commands(config)
-    clients = syncer.build_clients()
+    # 用当前配置构建客户端, 与上面读到的平台元数据同源; 不依赖 syncer 可能过期的
+    # 内部配置, 否则响应会混入旧客户端/旧凭据
+    clients = syncer.build_clients(config)
 
     # 各平台互不依赖, 并发查询缩短整体耗时; list_all_panels 自身不抛异常,
     # 单个平台失败只影响它自己的 payload。
@@ -134,14 +157,68 @@ async def build_status(
         )
     )
 
+    panels: dict[str, Any] = {
+        "total": sum(count for _, count, _ in results),
+        # 有场景查询失败时 total 只是下限, 明确标记给视图, 不能当成精确值
+        "partial": any(not complete for _, _, complete in results),
+    }
+    platform_count = len(clients)
+    if platform_count:
+        # 聚合面板数的有效上限 = 单机器人上限 × 机器人数; 没有平台时省略 max
+        panels["max"] = PANEL_MAX_ITEMS * platform_count
+
     return {
         "plugin": {"name": PLUGIN_NAME, "version": version},
-        "platforms": [payload for payload, _ in results],
+        "platforms": [payload for payload, _, _ in results],
         "scenes": scenes,
         "items": {"count": len(items), "max": PANEL_MAX_ITEMS},
-        # total 为所有平台线上面板数之和; max 为 QQ 单机器人上限
-        "panels": {"total": sum(count for _, count in results), "max": PANEL_MAX_ITEMS},
+        "panels": panels,
     }
+
+
+class StatusCache:
+    """状态结果的单飞 (single-flight) + 短期缓存
+
+    - 并发请求: 后到的请求在锁上等待, 复用正在计算或刚算完的结果, 不会各发一轮
+      QQ API
+    - 短期缓存: TTL 内的重复请求直接命中, 不打 QQ 接口
+    - force=True (视图手动刷新) 时跳过缓存重新计算
+    """
+
+    def __init__(self, ttl: float = STATUS_CACHE_TTL) -> None:
+        self._ttl = ttl
+        self._lock = asyncio.Lock()
+        self._expires_at = 0.0
+        self._value: dict[str, Any] | None = None
+
+    async def get(
+        self,
+        compute: Callable[[], Awaitable[dict[str, Any]]],
+        *,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        cached = self._peek(force)
+        if cached is not None:
+            return cached
+
+        async with self._lock:
+            # 等锁期间可能已有别的请求算好并写入缓存, 这里再判一次
+            cached = self._peek(force)
+            if cached is not None:
+                return cached
+            value = await compute()
+            self._value = value
+            self._expires_at = time.monotonic() + self._ttl
+            return value
+
+    def _peek(self, force: bool) -> dict[str, Any] | None:
+        """命中未过期的缓存则返回结果, 否则返回 None"""
+        if force or not self._is_fresh():
+            return None
+        return self._value
+
+    def _is_fresh(self) -> bool:
+        return self._value is not None and time.monotonic() < self._expires_at
 
 
 def register_status_api(
@@ -149,6 +226,8 @@ def register_status_api(
     get_syncer: Callable[[], PanelSyncer | None],
     get_config: Callable[[], dict[str, Any]],
     version: str = PLUGIN_VERSION,
+    *,
+    cache_ttl: float = STATUS_CACHE_TTL,
 ) -> bool:
     """注册视图用的只读 Web API 路由, 成功返回 True
 
@@ -159,7 +238,7 @@ def register_status_api(
     此时只记录 warning 并跳过注册, 不影响插件核心的面板同步功能。
     """
     try:
-        from astrbot.api.web import error_response, json_response
+        from astrbot.api.web import error_response, json_response, request
     except Exception as exc:  # pragma: no cover - 依赖宿主版本, 无法在离线测试覆盖
         logger.warning(f"{LOG_TAG} " + t("log.web_api_unavailable", exc=exc))
         return False
@@ -170,11 +249,21 @@ def register_status_api(
         )
         return False
 
+    cache = StatusCache(cache_ttl)
+
     async def page_status():  # noqa: ANN202 - 返回值由 astrbot.api.web 决定
         syncer = get_syncer()
         if syncer is None:
             return error_response(t("web.not_ready"), status_code=503)
-        return json_response(await build_status(syncer, get_config(), version))
+        # 视图手动刷新时带 refresh=1, 跳过缓存拉最新; 其余重复/并发请求复用缓存,
+        # 避免重复打 QQ API 消耗配额
+        raw_refresh = request.query.get("refresh", "")
+        force = str(raw_refresh).strip().lower() in ("1", "true", "yes")
+        payload = await cache.get(
+            lambda: build_status(syncer, get_config(), version),
+            force=force,
+        )
+        return json_response(payload)
 
     context.register_web_api(
         f"/{PLUGIN_NAME}/{STATUS_ROUTE_SUFFIX}",
@@ -186,7 +275,9 @@ def register_status_api(
 
 
 __all__ = [
+    "STATUS_CACHE_TTL",
     "STATUS_ROUTE_SUFFIX",
+    "StatusCache",
     "build_status",
     "mask_appid",
     "panel_items_count",
