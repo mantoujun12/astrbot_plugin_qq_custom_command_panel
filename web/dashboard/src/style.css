@@ -1,6 +1,8 @@
 /**
  * 全局基础样式。
- * 脚手架自带的默认模板样式已移除，主题变量与布局待后续计划实现。
+ *
+ * 视图在 AstrBot 的受限 iframe 里加载, 这里只保留让 v-app 撑满 iframe 所需的
+ * 规则; 排版、配色、圆角等都交给 Vuetify (v-app 上会挂 theme class)。
  */
 
 *,
@@ -9,10 +11,14 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

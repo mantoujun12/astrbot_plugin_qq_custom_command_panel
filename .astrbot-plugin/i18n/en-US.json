@@ -66,7 +66,47 @@
   "views": {
     "dashboard": {
       "title": "Command Panel",
-      "description": "Visually configure the entries written to the QQ Official bot command panel."
+      "description": "Visually configure the entries written to the QQ Official bot command panel.",
+      "nav": {
+        "status": "Overview",
+        "settings": "Settings"
+      },
+      "status": {
+        "title": "Overview",
+        "refresh": "Refresh",
+        "loadFailed": "Failed to load status",
+        "mockHint": "Local dev environment: showing mock data, not connected to the AstrBot backend.",
+        "itemsUnit": "items",
+        "cards": {
+          "platforms": "QQ platforms",
+          "scenes": "Active scenes",
+          "commands": "Command entries",
+          "panels": "Online panels"
+        },
+        "source": {
+          "schema": "Plugin config",
+          "context": "AstrBot platform config"
+        },
+        "state": {
+          "synced": "Synced",
+          "missing": "Missing online",
+          "failed": "Query failed"
+        },
+        "empty": {
+          "platforms": {
+            "title": "No QQ platform available yet",
+            "description": "Fill in appid / ClientSecret under qq_platforms in the plugin config, or enable a qq_official adapter in the AstrBot platform settings."
+          },
+          "commands": {
+            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands in the plugin config."
+          }
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "placeholderTitle": "Configuration still lives on the plugin config page",
+        "placeholder": "This page is not implemented yet. Change the current options on the plugin config page of the AstrBot WebUI and reload the plugin to apply them."
+      }
     }
   }
 }

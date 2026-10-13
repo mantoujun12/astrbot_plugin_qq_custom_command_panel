@@ -66,7 +66,47 @@
   "views": {
     "dashboard": {
       "title": "指令面板",
-      "description": "可视化配置要写入 QQ 官方机器人指令面板的条目。"
+      "description": "可视化配置要写入 QQ 官方机器人指令面板的条目。",
+      "nav": {
+        "status": "状态概览",
+        "settings": "设置"
+      },
+      "status": {
+        "title": "状态概览",
+        "refresh": "刷新",
+        "loadFailed": "获取状态失败",
+        "mockHint": "本地开发环境: 展示的是 mock 数据, 未连接 AstrBot 后端。",
+        "itemsUnit": "条",
+        "cards": {
+          "platforms": "QQ 平台",
+          "scenes": "生效场景",
+          "commands": "指令条目",
+          "panels": "线上面板"
+        },
+        "source": {
+          "schema": "插件配置",
+          "context": "AstrBot 平台配置"
+        },
+        "state": {
+          "synced": "已同步",
+          "missing": "线上缺失",
+          "failed": "查询失败"
+        },
+        "empty": {
+          "platforms": {
+            "title": "还没有可用的 QQ 平台",
+            "description": "在插件配置的 qq_platforms 里填写 appid / ClientSecret, 或在 AstrBot 平台配置里启用 qq_official 适配器。"
+          },
+          "commands": {
+            "description": "尚未配置指令条目, 同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。"
+          }
+        }
+      },
+      "settings": {
+        "title": "设置",
+        "placeholderTitle": "配置仍在插件配置页",
+        "placeholder": "本页尚未实现。目前的配置项请到 AstrBot WebUI 的插件配置页修改, 改完重载插件生效。"
+      }
     }
   }
 }
