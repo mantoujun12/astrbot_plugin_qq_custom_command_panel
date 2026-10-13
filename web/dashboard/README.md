@@ -22,8 +22,9 @@ pnpm build
 pages/dashboard/
 ├─ index.html          # 视图入口, AstrBot 只扫描该文件
 └─ assets/
-   ├─ index-*.js
-   └─ index-*.css
+   ├─ index.js
+   ├─ index.css
+   └─ <chunk>.js / <chunk>.css   # 懒加载路由与共享 chunk, 同样不带哈希
 ```
 
 要点：
@@ -32,6 +33,9 @@ pages/dashboard/
   `/api/v1/plugins/<插件>/views/<视图>/_t/<令牌>/` 下，只有相对路径能沿该前缀解析；绝对路径 `/assets/...` 会 404。
 - `outDir` 指向 `../../pages/dashboard`，且需显式 `emptyOutDir: true`（Vite 默认不会清空项目根之外的目录）。
 - 产物需要提交进仓库：AstrBot 不会执行 npm 构建，页面文件随插件一起分发。
+- 产物文件名**不带内容哈希**（`rollupOptions.output.*FileNames`）。AstrBot 下发视图资源的响应头固定带
+  `Cache-Control: no-store`（`astrbot/dashboard/services/plugin_page_service.py` 的 `build_security_headers`），
+  浏览器不会缓存，哈希没有 cache busting 的作用；去掉后重新 build 的产物文件名稳定，仓库 diff 不会整体翻新。
 - 请使用 hash 路由（如 `createWebHashHistory`）。静态资源按真实文件路径解析，history 路由刷新会 404。
 
 ## 开发
