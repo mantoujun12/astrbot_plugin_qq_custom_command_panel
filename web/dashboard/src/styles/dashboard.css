@@ -1,0 +1,161 @@
+/**
+ * 页面层样式。
+ *
+ * 写法对齐 AstrBot 宿主的 src/styles/dashboard-shell.css: 从 Vuetify 主题变量
+ * 派生辅助色, 亮暗主题自动适配, 不写死颜色。这里只保留本视图用到的部分,
+ * 没有搬宿主那份文件的全部类。
+ *
+ * 我们不做 SCSS 定制层, 所以宿主靠 $border-radius-root 得到的值 (卡片 16px)
+ * 在这里直接写具体数值 —— 宿主页面层也是同样写 16px。
+ */
+
+.qc-page {
+  --qc-text: rgb(var(--v-theme-on-surface));
+  --qc-muted: rgba(var(--v-theme-on-surface), 0.68);
+  --qc-subtle: rgba(var(--v-theme-on-surface), 0.56);
+  --qc-border: rgba(var(--v-theme-on-surface), 0.1);
+  --qc-soft: rgba(var(--v-theme-primary), 0.08);
+  min-height: 100%;
+  background: rgb(var(--v-theme-background));
+  color: var(--qc-text);
+}
+
+/* 平面描边卡: 宿主的概览卡也是 1px 描边 + 16px 圆角 + surface 底 */
+.qc-page .qc-card {
+  border-radius: 16px;
+  border-color: var(--qc-border);
+}
+
+.qc-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--qc-soft);
+  color: rgb(var(--v-theme-primary));
+}
+
+.qc-metric-label {
+  margin-top: 12px;
+  color: var(--qc-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.qc-metric-value {
+  margin-top: 8px;
+  font-size: clamp(24px, 2vw, 34px);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.qc-metric-note {
+  margin-top: 8px;
+  color: var(--qc-subtle);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.qc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.qc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 侧边栏 brand 行: 标题 + 折叠按钮, 尺寸与间距对齐宿主 VerticalSidebar 的实现 */
+.qc-sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 16px 2px 24px;
+}
+
+/* 折叠成 rail (56px) 时只留按钮居中 */
+.qc-sidebar-brand--rail {
+  width: 56px;
+  justify-content: center;
+  padding: 0 0 2px;
+}
+
+.qc-sidebar-brand-title {
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-sidebar-brand-toggle {
+  color: rgba(var(--v-theme-on-surface), 0.56);
+}
+
+.qc-sidebar-brand-toggle:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.qc-title {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.qc-subtitle {
+  margin: 4px 0 0;
+  max-width: 860px;
+  color: var(--qc-muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.qc-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--qc-border);
+  font-size: 14px;
+}
+
+.qc-list-row:last-child {
+  border-bottom: 0;
+}
+
+.qc-row-main {
+  min-width: 0;
+}
+
+.qc-list-label {
+  color: var(--qc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .qc-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

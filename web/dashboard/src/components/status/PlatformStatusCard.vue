@@ -29,45 +29,44 @@ function stateLabel(state: SceneState): string {
   return t(`views.dashboard.status.state.${state}`, STATE_META[state].fallback)
 }
 
-function itemsSuffix(scene: ScenePanelStatus): string {
-  if (scene.items_count === undefined) {
+// 面板 ID 后面的条目数, 没有面板时返回空串
+function panelDetail(scene: ScenePanelStatus): string {
+  if (!scene.panel_id) {
     return ''
   }
-  return ` · ${scene.items_count} ${t('views.dashboard.status.itemsUnit', '条')}`
+  if (scene.items_count === undefined) {
+    return scene.panel_id
+  }
+  return `${scene.panel_id} · ${scene.items_count} ${t('views.dashboard.status.itemsUnit', '条')}`
 }
 </script>
 
 <template>
-  <v-card variant="outlined" class="h-100">
-    <v-card-item :subtitle="platform.platform">
+  <v-card class="qc-card h-100" variant="outlined">
+    <v-card-item class="px-5 pt-5">
       <v-card-title class="text-body-large">{{ platform.pf_id }}</v-card-title>
+      <v-card-subtitle>{{ platform.platform }}</v-card-subtitle>
       <template #append>
         <v-chip size="small" variant="tonal">{{ sourceLabel }}</v-chip>
       </template>
     </v-card-item>
 
-    <v-divider />
-
-    <v-card-text>
-      <div class="text-body-small text-medium-emphasis mb-2">appid: {{ platform.appid }}</div>
+    <v-card-text class="px-5 pb-4 pt-3">
+      <div class="qc-metric-note mb-2">appid: {{ platform.appid }}</div>
 
       <v-alert v-if="platform.error" type="error" variant="tonal" density="compact" class="mb-2">
         {{ platform.error }}
       </v-alert>
 
-      <v-list density="compact" class="py-0">
-        <v-list-item v-for="scene in platform.scenes" :key="scene.scope">
-          <v-list-item-title>{{ scene.scope }}</v-list-item-title>
-          <v-list-item-subtitle v-if="scene.panel_id">
-            {{ scene.panel_id }}{{ itemsSuffix(scene) }}
-          </v-list-item-subtitle>
-          <template #append>
-            <v-chip size="small" variant="tonal" :color="stateColor(scene.state)">
-              {{ stateLabel(scene.state) }}
-            </v-chip>
-          </template>
-        </v-list-item>
-      </v-list>
+      <div v-for="scene in platform.scenes" :key="scene.scope" class="qc-list-row">
+        <div class="qc-row-main">
+          <div class="qc-list-label">{{ scene.scope }}</div>
+          <div v-if="scene.panel_id" class="qc-metric-note">{{ panelDetail(scene) }}</div>
+        </div>
+        <v-chip size="small" variant="tonal" :color="stateColor(scene.state)">
+          {{ stateLabel(scene.state) }}
+        </v-chip>
+      </div>
     </v-card-text>
   </v-card>
 </template>

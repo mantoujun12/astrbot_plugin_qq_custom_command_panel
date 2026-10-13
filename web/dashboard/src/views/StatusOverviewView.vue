@@ -51,20 +51,41 @@ const mockMode = !hasBackend()
 </script>
 
 <template>
-  <v-container fluid>
-    <div class="d-flex align-center justify-space-between mb-4">
-      <h2 class="text-headline-small">{{ t('views.dashboard.status.title', '状态概览') }}</h2>
-      <v-btn variant="tonal" :prepend-icon="mdiRefresh" :loading="loading" @click="load">
-        {{ t('views.dashboard.status.refresh', '刷新') }}
-      </v-btn>
+  <v-container fluid class="qc-page pa-4 pa-md-6">
+    <div class="qc-header">
+      <div>
+        <h1 class="qc-title">{{ t('views.dashboard.status.title', '状态概览') }}</h1>
+        <p class="qc-subtitle">
+          {{
+            t(
+              'views.dashboard.status.subtitle',
+              '查看各 QQ 平台与线上指令面板的当前状态。',
+            )
+          }}
+        </p>
+      </div>
+
+      <div class="qc-header-actions">
+        <v-btn
+          variant="text"
+          color="primary"
+          :loading="loading"
+          :prepend-icon="mdiRefresh"
+          @click="load"
+        >
+          {{ t('views.dashboard.status.refresh', '刷新') }}
+        </v-btn>
+      </div>
     </div>
+
+    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
     <v-alert
       v-if="mockMode"
       type="info"
       variant="tonal"
-      class="mb-4"
       density="compact"
+      class="mb-4"
       :prepend-icon="mdiInformationOutline"
     >
       {{
@@ -85,13 +106,7 @@ const mockMode = !hasBackend()
       {{ t('views.dashboard.status.loadFailed', '获取状态失败') }}: {{ error }}
     </v-alert>
 
-    <v-row v-if="loading && !status">
-      <v-col v-for="n in 4" :key="n" cols="12" sm="6" lg="3">
-        <v-skeleton-loader type="card" />
-      </v-col>
-    </v-row>
-
-    <template v-else-if="status">
+    <template v-if="status">
       <v-row>
         <v-col cols="12" sm="6" lg="3">
           <StatCard
@@ -105,7 +120,7 @@ const mockMode = !hasBackend()
             :icon="mdiForumOutline"
             :title="t('views.dashboard.status.cards.scenes', '生效场景')"
             :value="status.scenes.length"
-            :subtitle="status.scenes.join(' / ')"
+            :note="status.scenes.join(' / ')"
           />
         </v-col>
         <v-col cols="12" sm="6" lg="3">
@@ -145,7 +160,7 @@ const mockMode = !hasBackend()
           v-if="!hasItems"
           type="warning"
           variant="tonal"
-          class="my-2"
+          class="mb-4"
           :prepend-icon="mdiAlertCircleOutline"
         >
           {{

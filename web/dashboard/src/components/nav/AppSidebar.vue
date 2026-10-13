@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { mdiCogOutline, mdiViewDashboardOutline } from '@mdi/js'
-import { useBridge } from '../../composables/useBridge'
+import NavItem from './NavItem.vue'
 
-const { t } = useBridge()
+defineProps<{
+  /** 折叠成 rail 图标栏 */
+  rail?: boolean
+  /** 显示在 brand 行里的标题 (视图标题) */
+  title: string
+  toggleIcon: string
+  toggleLabel: string
+}>()
+
+defineEmits<{ toggle: [] }>()
 
 // 本次只落地这两个入口: 「状态概览」置顶, 「设置」压到抽屉底部
 const mainItems = [
   {
     to: '/status',
     icon: mdiViewDashboardOutline,
-    key: 'views.dashboard.nav.status',
+    labelKey: 'views.dashboard.nav.status',
     fallback: '状态概览',
   },
 ]
@@ -18,7 +27,7 @@ const bottomItems = [
   {
     to: '/settings',
     icon: mdiCogOutline,
-    key: 'views.dashboard.nav.settings',
+    labelKey: 'views.dashboard.nav.settings',
     fallback: '设置',
   },
 ]
@@ -26,27 +35,31 @@ const bottomItems = [
 
 <template>
   <div class="d-flex flex-column h-100">
+    <div class="qc-sidebar-brand" :class="{ 'qc-sidebar-brand--rail': rail }">
+      <div v-if="!rail" class="qc-sidebar-brand-title">{{ title }}</div>
+
+      <v-btn
+        class="qc-sidebar-brand-toggle"
+        icon
+        rounded="sm"
+        variant="text"
+        :ripple="false"
+        :aria-label="toggleLabel"
+        @click="$emit('toggle')"
+      >
+        <v-icon :icon="toggleIcon" size="20" />
+      </v-btn>
+    </div>
+
     <v-list nav density="comfortable">
-      <v-list-item
-        v-for="item in mainItems"
-        :key="item.to"
-        :to="item.to"
-        :prepend-icon="item.icon"
-        :title="t(item.key, item.fallback)"
-      />
+      <NavItem v-for="item in mainItems" :key="item.to" v-bind="item" :rail="rail" />
     </v-list>
 
     <v-spacer />
 
     <v-list nav density="comfortable">
       <v-divider />
-      <v-list-item
-        v-for="item in bottomItems"
-        :key="item.to"
-        :to="item.to"
-        :prepend-icon="item.icon"
-        :title="t(item.key, item.fallback)"
-      />
+      <NavItem v-for="item in bottomItems" :key="item.to" v-bind="item" :rail="rail" />
     </v-list>
   </div>
 </template>

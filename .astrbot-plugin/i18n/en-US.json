@@ -69,14 +69,20 @@
       "description": "Visually configure the entries written to the QQ Official bot command panel.",
       "nav": {
         "status": "Overview",
-        "settings": "Settings"
+        "settings": "Settings",
+        "collapse": "Collapse sidebar",
+        "expand": "Expand sidebar",
+        "openDrawer": "Open sidebar",
+        "closeDrawer": "Close sidebar"
       },
       "status": {
         "title": "Overview",
+        "subtitle": "Check the current state of each QQ platform and its on-line command panel.",
         "refresh": "Refresh",
         "loadFailed": "Failed to load status",
         "mockHint": "Local dev environment: showing mock data, not connected to the AstrBot backend.",
         "itemsUnit": "items",
+        "limit": "limit",
         "cards": {
           "platforms": "QQ platforms",
           "scenes": "Active scenes",
@@ -104,6 +110,7 @@
       },
       "settings": {
         "title": "Settings",
+        "subtitle": "Panel entries and platform credentials are kept on the plugin config page.",
         "placeholderTitle": "Configuration still lives on the plugin config page",
         "placeholder": "This page is not implemented yet. Change the current options on the plugin config page of the AstrBot WebUI and reload the plugin to apply them."
       }

@@ -1,48 +1,44 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useBridge } from '../../composables/useBridge'
 
 const props = defineProps<{
   title: string
   value: number
-  /** 上限 (例如 QQ 侧 20 条指令 / 20 个面板), 传了才显示 N/M 和进度条 */
+  /** 上限 (例如 QQ 侧 20 条指令 / 20 个面板); 传了就在备注里说明 */
   max?: number
-  subtitle?: string
+  /** 覆盖默认备注 */
+  note?: string
   icon?: string
-  /** 到达上限时用 error 色高亮 */
+  /** 到达上限时用 error 色高亮数值 */
   emphasizeAtLimit?: boolean
 }>()
 
-const percent = computed(() =>
-  props.max ? Math.min(100, Math.round((props.value / props.max) * 100)) : undefined,
-)
+const { t } = useBridge()
 
 const warn = computed(
   () => props.emphasizeAtLimit === true && props.max !== undefined && props.value >= props.max,
 )
+
+const noteText = computed(() => {
+  if (props.note !== undefined) {
+    return props.note
+  }
+  return props.max === undefined ? undefined : `${t('views.dashboard.status.limit', '上限')} ${props.max}`
+})
 </script>
 
+<!-- 卡片结构与宿主概览卡一致: 图标色块 -> 标签 -> 数值 -> 备注 -->
 <template>
-  <v-card variant="tonal" class="h-100">
-    <v-card-text>
-      <div class="d-flex align-center ga-4 mb-1">
-        <v-icon v-if="icon" :icon="icon" size="small" class="text-medium-emphasis" />
-        <span class="text-body-medium text-medium-emphasis">{{ title }}</span>
-      </div>
+  <v-card class="qc-card h-100" variant="outlined">
+    <v-card-text class="pa-5">
+      <span v-if="icon" class="qc-card-icon">
+        <v-icon :icon="icon" size="18" />
+      </span>
 
-      <div class="text-headline-small" :class="{ 'text-error': warn }">
-        {{ value }}<template v-if="max !== undefined"
-          ><span class="text-body-medium text-medium-emphasis"> / {{ max }}</span></template
-        >
-      </div>
-
-      <div v-if="subtitle" class="text-body-small text-medium-emphasis">{{ subtitle }}</div>
+      <div class="qc-metric-label">{{ title }}</div>
+      <div class="qc-metric-value" :class="{ 'text-error': warn }">{{ value }}</div>
+      <div v-if="noteText" class="qc-metric-note">{{ noteText }}</div>
     </v-card-text>
-
-    <v-progress-linear
-      v-if="percent !== undefined"
-      :model-value="percent"
-      :color="warn ? 'error' : 'primary'"
-      height="4"
-    />
   </v-card>
 </template>
