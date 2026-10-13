@@ -1,76 +1,93 @@
 name: Auto Release
 
+# 发布入口:
+# - push 到 master 且改动了 metadata.yaml: 版本号变了就自动发布
+# - workflow_dispatch: 手动补发/重试 (push 事件没触发, 或上次发布中途失败时用)
 on:
   push:
     branches:
-      - main
       - master
     paths:
       - metadata.yaml
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+# 串行化发布: 两次推送同时到达时不重复打 tag / 建 release, 也不取消正在进行的发布
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
 
 jobs:
   release:
     name: Create Release on Version Change
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          # Need enough history to reach github.event.before (push range)
+          # generate_release_notes 需要完整历史才能找到上一个 tag
           fetch-depth: 0
 
-      - name: Detect version change
+      - name: Validate version metadata
         id: version_check
         shell: bash
         run: |
           set -euo pipefail
 
-          NEW_VERSION=$(grep -E '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
-          echo "Current metadata.yaml version: $NEW_VERSION"
-
-          # Use github.event.before (the SHA before the push) as the baseline,
-          # so multi-commit pushes where metadata.yaml is not touched in the
-          # last commit are still detected correctly.
-          BEFORE_SHA="${{ github.event.before }}"
-          OLD_VERSION=""
-          if [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
-            && git rev-parse --verify "$BEFORE_SHA" >/dev/null 2>&1; then
-            OLD_VERSION=$(git show "${BEFORE_SHA}:metadata.yaml" 2>/dev/null \
-              | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
-            echo "Push-baseline ($BEFORE_SHA) version: ${OLD_VERSION:-<not found>}"
-          elif git rev-parse HEAD^ >/dev/null 2>&1; then
-            OLD_VERSION=$(git show HEAD^:metadata.yaml 2>/dev/null \
-              | grep -E '^version:' | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
-            echo "Falling back to HEAD^, previous commit version: ${OLD_VERSION:-<not found>}"
-          else
-            echo "No previous commit found, first push."
-          fi
-
-          if [[ -z "$NEW_VERSION" ]]; then
-            echo "Error: could not read version from metadata.yaml" >&2
+          # metadata.yaml 是唯一版本源: 插件运行时 (core/paths.py) 与视图
+          # (web/dashboard/package.json) 的版本都必须跟它一致, 否则打出来的 tag
+          # 会和插件实际报告的版本对不上
+          VERSION=$(grep -E '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::metadata.yaml version '${VERSION}' is not a valid vX.Y.Z version" >&2
             exit 1
           fi
 
-          if [[ "$NEW_VERSION" == "$OLD_VERSION" ]]; then
+          PY_VERSION=$(grep -oE 'PLUGIN_VERSION *= *"[^"]+"' core/paths.py | grep -oE '"[^"]+"' | tr -d '"' || true)
+          WEB_VERSION=$(jq -r '.version' web/dashboard/package.json || true)
+
+          failed=0
+          if [[ "$PY_VERSION" != "$VERSION" ]]; then
+            echo "::error::core/paths.py PLUGIN_VERSION (${PY_VERSION:-<not found>}) != metadata.yaml version ($VERSION)" >&2
+            failed=1
+          fi
+          if [[ "$WEB_VERSION" != "${VERSION#v}" ]]; then
+            echo "::error::web/dashboard/package.json version (${WEB_VERSION:-<not found>}) != metadata.yaml version ($VERSION)" >&2
+            failed=1
+          fi
+          [[ $failed -eq 0 ]] || exit 1
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::Version metadata is consistent: $VERSION"
+
+      - name: Check whether this version is already released
+        id: release_check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version_check.outputs.tag }}"
+
+          # 用「tag 和 release 是否都已存在」判断, 而不是比较 metadata.yaml 的前后改动:
+          # 这样发布是幂等的 —— 重跑一次不会重复发布, 上次中途失败留下的半成品也能补上,
+          # 手动 workflow_dispatch 也不需要依赖 push 事件的历史
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1 \
+            && gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" >/dev/null 2>&1; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Version unchanged ($NEW_VERSION), skipping release."
+            echo "Tag $TAG and its release already exist, skipping."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-            TAG_NAME="$NEW_VERSION"
-            if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-              echo "Tag $TAG_NAME already exists locally, skipping tag creation (release should still go through via CLI)."
-            fi
-            echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
-            echo "::notice::Detected version change: ${OLD_VERSION:-<none>} -> $NEW_VERSION, tag=$TAG_NAME"
+            echo "::notice::Detected version $TAG to publish."
           fi
 
       - name: Build plugin zip package
         id: build_package
-        if: steps.version_check.outputs.skip == 'false'
+        if: steps.release_check.outputs.skip == 'false'
         shell: bash
         run: |
           set -euo pipefail
@@ -106,13 +123,14 @@ jobs:
           echo "::notice::Created plugin package: ${ZIP_FILE}"
 
       - name: Push version tag
-        if: steps.version_check.outputs.skip == 'false'
+        if: steps.release_check.outputs.skip == 'false'
         shell: bash
         run: |
           set -euo pipefail
           TAG="${{ steps.version_check.outputs.tag }}"
-          if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists on remote, skipping push."
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            # tag 已存在 (例如上次发布只完成了打 tag): 保留它, 只补 release
+            echo "Tag $TAG already exists on remote, keeping it."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -124,13 +142,15 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        if: steps.version_check.outputs.skip == 'false'
+        if: steps.release_check.outputs.skip == 'false'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version_check.outputs.tag }}
           name: ${{ steps.version_check.outputs.version }}
+          generate_release_notes: true
+          # 资源没匹配上时直接失败, 免得发出一个没有附件的 release
+          fail_on_unmatched_files: true
           files: |
             ${{ steps.build_package.outputs.zip_name }}
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
