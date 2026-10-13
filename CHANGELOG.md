@@ -5,6 +5,20 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.5.0] - 2026-10-13
+
+> **内嵌面板 (AstrBot WebUI 可视化视图) 目前处于测试阶段**, 界面布局与状态接口仍可能继续调整, 使用中遇到问题欢迎反馈。
+
+### 新增
+
+- 内嵌面板 (AstrBot WebUI 可视化视图): 在 WebUI 中查看各 QQ 平台的面板同步状态、指令条目数与配置概要, 跟随宿主的明暗主题 (#33, #34)
+- 视图后端接口 `GET /<plugin>/status`: 基于 `context.register_web_api()` 并发查询各平台面板状态, 对 appid / pf_id 脱敏, 并带单飞 + 短 TTL 缓存 (#34)
+
+### 变更
+
+- 前端视图 (Vue 3 + TypeScript + Vite + Vuetify 4) 的构建与类型检查纳入 CI 与 pre-commit, 构建产物不带内容哈希 (#33, #34)
+- `PanelSyncer` 新增 `build_clients()` 与公开的 `owned_panels_by_scope()`, 供视图状态接口复用 (#34)
+
 ## [v0.4.4] - 2026-10-12
 
 ### 变更
@@ -94,6 +108,7 @@
 
 - 首次发布: QQ 官方机器人指令面板同步功能 (#1)
 
+[v0.5.0]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.4...v0.5.0
 [v0.4.4]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.3...v0.4.4
 [v0.4.3]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.2...v0.4.3
 [v0.4.2]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.1...v0.4.2
