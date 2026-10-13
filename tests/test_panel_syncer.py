@@ -1,6 +1,6 @@
-"""core.panel_syncer.PanelSyncer 的单元测试 (注入 FakeQQClient / fake context)
+"""core.panel_syncer.PanelSyncer 的单元测试（注入 FakeQQClient / fake context）
 
-重点覆盖 AGENTS.md 中 "任一场景拉取失败要中止" 的关键约定,
+重点覆盖 AGENTS.md 中 "任一场景拉取失败要中止" 的关键约定，
 以及 sync / clear / purge 的核心分支。
 """
 
@@ -30,7 +30,7 @@ def owned_panel(scope: str, panel_id: str, pf: str = "pf1") -> dict[str, Any]:
 
 
 def foreign_panel(scope: str, panel_id: str) -> dict[str, Any]:
-    """构造一个不带 remark 前缀的面板 record (他人创建)"""
+    """构造一个不带 remark 前缀的面板 record（他人创建）"""
     return {
         "panel_id": panel_id,
         "scope": scope,
@@ -44,8 +44,8 @@ def make_syncer(
 ) -> PanelSyncer:
     """构造 PanelSyncer, context 用 SimpleNamespace 代替
 
-    data_dir 用一次性临时目录: PanelSyncer.__init__ 会用它初始化
-    PanelStateStore, 本文件不对其内容做断言。
+    data_dir 用一次性临时目录：PanelSyncer.__init__ 会用它初始化
+    PanelStateStore，本文件不对其内容做断言。
     """
     context = SimpleNamespace(**(context_attrs or {}))
     return PanelSyncer(
@@ -79,7 +79,7 @@ def test_is_owned_panel_false_for_missing_remark() -> None:
 
 
 # ---------------------------------------------------------------------------
-# list_all_panels: 失败场景收集 (AGENTS.md 约定 2 的核心)
+# list_all_panels: 失败场景收集（AGENTS.md 约定 2 的核心）
 # ---------------------------------------------------------------------------
 
 
@@ -144,7 +144,7 @@ async def test_sync_updates_existing_owned_panel() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_aborts_when_any_scope_list_fails() -> None:
-    """AGENTS.md 约定: 任一场景拉取失败要中止, 不许吞异常 (防重复建面板)"""
+    """AGENTS.md 约定：任一场景拉取失败要中止，不许吞异常（防重复建面板）"""
     syncer = make_syncer()
     client = FakeQQClient(existing={}, failing_scopes={"channel"})
 
@@ -207,7 +207,7 @@ async def test_sync_cleans_disabled_scene_panels() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_create_failure_does_not_break_other_scopes() -> None:
-    """某场景 create 失败仅记录 error, 不影响其他场景"""
+    """某场景 create 失败仅记录 error，不影响其他场景"""
     syncer = make_syncer()
 
     class PartialClient(FakeQQClient):
@@ -275,7 +275,7 @@ async def test_clear_removes_owned_panels_only() -> None:
 
 @pytest.mark.asyncio
 async def test_clear_tolerates_scope_list_failure() -> None:
-    """clear 路径容忍部分场景失败 (删得掉多少算多少)"""
+    """clear 路径容忍部分场景失败（删得掉多少算多少）"""
     syncer = make_syncer()
     client = FakeQQClient(
         existing={"c2c": [owned_panel("c2c", "p_mine")]},
@@ -304,7 +304,7 @@ def test_set_config_updates_reference() -> None:
 
 
 def test_build_clients_accepts_explicit_config() -> None:
-    """传入当前配置时应按它构建, 而不是用 syncer 内部可能过期的配置"""
+    """传入当前配置时应按它构建，而不是用 syncer 内部可能过期的配置"""
     syncer = make_syncer(config={"qq_platforms": [{"name": "old", "appid": "a1", "secret": "s"}]})
     clients = syncer.build_clients(
         {"qq_platforms": [{"name": "new", "appid": "a2", "secret": "s"}]}
@@ -346,7 +346,7 @@ def test_owned_panels_by_scope_skips_panels_without_scope() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_updates_first_owned_panel_when_duplicated() -> None:
-    """同一 scope 有多条 owned 面板时只更新第一条 (不再被后一条覆盖)"""
+    """同一 scope 有多条 owned 面板时只更新第一条（不再被后一条覆盖）"""
     syncer = make_syncer()
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
     items = [{"name": "a", "type": "command", "desc": ""}]
@@ -359,7 +359,7 @@ async def test_sync_updates_first_owned_panel_when_duplicated() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_empty_items_deletes_all_duplicate_owned_panels() -> None:
-    """清空指令时同 scope 的重复面板要一并删除, 不能只删一条"""
+    """清空指令时同 scope 的重复面板要一并删除，不能只删一条"""
     syncer = make_syncer()
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
 

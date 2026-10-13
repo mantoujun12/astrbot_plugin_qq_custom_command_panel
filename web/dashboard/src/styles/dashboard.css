@@ -1,8 +1,8 @@
 /**
- * 页面层样式: 写法对齐 AstrBot 宿主的 src/styles/dashboard-shell.css, 从 Vuetify
- * 主题变量派生辅助色, 亮暗主题自动适配。
+ * 页面层样式：写法对齐 AstrBot 宿主的 src/styles/dashboard-shell.css，从 Vuetify
+ * 主题变量派生辅助色，亮暗主题自动适配。
  *
- * 不做 SCSS 定制层, 因此宿主靠 $border-radius-root 得到的卡片 16px 圆角
+ * 不做 SCSS 定制层，因此宿主靠 $border-radius-root 得到的卡片 16px 圆角
  * 在这里直接写具体数值。
  */
 
@@ -17,7 +17,7 @@
   color: var(--qc-text);
 }
 
-/* 平面描边卡: 宿主的概览卡也是 1px 描边 + 16px 圆角 + surface 底 */
+/* 平面描边卡：宿主的概览卡也是 1px 描边 + 16px 圆角 + surface 底 */
 .qc-page .qc-card {
   border-radius: 16px;
   border-color: var(--qc-border);
@@ -73,7 +73,7 @@
   flex-wrap: wrap;
 }
 
-/* 侧边栏 brand 行: 标题 + 折叠按钮, 尺寸与间距对齐宿主 VerticalSidebar 的实现 */
+/* 侧边栏 brand 行：标题 + 折叠按钮，尺寸与间距对齐宿主 VerticalSidebar 的实现 */
 .qc-sidebar-brand {
   display: flex;
   align-items: center;

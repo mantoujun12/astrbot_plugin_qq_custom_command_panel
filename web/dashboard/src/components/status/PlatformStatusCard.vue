@@ -14,7 +14,7 @@ const sourceLabel = computed(() =>
   ),
 )
 
-// scope 直接展示 QQ API 的原始取值 (c2c/group/...), 不做二次翻译
+// scope 直接展示 QQ API 的原始取值 (c2c/group/...)，不做二次翻译
 const STATE_META: Record<SceneState, { color: string; fallback: string }> = {
   synced: { color: 'success', fallback: '已同步' },
   duplicate: { color: 'error', fallback: '重复面板' },
@@ -30,7 +30,7 @@ function stateLabel(state: SceneState): string {
   return t(`views.dashboard.status.state.${state}`, STATE_META[state].fallback)
 }
 
-// 面板 ID 后面的条目数, 没有面板时返回空串
+// 面板 ID 后面的条目数，没有面板时返回空串
 function panelDetail(scene: ScenePanelStatus): string {
   if (!scene.panel_id) {
     return ''

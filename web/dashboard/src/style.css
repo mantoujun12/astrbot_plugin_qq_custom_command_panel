@@ -1,8 +1,8 @@
 /**
  * 全局基础样式。
  *
- * 视图在 AstrBot 的受限 iframe 里加载, 这里只保留让 v-app 撑满 iframe 所需的
- * 规则; 排版、配色、圆角等都交给 Vuetify (v-app 上会挂 theme class)。
+ * 视图在 AstrBot 的受限 iframe 里加载，这里只保留让 v-app 撑满 iframe 所需的
+ * 规则；排版、配色、圆角等都交给 Vuetify（v-app 上会挂 theme class）。
  */
 
 *,

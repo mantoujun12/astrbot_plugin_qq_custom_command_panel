@@ -5,7 +5,7 @@ import NavItem from './NavItem.vue'
 defineProps<{
   /** 折叠成 rail 图标栏 */
   rail?: boolean
-  /** 显示在 brand 行里的标题 (视图标题) */
+  /** 显示在 brand 行里的标题（视图标题）*/
   title: string
   toggleIcon: string
   toggleLabel: string
@@ -13,7 +13,7 @@ defineProps<{
 
 defineEmits<{ toggle: [] }>()
 
-// 本次只落地这两个入口: 「状态概览」置顶, 「设置」压到抽屉底部
+// 本次只落地这两个入口：「状态概览」置顶，「设置」压到抽屉底部
 const mainItems = [
   {
     to: '/status',

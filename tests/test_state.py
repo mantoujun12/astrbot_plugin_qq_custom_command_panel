@@ -1,4 +1,4 @@
-"""core.state.PanelStateStore 的单元测试 (真实文件 IO, 用 tmp_path)"""
+"""core.state.PanelStateStore 的单元测试（真实文件 IO，用 tmp_path）"""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def test_load_normalizes_non_string_values(tmp_path: pytest.Path) -> None:
         encoding="utf-8",
     )
     store = PanelStateStore(tmp_path)
-    # 键/值都被规范化为字符串, 空值被过滤
+    # 键/值都被规范化为字符串，空值被过滤
     assert store.load() == {"123": {"456": "789"}}
 
 

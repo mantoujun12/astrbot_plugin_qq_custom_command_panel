@@ -16,7 +16,7 @@ SCENES: tuple[str, ...] = ("c2c", "group", "channel", "dm")
 DEFAULT_SCENES: list[str] = ["c2c", "group"]
 
 
-# QQ 平台类型别名, 用于在不同 AstrBot 版本/适配器命名之间做归一化
+# QQ 平台类型别名，用于在不同 AstrBot 版本/适配器命名之间做归一化
 _PLATFORM_ALIASES: dict[str, str] = {
     "qq_official": "qq_official",
     "qq_official_webhook": "qq_official_webhook",
@@ -40,10 +40,10 @@ def get_enabled_scenes(config: dict[str, Any]) -> list[str]:
 def get_selected_commands(config: dict[str, Any]) -> list[dict[str, str]]:
     """读取用户在 schema 里手动配置的指令面板条目
 
-    schema 中 selected_commands 是 template_list, 每条 {name, desc},
-    用户在这里自定义要出现在 QQ 面板上的指令名和描述, 插件原样写入
+    schema 中 selected_commands 是 template_list，每条 {name, desc}，
+    用户在这里自定义要出现在 QQ 面板上的指令名和描述，插件原样写入
 
-    返回:
+    返回：
         list[{"name": str, "type": "command", "desc": str}],
         最多 PANEL_MAX_ITEMS 条
         name 截断到 PANEL_ITEM_NAME_MAX, desc 截断到 PANEL_ITEM_DESC_MAX。
@@ -78,10 +78,10 @@ def get_selected_commands(config: dict[str, Any]) -> list[dict[str, str]]:
 def _parse_platform_entry(pf_meta: Any) -> dict[str, str] | None:
     """从一个 schema 条目或 context 条目中解析 appid/secret/platform。
 
-    兼容:
-    - schema 新格式: {"name": "备注", "appid": "...", "secret": "...", "platform": "qq_official"}
-    - schema 旧 dict 格式: {"appid": "...", "secret": "...", "platform": "..."}
-    - context 格式: 同上, 但 enable 字段为 False 时跳过
+    兼容：
+    - schema 新格式：{"name": "备注", "appid": "...", "secret": "...", "platform": "qq_official"}
+    - schema 旧 dict 格式：{"appid": "...", "secret": "...", "platform": "..."}
+    - context 格式：同上，但 enable 字段为 False 时跳过
     """
     if not isinstance(pf_meta, dict):
         return None
@@ -91,7 +91,7 @@ def _parse_platform_entry(pf_meta: Any) -> dict[str, str] | None:
     if platform not in ("qq_official", "qq_official_webhook"):
         return None
 
-    # schema 来源时, enable 字段默认 True (用户显式填了就是 True);
+    # schema 来源时，enable 字段默认 True（用户显式填了就是 True）；
     # context 来源时遵循原始 enable 字段。
     if pf_meta.get("enable") is False:
         return None
@@ -112,7 +112,7 @@ def _parse_platform_entry(pf_meta: Any) -> dict[str, str] | None:
     if not appid or not secret:
         return None
 
-    # pf_id 优先用 name (备注), 否则用 appid, 否则用 platform
+    # pf_id 优先用 name（备注），否则用 appid，否则用 platform
     pf_id = pf_meta.get("id") or pf_meta.get("name") or pf_meta.get("platform_id") or str(appid)
     return {
         "pf_id": str(pf_id),
@@ -125,8 +125,8 @@ def _parse_platform_entry(pf_meta: Any) -> dict[str, str] | None:
 def _build_platform_map(raw_entries: Any) -> dict[str, dict[str, str]]:
     """把原始 platform 条目列表解析并去重为 {pf_id: {appid, secret, platform}}。
 
-    schema 和 context 两个来源的解析后半段一致, 统一在此处合并。
-    同一 pf_id 只保留第一条, 避免重复同步。
+    schema 和 context 两个来源的解析后半段一致，统一在此处合并。
+    同一 pf_id 只保留第一条，避免重复同步。
     """
     if not isinstance(raw_entries, list) or not raw_entries:
         return {}
@@ -149,7 +149,7 @@ def _build_platform_map(raw_entries: Any) -> dict[str, dict[str, str]]:
 def get_platforms_from_schema(config: dict[str, Any]) -> dict[str, dict[str, str]]:
     """从 schema 配置 (qq_platforms) 读取用户手动填写的 QQ 平台凭证。
 
-    schema 格式:: template_list, 每条 {name?, appid, secret, platform?}
+    schema 格式:: template_list，每条 {name?, appid, secret, platform?}
     """
     return _build_platform_map(config.get("qq_platforms", []))
 
@@ -157,7 +157,7 @@ def get_platforms_from_schema(config: dict[str, Any]) -> dict[str, dict[str, str
 def get_platforms_from_context(context: Any) -> dict[str, dict[str, str]]:
     """从 AstrBot 平台配置中读取 qq_official / qq_official_webhook 的 appid/secret。
 
-    不同 AstrBot 版本/部署方式下, 配置可能挂在不同字段上,
+    不同 AstrBot 版本/部署方式下，配置可能挂在不同字段上，
     按优先级尝试多个候选路径。
     """
     platform_settings: Any = None
@@ -181,10 +181,10 @@ def get_configured_platforms(
     config: dict[str, Any],
     context: Any,
 ) -> tuple[dict[str, dict[str, str]], str]:
-    """优先读 schema (qq_platforms), 为空才 fallback 到 context 平台配置。
+    """优先读 schema (qq_platforms)，为空才 fallback 到 context 平台配置。
 
-    返回 ({pf_id: {"appid", "secret", "platform"}}, 来源)
-    来源取值: "schema" / "context" / "none"
+    返回（{pf_id: {"appid", "secret", "platform"}}，来源）
+    来源取值："schema" / "context" / "none"
     """
     from_schema = get_platforms_from_schema(config)
     if from_schema:

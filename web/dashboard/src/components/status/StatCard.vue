@@ -5,7 +5,7 @@ import { useBridge } from '../../composables/useBridge'
 const props = defineProps<{
   title: string
   value: number
-  /** 上限 (例如 QQ 侧 20 条指令 / 20 个面板); 传了就在备注里说明 */
+  /** 上限（例如 QQ 侧 20 条指令 / 20 个面板）；传了就在备注里说明 */
   max?: number
   /** 覆盖默认备注 */
   note?: string
@@ -28,7 +28,7 @@ const noteText = computed(() => {
 })
 </script>
 
-<!-- 卡片结构与宿主概览卡一致: 图标色块 -> 标签 -> 数值 -> 备注 -->
+<!-- 卡片结构与宿主概览卡一致：图标色块 -> 标签 -> 数值 -> 备注 -->
 <template>
   <v-card class="qc-card h-100" variant="outlined">
     <v-card-text class="pa-5">

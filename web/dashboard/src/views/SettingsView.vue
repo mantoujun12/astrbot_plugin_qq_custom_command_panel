@@ -4,7 +4,7 @@ import { useBridge } from '../composables/useBridge'
 
 const { t } = useBridge()
 
-// 设置页占位: 现有配置项都在插件配置 (schema) 页, 这里只列出字段名方便定位
+// 设置页占位：现有配置项都在插件配置 (schema) 页，这里只列出字段名方便定位
 const configFields = ['language', 'scenes', 'qq_platforms', 'selected_commands']
 </script>
 
@@ -33,7 +33,7 @@ const configFields = ['language', 'scenes', 'qq_platforms', 'selected_commands']
           {{
             t(
               'views.dashboard.settings.placeholder',
-              '本页尚未实现。目前的配置项请到 AstrBot WebUI 的插件配置页修改, 改完重载插件生效。',
+              '本页尚未实现。目前的配置项请到 AstrBot WebUI 的插件配置页修改，改完重载插件生效。',
             )
           }}
         </v-card-subtitle>

@@ -1,11 +1,11 @@
 """轻量级国际化 (i18n) 支持
 
-零第三方依赖: 加载 `core/i18n/<lang>.json` 扁平翻译表,
+零第三方依赖：加载 `core/i18n/<lang>.json` 扁平翻译表，
 提供模块级单例 `translator` + 便捷函数 `t`。
 
-注意: 本模块处理的是运行时日志 / 指令回复文案, 与 AstrBot WebUI
-专用的 `.astrbot-plugin/i18n/*.json` (嵌套 metadata/config 结构)
-是两条独立的 i18n 管线, 不要混用:
+注意：本模块处理的是运行时日志 / 指令回复文案，与 AstrBot WebUI
+专用的 `.astrbot-plugin/i18n/*.json`（嵌套 metadata/config 结构）
+是两条独立的 i18n 管线，不要混用：
   - core/i18n/*.json         → 运行时 flat key → 本模块 Translator 读取
   - .astrbot-plugin/i18n/*.json → WebUI 展示 metadata/config → AstrBot 读取
 """
@@ -38,7 +38,7 @@ class Translator:
         self._active: dict[str, str] = {}
         self._fallback: dict[str, str] = {}
         self._language: str = DEFAULT_LANGUAGE
-        # fallback 字典先加载好, 保证后续 set_language 失败时仍可用
+        # fallback 字典先加载好，保证后续 set_language 失败时仍可用
         self._fallback = self._load_dict(self._fallback_lang)
         self.set_language(language)
 
@@ -52,9 +52,9 @@ class Translator:
         return self._language
 
     def set_language(self, language: str | None) -> None:
-        """切换语言, 未识别时回退到 DEFAULT_LANGUAGE 并记录 warning
+        """切换语言，未识别时回退到 DEFAULT_LANGUAGE 并记录 warning
 
-        非字符串配置值 (真值数字/列表等) 直接回退到默认语言,
+        非字符串配置值（真值数字/列表等）直接回退到默认语言，
         避免 set_config / _apply_language 等所有入口对配置值 .strip() 抛异常。
         """
         if not isinstance(language, str):
@@ -80,7 +80,7 @@ class Translator:
         self._language = target
 
     def t(self, key: str, **kwargs: Any) -> str:
-        """按 key 查找翻译, 未找到时回退到 zh-CN, 再未找到则原样返回 key"""
+        """按 key 查找翻译，未找到时回退到 zh-CN，再未找到则原样返回 key"""
         template = self._active.get(key)
         if template is None:
             template = self._fallback.get(key)
@@ -99,7 +99,7 @@ class Translator:
     # ------------------------------------------------------------------
 
     def _load_dict(self, language: str) -> dict[str, str]:
-        """加载一个语言的 JSON 文件, 任何失败都返回 {} 并记录 warning"""
+        """加载一个语言的 JSON 文件，任何失败都返回 {} 并记录 warning"""
         path = self.locales_dir / f"{language}.json"
         if not path.exists():
             logger.warning(f"{LOG_TAG} locale file not found: {path}")
@@ -121,7 +121,7 @@ class Translator:
 
 
 # ----------------------------------------------------------------------
-# 模块级便捷 API (单例模式)
+# 模块级便捷 API（单例模式）
 # ----------------------------------------------------------------------
 
 
@@ -129,16 +129,16 @@ def initialize(
     locales_dir: Path | str,
     language: str = DEFAULT_LANGUAGE,
 ) -> Translator:
-    """初始化(或重置)模块级单例, 返回新实例"""
+    """初始化（或重置）模块级单例，返回新实例"""
     global _instance
     _instance = Translator(locales_dir, language)
     return _instance
 
 
 def get_instance() -> Translator:
-    """获取已初始化的单例, 未初始化时先创建一个默认 zh-CN 实例
+    """获取已初始化的单例，未初始化时先创建一个默认 zh-CN 实例
 
-    兜底使用, 避免尚未初始化时其他模块直接调用 `t` 抛异常
+    兜底使用，避免尚未初始化时其他模块直接调用 `t` 抛异常
     """
     global _instance
     if _instance is None:
@@ -148,7 +148,7 @@ def get_instance() -> Translator:
 
 
 def t(key: str, **kwargs: Any) -> str:
-    """便捷翻译函数, 等价于 get_instance().t(key, **kwargs)"""
+    """便捷翻译函数，等价于 get_instance().t(key, **kwargs)"""
     return get_instance().t(key, **kwargs)
 
 

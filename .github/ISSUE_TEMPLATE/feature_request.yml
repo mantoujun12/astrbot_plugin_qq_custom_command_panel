@@ -26,7 +26,7 @@ body:
     id: problem
     attributes:
       label: 你希望这个功能解决什么问题？
-      description: 请先描述你遇到的痛点或使用场景，而不是直接说"希望加一个 XX 功能"。
+      description: 请先描述你遇到的痛点或使用场景，而不是直接说“希望加一个 XX 功能”。
     validations:
       required: true
 
@@ -51,6 +51,6 @@ body:
     id: additional
     attributes:
       label: 补充信息
-      description: 其他参考信息 例如API 链接、截图或草图等
+      description: 其他参考信息，例如 API 链接、截图或草图等
     validations:
       required: false

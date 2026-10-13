@@ -7,7 +7,7 @@ const props = defineProps<{
   icon: string
   labelKey: string
   fallback: string
-  /** 折叠成 rail 时标题会被 Vuetify 隐藏, 用 tooltip 补上 */
+  /** 折叠成 rail 时标题会被 Vuetify 隐藏，用 tooltip 补上 */
   rail?: boolean
 }>()
 

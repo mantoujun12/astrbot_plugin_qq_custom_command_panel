@@ -1,17 +1,17 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# 仓库根加入 sys.path, 使测试可以 import core.* (包内相对导入正常工作)
+# 仓库根加入 sys.path，使测试可以 import core.*（包内相对导入正常工作）
 pythonpath = ["."]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-# 只统计插件生产代码 (core 包 + 装配入口 main.py) 的行/分支覆盖,
-# 用 omit 排除测试文件, 避免 tests/* 被计入覆盖率统计
+# 只统计插件生产代码（core 包 + 装配入口 main.py）的行/分支覆盖，
+# 用 omit 排除测试文件，避免 tests/* 被计入覆盖率统计
 source = ["."]
 omit = ["tests/*"]
 
 [tool.coverage.report]
-# 未被执行到的生产代码 (如 main.py 的装配分支) 需要在报告里体现出来
+# 未被执行到的生产代码（如 main.py 的装配分支）需要在报告里体现出来
 show_missing = true
 
 [tool.ruff]
@@ -19,7 +19,7 @@ line-length = 100
 target-version = "py312"
 # AstrBot 插件运行时会把 panel_state.yaml 写到
 # <AstrBot data>/plugin_data/astrbot_plugin_qq_custom_command_panel/,
-# 兜底路径下才会落到工作目录的 data/, 排除掉避免 ruff 去 lint 这个运行时生成的目录
+# 兜底路径下才会落到工作目录的 data/，排除掉避免 ruff 去 lint 这个运行时生成的目录
 extend-exclude = ["data"]
 
 [tool.ruff.lint]
@@ -31,14 +31,14 @@ extend-exclude = ["data"]
 # S: flake8-bandit (S110 = try-except-pass)
 select = ["E", "W", "F", "I", "UP", "B", "S"]
 
-# 插件代码中 catch Exception 是合理的 (第三方 API / 文件 IO 容错),
-# 在具体位置已用 logger 记录, 不需要逐条声明异常类型
+# 插件代码中 catch Exception 是合理的（第三方 API / 文件 IO 容错），
+# 在具体位置已用 logger 记录，不需要逐条声明异常类型
 ignore = ["BLE001"]
 
 [tool.ruff.lint.per-file-ignores]
-# 入口需要在最外层兜底 exceptions, 集中提示用户即可
+# 入口需要在最外层兜底 exceptions，集中提示用户即可
 "main.py" = ["BLE001"]
-# 测试: assert 语句 (S101) 是测试的本职; 假凭证字符串触发 S105/S106/S107
+# 测试：assert 语句 (S101) 是测试的本职；假凭证字符串触发 S105/S106/S107
 "tests/*" = ["S101", "S105", "S106", "S107"]
 
 [tool.ruff.format]

@@ -1,4 +1,4 @@
-"""core.config 的单元测试 (纯函数, 无 IO)"""
+"""core.config 的单元测试（纯函数，无 IO）"""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ def test_get_selected_commands_non_list_returns_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 平台解析: schema / context / fallback
+# 平台解析：schema / context / fallback
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +104,7 @@ def test_get_platforms_from_schema_basic() -> None:
 def test_get_platforms_from_schema_alias_and_defaults() -> None:
     config = {
         "qq_platforms": [
-            # 无 name/platform → pf_id 取 appid, platform 归一化为 qq_official
+            # 无 name/platform → pf_id 取 appid，platform 归一化为 qq_official
             {"appid": "222", "secret": "s2", "platform": "qq"},
         ]
     }
@@ -225,7 +225,7 @@ class SimpleNamespacePlatform:
             setattr(self, key, value)
 
 
-# 严谨起见确认常量值 (截断逻辑依赖它们)
+# 严谨起见确认常量值（截断逻辑依赖它们）
 def test_panel_limits_values() -> None:
     assert PANEL_ITEM_NAME_MAX == 14
     assert PANEL_ITEM_DESC_MAX == 30

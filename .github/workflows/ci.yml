@@ -34,7 +34,7 @@ jobs:
       - name: Run tests with coverage
         run: pytest --cov --cov-branch --cov-report=xml
 
-      # 只在单个矩阵任务上传, 避免同一 commit 多次提交覆盖率报告
+      # 只在单个矩阵任务上传，避免同一 commit 多次提交覆盖率报告
       - name: Upload coverage to Codecov
         if: ${{ matrix.python-version == '3.12' }}
         uses: codecov/codecov-action@v7
@@ -46,8 +46,8 @@ jobs:
 
   dashboard:
     name: Dashboard (build + freshness)
-    # AstrBot 直接读取提交进仓库的 pages/dashboard/, 所以这里既要确认能构建,
-    # 也要确认提交的产物和源码一致 (源码改了但忘记重新 build 会让 CI 变红)
+    # AstrBot 直接读取提交进仓库的 pages/dashboard/，所以这里既要确认能构建，
+    # 也要确认提交的产物和源码一致（源码改了但忘记重新 build 会让 CI 变红）
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

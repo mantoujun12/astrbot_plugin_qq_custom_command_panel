@@ -1,6 +1,6 @@
 """QQ 自定义指令面板插件
 
-用户在 AstrBot WebUI 中通过 schema 的 `selected_commands` 字段手动配置要展示的指令条目,
+用户在 AstrBot WebUI 中通过 schema 的 `selected_commands` 字段手动配置要展示的指令条目，
 本插件将用户在 schema 里写好的 {name, desc} 列表原样写入 QQ 官方机器人指令面板。
 """
 
@@ -39,12 +39,12 @@ class QQCommandPanelPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        # 持久化目录: AstrBot 的 data/plugin_data/<plugin_name>/,
+        # 持久化目录：AstrBot 的 data/plugin_data/<plugin_name>/，
         # 由 core.paths.resolve_plugin_data_dir 兼容不同 AstrBot 版本的获取方式
         self.data_dir = resolve_plugin_data_dir(context, PLUGIN_NAME)
         self._http: aiohttp.ClientSession | None = None
         self._syncer: PanelSyncer | None = None
-        # 注册视图 (Dashboard) 的只读状态接口; syncer 到 initialize() 才创建,
+        # 注册视图 (Dashboard) 的只读状态接口；syncer 到 initialize() 才创建，
         # 因此 handler 在每次请求时再取最新的 syncer / config
         register_status_api(
             self.context,
@@ -53,7 +53,7 @@ class QQCommandPanelPlugin(Star):
         )
 
     async def initialize(self) -> None:
-        """插件初始化: 启动时同步一次面板"""
+        """插件初始化：启动时同步一次面板"""
         self._http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
         self._syncer = PanelSyncer(
             self.context,

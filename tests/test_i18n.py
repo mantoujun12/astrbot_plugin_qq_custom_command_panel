@@ -31,8 +31,8 @@ def test_translator_formats_kwargs() -> None:
 def test_translator_falls_back_for_missing_active_key() -> None:
     """en-US 缺失的 key 回退到 zh-CN"""
     tr = make_translator("en-US")
-    # 用一个 en-US 可能没有的 key — 直接探测 zh-CN 全量 vs en-US 差异不现实,
-    # 改为直接测回退机制: 强制清空 active 字典
+    # 用一个 en-US 可能没有的 key — 直接探测 zh-CN 全量 vs en-US 差异不现实，
+    # 改为直接测回退机制：强制清空 active 字典
     tr._active = {}
     assert tr.t("log.no_scene_enabled") == "未启用任何场景，跳过同步"
 
@@ -65,7 +65,7 @@ def test_translator_non_string_language_falls_back() -> None:
 
 
 def test_translator_format_failure_returns_template() -> None:
-    """format kwargs 与模板占位不匹配时, 返回原模板而非抛异常"""
+    """format kwargs 与模板占位不匹配时，返回原模板而非抛异常"""
     tr = make_translator()
     result = tr.t("log.update_panel", wrong_kwarg="x")
     assert "更新面板" in result
