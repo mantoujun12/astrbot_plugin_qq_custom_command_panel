@@ -57,6 +57,15 @@ const limits = computed(
   () => config.value?.limits ?? { name_max: 14, desc_max: 30, items_max: 20 },
 )
 
+/** 已保存平台按 appid 建索引：新增/删除行会改变下标，占位与提示要按 appid 跟随当前行 */
+const savedPlatforms = computed(
+  () => new Map((config.value?.qq_platforms ?? []).map((platform) => [platform.appid, platform])),
+)
+
+function savedPlatform(appid: string) {
+  return savedPlatforms.value.get(appid.trim())
+}
+
 function toForm(source: PluginConfigResponse): PluginConfigPayload {
   return {
     language: source.language,
@@ -403,15 +412,15 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                   type="password"
                   :label="t('pages.dashboard.settings.platformSecret', 'ClientSecret')"
                   :placeholder="
-                    config?.qq_platforms[index]?.secret_set
+                    savedPlatform(platform.appid)?.secret_set
                       ? t('pages.dashboard.settings.secretKeep', '留空表示沿用原值')
                       : t('pages.dashboard.settings.secretRequired', '新增平台必须填写')
                   "
                   :hint="
-                    config?.qq_platforms[index]?.secret_masked
+                    savedPlatform(platform.appid)?.secret_masked
                       ? t('pages.dashboard.settings.secretSaved', '当前：{masked}').replace(
                           '{masked}',
-                          config?.qq_platforms[index]?.secret_masked ?? '',
+                          savedPlatform(platform.appid)?.secret_masked ?? '',
                         )
                       : undefined
                   "
