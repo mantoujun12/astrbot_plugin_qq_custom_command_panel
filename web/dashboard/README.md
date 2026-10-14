@@ -46,7 +46,28 @@ pnpm dev
 
 本地 dev server 里**没有** AstrBot 注入的 bridge SDK（`window.AstrBotPluginView`），因此调用后端 API 的部分需要在真实 AstrBot 中调试：build 后在 WebUI 插件页重载插件，再打开视图；改静态资源通常刷新视图即可，新增/删除视图目录才需要重载插件。
 
-视图标题与描述配置在仓库根目录的 `.astrbot-plugin/i18n/<locale>.json` 的 `views.dashboard` 下，修改后需重载插件生效。
+视图标题与描述配置在仓库根目录的 `.astrbot-plugin/i18n/<locale>.json` 的 `pages.dashboard` 下，修改后需重载插件生效。**根键必须是 `pages`**：宿主按 `pages.<目录名>.title` 取视图标题，写成 `views` 时标题会回退成目录名 `dashboard`。
+
+本地 dev 没有 bridge 时：状态页与设置页显示 mock 数据并显式标注；同步入口与保存按钮置灰，绝不伪造同步结果或保存成功。
+
+## 后端接口
+
+视图内用相对路径调用（bridge 会补上 `/<plugin_name>/` 前缀），后端实现见 `core/web_api.py`：
+
+| 路径 | 方法 | 用途 |
+| --- | --- | --- |
+| `status` | GET | 状态概览；`refresh=1` 绕过 5s 缓存 |
+| `config` | GET | 读取配置，secret 只回掩码（`secret_masked` / `secret_set`）|
+| `config` | POST | 校验并写回配置，保存后立即生效并失效状态缓存 |
+| `sync` | POST | 触发一次同步，返回 `{started, busy}` |
+| `sync/events` | GET | SSE 进度流，`since` 之后的 seq 会重放 |
+
+要点：
+
+- 同步任务跑在插件进程的后台（`core/sync_runner.py`），同一时间只允许一个任务；SSE 断开、刷新页面都不会中断任务。
+- 事件是结构化 JSON（`start` / `platform` / `finish`）加本地化文本消息（`message`），页面据此渲染进度条、平台状态与日志。
+- 宿主不会通知 SSE 流被关闭，前端收到 `finish` 事件后要自己 `unsubscribeSSE`。
+- `config` 的 POST 载荷里 secret 留空表示沿用原值（页面只拿到掩码），新增平台则必须填 secret。
 
 ## 测试
 

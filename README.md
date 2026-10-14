@@ -32,18 +32,20 @@ QQ 官方机器人指令面板内容自定义插件
 
 - 用户在 **AstrBot WebUI** 中通过 schema 的 `selected_commands` 字段手动添加指令条目 (name + desc)，面板内容完全由用户决定
 - 支持 c2c（单聊）、group（群聊）、channel（文字子频道）、dm（频道私信）四种场景
-- 可直接在 schema 的 `qq_platforms` 里填写 appid + clientSecret，不依赖 AstrBot 后台是否配置了 qq_official 适配器
+- 平台凭证只能填在插件自己的 `qq_platforms` 里：AstrBot 不向插件暴露平台适配器的机器人信息，插件无法从 AstrBot 平台配置里读取 appid / clientSecret
+- 配套的可视化视图支持在页面上改配置、一键同步面板，并用 SSE 实时展示逐平台进度
 - 配置变更后重启 AstrBot 即会自动同步，无需任何指令操作
 
 ## 配置说明
 
 在 AstrBot WebUI -> 插件配置 -> `astrbot_plugin_qq_custom_command_panel` 中：
 
-1. **qq_platforms**: 添加 QQ 机器人，填入 appid / clientSecret（留空则自动从 AstrBot 平台配置读取）
+1. **qq_platforms**: 添加 QQ 机器人，填入 appid / clientSecret（插件只读这里的凭证，必须手动填写）
 2. **scenes**: 选择生效场景，默认 `c2c + group`（单聊 + 群聊）
 3. **selected_commands**: 添加要在 QQ 面板展示的指令条目，每条 {name, desc}，name 最长 14 字符，desc 最长 30 字符，最多 20 条
 
 > 插件启动时会自动同步一次面板；修改配置后重启插件即可生效。
+> 也可以在插件可视化视图里改这些配置并点「保存并同步」，无需回到插件配置页。
 
 ## 已知限制
 
@@ -63,7 +65,8 @@ QQ 官方机器人指令面板的 API 限制：
 - [x] i18n - 国际化支持
 - [x] QQ API 覆盖 - 更新、批量、子频道、富文本
 - [x] Dashboard - 可视化配置，一键同步 AstrBot 指令列表并按需选择
-- [ ] 完善调用入口 - 可视化 + 异步进度反馈
+- [x] 完善调用入口 - 可视化 + 异步进度反馈
+- [x] Dashboard 改造 - 平台凭证只读插件配置（AstrBot 插件读不到适配器机器人信息），设置页可直接改 `_conf_schema` 配置并写回，修复面板标题回退成 `dashboard` 的 i18n 根键问题
 - [ ] 完善配置 - 连接测试等
 
 ## 参考链接
