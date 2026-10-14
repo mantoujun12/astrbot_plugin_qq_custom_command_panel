@@ -242,7 +242,8 @@ def test_build_clients_from_schema_config() -> None:
     assert clients["pf1"].platform_label == "qq_official"
 
 
-def test_build_clients_from_context() -> None:
+def test_build_clients_ignores_context_platform_settings() -> None:
+    """插件读不到平台适配器的机器人信息，context 里就算有 platform_settings 也不采用"""
     syncer = make_syncer(
         context_attrs={
             "platform_settings": [
@@ -250,8 +251,7 @@ def test_build_clients_from_context() -> None:
             ]
         }
     )
-    clients = syncer.build_clients()
-    assert set(clients) == {"ctx1"}
+    assert syncer.build_clients() == {}
 
 
 # ---------------------------------------------------------------------------
@@ -366,3 +366,131 @@ async def test_sync_empty_items_deletes_all_duplicate_owned_panels() -> None:
     await syncer.sync_for_platform("pf1", client, ["c2c"], [])
 
     assert sorted(client.deleted) == ["p1", "p2"]
+
+
+# ---------------------------------------------------------------------------
+# sync_all: 结构化进度事件（dashboard 的 SSE 就靠这些事件渲染）
+# ---------------------------------------------------------------------------
+
+
+def stub_clients(syncer: PanelSyncer, clients: dict[str, FakeQQClient]) -> PanelSyncer:
+    """把 build_clients 换成固定返回值，避免真实创建 QQClient"""
+    syncer.build_clients = lambda config=None: clients  # type: ignore[method-assign]
+    return syncer
+
+
+async def collect_events() -> tuple[list[dict[str, Any]], Any]:
+    """构造一个把事件收进列表的回调"""
+    events: list[dict[str, Any]] = []
+
+    async def on_event(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    return events, on_event
+
+
+@pytest.mark.asyncio
+async def test_sync_all_emits_finish_when_no_scene_enabled() -> None:
+    syncer = make_syncer(config={"scenes": []})
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    assert result == {}
+    assert [event["type"] for event in events] == ["finish"]
+    assert events[0]["reason"] == "no_scene"
+    assert events[0]["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_sync_all_emits_finish_when_no_platform() -> None:
+    syncer = make_syncer(config={"scenes": ["c2c"]})
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    assert result == {}
+    assert [event["type"] for event in events] == ["finish"]
+    assert events[0]["reason"] == "no_platform"
+
+
+@pytest.mark.asyncio
+async def test_sync_all_emits_start_platform_and_finish() -> None:
+    syncer = make_syncer(
+        config={
+            "scenes": ["c2c"],
+            "qq_platforms": [{"name": "pf1", "appid": "app", "secret": "sec"}],
+            "selected_commands": [{"name": "help", "desc": "帮助"}],
+        }
+    )
+    client = FakeQQClient(existing={})
+    stub_clients(syncer, {"pf1": client})
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    assert [event["type"] for event in events] == ["start", "platform", "finish"]
+    start, platform_event, finish = events
+    assert start["platforms"] == 1
+    assert start["scenes"] == 1
+    assert start["items"] == 1
+    assert platform_event["pf_id"] == "pf1"
+    assert platform_event["index"] == 1
+    assert platform_event["status"] == "ok"
+    assert platform_event["saved"] == 1
+    assert finish["ok"] is True
+    assert finish["succeeded"] == 1
+    assert finish["failed"] == 0
+    assert result == {"pf1": {"c2c": "panel_new_1001"}}
+
+
+@pytest.mark.asyncio
+async def test_sync_all_reports_failed_platform_in_events() -> None:
+    syncer = make_syncer(
+        config={
+            "scenes": ["c2c"],
+            "qq_platforms": [{"name": "pf1", "appid": "app", "secret": "sec"}],
+            "selected_commands": [{"name": "help", "desc": "帮助"}],
+        }
+    )
+    # 场景列表查询失败 => sync_for_platform 抛错 => 平台标记失败
+    client = FakeQQClient(existing={}, failing_scopes={"c2c"})
+    stub_clients(syncer, {"pf1": client})
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    platform_event = next(event for event in events if event["type"] == "platform")
+    assert platform_event["status"] == "error"
+    assert platform_event["saved"] == 0
+    assert platform_event["error"]
+    finish = events[-1]
+    assert finish["type"] == "finish"
+    assert finish["ok"] is False
+    assert finish["failed"] == 1
+    assert "error" in result["pf1"]
+
+
+@pytest.mark.asyncio
+async def test_sync_all_clearing_branch_emits_structured_events() -> None:
+    """selected_commands 为空时走清理分支，同样要有 start/platform/finish"""
+    syncer = make_syncer(
+        config={
+            "scenes": ["c2c"],
+            "qq_platforms": [{"name": "pf1", "appid": "app", "secret": "sec"}],
+            "selected_commands": [],
+        }
+    )
+    client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p_old")]})
+    stub_clients(syncer, {"pf1": client})
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    assert result == {}
+    assert [event["type"] for event in events] == ["start", "platform", "finish"]
+    assert events[0]["mode"] == "clear"
+    assert events[0]["items"] == 0
+    assert events[1]["status"] == "ok"
+    assert events[2]["reason"] == "clear"
+    assert client.deleted == ["p_old"]

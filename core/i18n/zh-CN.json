@@ -43,6 +43,27 @@
   "panel.incomplete_list_purged_partial": "查询面板列表不完整，失败场景：{scopes}；已删除已列出的面板，请稍后重试",
 
   "web.not_ready": "插件尚未初始化完成，请稍后重试",
+  "web.config_unavailable": "当前 AstrBot 版本没有提供配置持久化接口，无法保存配置",
+  "web.config_invalid_body": "请求体必须是 JSON 对象",
+  "web.config_save_failed": "保存配置失败：{exc}",
+
+  "log.sync_task_failed": "同步任务异常中止：{exc}",
+  "log.config_save_failed": "保存插件配置失败：{exc}",
+
+  "config.error.language": "language：{value} 不是支持的语言（{supported}）",
+  "config.error.scenes_type": "scenes：必须是场景列表",
+  "config.error.platforms_type": "qq_platforms：必须是平台列表",
+  "config.error.platform_entry": "qq_platforms[{index}]：条目必须是对象",
+  "config.error.platform_appid": "qq_platforms[{index}]：appid 不能为空",
+  "config.error.platform_duplicate": "qq_platforms[{index}]：appid {appid} 重复",
+  "config.error.platform_type": "qq_platforms[{index}]：不支持的平台类型 {platform}",
+  "config.error.platform_secret": "qq_platforms[{index}]：新增平台必须填写 clientSecret",
+  "config.error.commands_type": "selected_commands：必须是指令列表",
+  "config.error.commands_limit": "selected_commands：最多 {limit} 条",
+  "config.error.command_entry": "selected_commands[{index}]：条目必须是对象",
+  "config.error.command_name": "selected_commands[{index}]：name 不能为空",
+  "config.error.command_name_length": "selected_commands[{index}]：name 最多 {limit} 个字符",
+  "config.error.command_desc_length": "selected_commands[{index}]：desc 最多 {limit} 个字符",
 
   "progress.sync_no_scene": "⚠️ 未启用任何场景，无需同步",
   "progress.sync_no_platform": "⚠️ 未识别到 QQ 平台配置，无法同步",

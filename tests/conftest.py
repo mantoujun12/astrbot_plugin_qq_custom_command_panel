@@ -83,14 +83,26 @@ def _install_astrbot_stub() -> None:
     class _FakeQuery:
         """假 query 参数容器：与真实 request.query 的 get(key, default, type) 对齐"""
 
+        # 测试可通过 request.query.set_values({...}) 注入查询参数
+        values: dict = {}
+
         def get(self, key, default=None, **kwargs):  # noqa: ANN001, ANN003, ANN201 - stub
-            return default
+            return self.values.get(key, default)
 
         def getlist(self, key):  # noqa: ANN001, ANN201 - stub
-            return []
+            value = self.values.get(key)
+            return list(value) if isinstance(value, list) else []
+
+        def set_values(self, values: dict) -> None:  # noqa: ANN001 - stub
+            self.values = dict(values)
 
     class _FakeRequest:
         query = _FakeQuery()
+        # 测试可通过 request.payload = {...} 注入 JSON 请求体
+        payload: object = {}
+
+        async def json(self, default=None):  # noqa: ANN001, ANN201 - stub
+            return self.payload if self.payload is not None else default
 
     web = _mod(
         "astrbot.api.web",

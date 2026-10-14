@@ -31,6 +31,10 @@ DEFAULT_PANEL_OP_CONCURRENCY = 5
 # syncer 会在每个平台完成时调用；回调内异常不影响主流程，仅 warning。
 ProgressCallback = Callable[[str], Awaitable[None]]
 
+# 结构化事件回调：供 dashboard 渲染进度条 / 平台状态列表
+# 与 ProgressCallback 并行存在：文本进日志，结构化事件进可视化
+EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
+
 
 class PanelSyncer:
     """负责把用户在 schema 里手动配置的指令条目写入 QQ 官方机器人面板"""
@@ -145,6 +149,19 @@ class PanelSyncer:
         except Exception as exc:
             logger.warning(f"{LOG_TAG} progress callback failed: {exc}")
 
+    @staticmethod
+    async def _emit_event(
+        on_event: EventCallback | None,
+        event: dict[str, Any],
+    ) -> None:
+        """安全触发结构化事件回调，异常仅记录 warning 不影响主流程"""
+        if on_event is None:
+            return
+        try:
+            await on_event(event)
+        except Exception as exc:
+            logger.warning(f"{LOG_TAG} event callback failed: {exc}")
+
     def build_clients(
         self,
         config: dict[str, Any] | None = None,
@@ -157,7 +174,7 @@ class PanelSyncer:
         """
         source_config = self._config if config is None else config
         clients: dict[str, QQClient] = {}
-        platforms, _source = get_configured_platforms(source_config, self.context)
+        platforms = get_configured_platforms(source_config)
         for pf_id, info in platforms.items():
             client = QQClient(
                 appid=info["appid"],
@@ -477,6 +494,7 @@ class PanelSyncer:
     async def sync_all(
         self,
         on_progress: ProgressCallback | None = None,
+        on_event: EventCallback | None = None,
     ) -> dict[str, dict[str, str]]:
         """总入口：把用户在 schema 中自定义的指令条目写入所有启用的 QQ 平台
 
@@ -492,6 +510,20 @@ class PanelSyncer:
         if not scenes:
             logger.info(f"{LOG_TAG} {t('log.no_scene_enabled')}")
             await self._emit_progress(on_progress, t("progress.sync_no_scene"))
+            await self._emit_event(
+                on_event,
+                {
+                    "type": "finish",
+                    "ok": True,
+                    "reason": "no_scene",
+                    "platforms": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "scenes": 0,
+                    "items": 0,
+                    "result": {},
+                },
+            )
             return {}
 
         # 直接读取用户在 schema 中自定义的指令条目，不再扫描 AstrBot 已注册指令
@@ -501,22 +533,63 @@ class PanelSyncer:
         if not clients:
             logger.warning(f"{LOG_TAG} {t('log.no_platform_config')}")
             await self._emit_progress(on_progress, t("progress.sync_no_platform"))
+            await self._emit_event(
+                on_event,
+                {
+                    "type": "finish",
+                    "ok": True,
+                    "reason": "no_platform",
+                    "platforms": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "scenes": len(scenes),
+                    "items": len(items),
+                    "result": {},
+                },
+            )
             return {}
 
         if not items:
             logger.info(f"{LOG_TAG} {t('log.selected_commands_empty')}")
+            total = len(clients)
             await self._emit_progress(
                 on_progress,
-                t("progress.sync_clearing_start", platforms=len(clients)),
+                t("progress.sync_clearing_start", platforms=total),
             )
-            for pf_id, client in clients.items():
+            await self._emit_event(
+                on_event,
+                {
+                    "type": "start",
+                    "mode": "clear",
+                    "platforms": total,
+                    "scenes": len(scenes),
+                    "items": 0,
+                },
+            )
+            cleared = 0
+            clear_failed = 0
+            for idx, (pf_id, client) in enumerate(clients.items(), start=1):
                 try:
                     await self.clear_for_platform(pf_id, client)
+                    cleared += 1
                     await self._emit_progress(
                         on_progress,
                         t("progress.platform_cleared", pf_id=pf_id),
                     )
+                    await self._emit_event(
+                        on_event,
+                        {
+                            "type": "platform",
+                            "pf_id": pf_id,
+                            "index": idx,
+                            "total": total,
+                            "status": "ok",
+                            "saved": 0,
+                            "error": None,
+                        },
+                    )
                 except Exception as exc:
+                    clear_failed += 1
                     logger.error(
                         f"{LOG_TAG} " + t("log.clear_platform_failed", pf_id=pf_id, exc=exc),
                         exc_info=True,
@@ -525,7 +598,33 @@ class PanelSyncer:
                         on_progress,
                         t("progress.platform_clear_failed", pf_id=pf_id, exc=exc),
                     )
+                    await self._emit_event(
+                        on_event,
+                        {
+                            "type": "platform",
+                            "pf_id": pf_id,
+                            "index": idx,
+                            "total": total,
+                            "status": "error",
+                            "saved": 0,
+                            "error": str(exc),
+                        },
+                    )
             self._state.save({})
+            await self._emit_event(
+                on_event,
+                {
+                    "type": "finish",
+                    "ok": clear_failed == 0,
+                    "reason": "clear",
+                    "platforms": total,
+                    "succeeded": cleared,
+                    "failed": clear_failed,
+                    "scenes": len(scenes),
+                    "items": 0,
+                    "result": {},
+                },
+            )
             return {}
 
         logger.info(f"{LOG_TAG} " + t("log.prepare_write_items", count=len(items), scenes=scenes))
@@ -538,6 +637,16 @@ class PanelSyncer:
                 scenes=len(scenes),
                 items=len(items),
             ),
+        )
+        await self._emit_event(
+            on_event,
+            {
+                "type": "start",
+                "mode": "sync",
+                "platforms": total,
+                "scenes": len(scenes),
+                "items": len(items),
+            },
         )
 
         result: dict[str, dict[str, str]] = {}
@@ -553,6 +662,18 @@ class PanelSyncer:
                         total=total,
                         saved=len(result[pf_id]),
                     ),
+                )
+                await self._emit_event(
+                    on_event,
+                    {
+                        "type": "platform",
+                        "pf_id": pf_id,
+                        "index": idx,
+                        "total": total,
+                        "status": "ok",
+                        "saved": len(result[pf_id]),
+                        "error": None,
+                    },
                 )
             except Exception as exc:
                 logger.error(
@@ -572,10 +693,37 @@ class PanelSyncer:
                         exc=exc,
                     ),
                 )
+                await self._emit_event(
+                    on_event,
+                    {
+                        "type": "platform",
+                        "pf_id": pf_id,
+                        "index": idx,
+                        "total": total,
+                        "status": "error",
+                        "saved": 0,
+                        "error": str(exc),
+                    },
+                )
 
         # state 只持久化成功的平台映射，避免污染下次 fetch/show
         self._state.save(
             {pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes}
+        )
+        succeeded = sum(1 for scopes in result.values() if "error" not in scopes)
+        await self._emit_event(
+            on_event,
+            {
+                "type": "finish",
+                "ok": succeeded == len(result),
+                "reason": "sync",
+                "platforms": len(result),
+                "succeeded": succeeded,
+                "failed": len(result) - succeeded,
+                "scenes": len(scenes),
+                "items": len(items),
+                "result": result,
+            },
         )
         return result
 
@@ -606,4 +754,4 @@ class PanelSyncer:
         self.translator.set_language(language)
 
 
-__all__ = ["PanelSyncer", "ProgressCallback"]
+__all__ = ["EventCallback", "PanelSyncer", "ProgressCallback"]
