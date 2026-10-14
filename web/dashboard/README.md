@@ -7,7 +7,7 @@
 - **Node.js `^22.12.0 || >=24`** —— Vite 8 与 Vitest 5 的硬性要求，版本过低时 `pnpm build` / `pnpm test` 会在运行前直接失败。
   可在 `package.json` 的 `engines` 字段查看。
 - **pnpm** —— lockfile 为 `lockfileVersion: 9.0`，pnpm 9+ 均可安装；CI 固定用 **pnpm 12** 构建与测试
-  （见 `.github/workflows/ci-dashboard.yml` 与 `.github/workflows/coverage-dashboard.yml`）。
+  （见 `.github/workflows/ci-dashboard.yml` 与 `.github/workflows/codecov-dashboard.yml`）。
 
 ## 构建
 
