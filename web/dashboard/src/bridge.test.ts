@@ -11,6 +11,8 @@ function createBridge(): PluginViewBridge {
     onContext: vi.fn(() => () => {}),
     apiGet: vi.fn(async () => null),
     apiPost: vi.fn(async () => null),
+    subscribeSSE: vi.fn(async () => 'sub-1'),
+    unsubscribeSSE: vi.fn(async () => ({ subscriptionId: 'sub-1' })),
   }
 }
 

@@ -17,7 +17,7 @@
     },
     "qq_platforms": {
       "description": "QQ 官方机器人平台凭证",
-      "hint": "直接填写 appid + clientSecret 后即可同步指令面板，不依赖 AstrBot 后台是否配置了 qq_official 适配器。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
+      "hint": "插件只能读取这里的凭证：AstrBot 不向插件暴露平台适配器的机器人信息，所以必须手动填写 appid + clientSecret。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
       "templates": {
         "qq_platform": {
           "name": "QQ 机器人",
@@ -45,7 +45,7 @@
     },
     "selected_commands": {
       "description": "要在 QQ 指令面板展示的自定义指令条目",
-      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。",
+      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。也可以在插件可视化视图的设置页维护这些配置。",
       "templates": {
         "command": {
           "name": "指令条目",
@@ -63,10 +63,10 @@
       }
     }
   },
-  "views": {
+  "pages": {
     "dashboard": {
       "title": "指令面板",
-      "description": "可视化配置要写入 QQ 官方机器人指令面板的条目。",
+      "description": "可视化配置要写入 QQ 官方机器人指令面板的条目，并查看同步进度。",
       "nav": {
         "status": "状态概览",
         "settings": "设置",
@@ -90,31 +90,79 @@
           "commands": "指令条目",
           "panels": "线上面板"
         },
-        "source": {
-          "schema": "插件配置",
-          "context": "AstrBot 平台配置"
-        },
         "state": {
           "synced": "已同步",
           "duplicate": "重复面板",
           "missing": "线上缺失",
           "failed": "查询失败"
         },
+        "sync": {
+          "title": "同步面板",
+          "subtitle": "用当前配置把指令条目写入 QQ 面板，进度实时推送。",
+          "action": "同步面板",
+          "running": "正在同步…",
+          "progress": "进度 {completed}/{total}",
+          "done": "同步完成：成功 {succeeded} 个平台，失败 {failed} 个",
+          "retry": "重试",
+          "empty": "还没有同步记录。",
+          "disabledMock": "本地开发环境没有 AstrBot 后端，同步入口不可用。"
+        },
         "empty": {
           "platforms": {
             "title": "还没有可用的 QQ 平台",
-            "description": "在插件配置的 qq_platforms 里填写 appid / ClientSecret，或在 AstrBot 平台配置里启用 qq_official 适配器。"
+            "description": "到「设置」页填写 qq_platforms 的 appid / ClientSecret。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。"
           },
           "commands": {
-            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。"
+            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请到「设置」页添加 selected_commands。"
           }
         }
       },
       "settings": {
         "title": "设置",
-        "subtitle": "面板内容与平台凭证都在插件配置页维护。",
-        "placeholderTitle": "配置仍在插件配置页",
-        "placeholder": "本页尚未实现。目前的配置项请到 AstrBot WebUI 的插件配置页修改，改完重载插件生效。"
+        "subtitle": "在这里维护写入 QQ 指令面板的内容与平台凭证，保存后立即生效。",
+        "reload": "重新载入",
+        "save": "保存",
+        "saveAndSync": "保存并同步",
+        "saved": "配置已保存并生效。",
+        "mockHint": "本地开发环境：展示的是 mock 数据，不能保存配置。",
+        "basicTitle": "基础配置",
+        "basicSubtitle": "日志语言只影响插件日志；场景决定指令面板在哪些会话里生效。",
+        "language": "日志语言",
+        "scenes": "生效场景",
+        "scene": {
+          "c2c": "单聊",
+          "group": "群聊",
+          "channel": "文字子频道",
+          "dm": "频道私信"
+        },
+        "platformsTitle": "QQ 平台凭证",
+        "platformsSubtitle": "插件只能读取这里的凭证，AstrBot 平台适配器里的机器人信息不会同步过来；ClientSecret 留空表示沿用原值。",
+        "addPlatform": "添加平台",
+        "platformName": "备注（可选）",
+        "platformSecret": "ClientSecret",
+        "platformType": "平台类型",
+        "platformTypeName": {
+          "qq_official": "QQ 官方机器人",
+          "qq_official_webhook": "QQ 官方机器人 Webhook"
+        },
+        "secretKeep": "留空表示沿用原值",
+        "secretRequired": "新增平台必须填写",
+        "secretSaved": "当前：{masked}",
+        "noPlatforms": "还没有平台，先添加一个 appid + ClientSecret。",
+        "remove": "删除",
+        "commandsTitle": "指令条目",
+        "commandsSubtitle": "最多 {items} 条，指令名 ≤ {name} 字，描述 ≤ {desc} 字。",
+        "addCommand": "添加指令",
+        "commandName": "指令名",
+        "commandDesc": "指令描述",
+        "noCommands": "没有指令条目时，同步会清空本插件创建的面板。",
+        "notLoaded": "配置尚未载入。",
+        "commandsTooMany": "指令条目超出上限。",
+        "commandNameRequired": "指令名不能为空。",
+        "commandNameTooLong": "指令名超出长度上限。",
+        "commandDescTooLong": "指令描述超出长度上限。",
+        "platformAppidRequired": "平台 appid 不能为空。",
+        "platformSecretRequired": "新增平台必须填写 ClientSecret。"
       }
     }
   }

@@ -1,21 +1,24 @@
 /**
- * 插件后端数据访问层：视图只通过这里取数据，不直接碰 bridge。
- * endpoint 是插件内相对路径，不含插件名前缀。
+ * 视图的数据访问层：视图只通过这里取数据，不直接碰 bridge。
+ * endpoint 是插件内相对路径，bridge 会补上宿主的插件名前缀。
  *
- * bridge 由宿主异步注入，视图必须等 `useBridge().ready` 后再调用，否则会退回
- * mock（见 mock.ts），真实环境会误显示假数据。
+ * bridge 由宿主异步注入，视图必须等 `useBridge().ready` 后再调用，否则本地会
+ * 退回 mock（见 mock.ts）。真实请求失败会直接抛出，由调用方处理错误态。
  */
 
 import { getBridge } from '../bridge'
-import { MOCK_STATUS } from './mock'
-import type { StatusResponse } from '../types/dashboard'
+import { MOCK_CONFIG, MOCK_STATUS } from './mock'
+import type { PluginConfigPayload, PluginConfigResponse, StatusResponse } from '../types/dashboard'
 
-/** 与后端 register_web_api 的路由 `/<plugin_name>/status` 对应 */
+/** 对应后端 register_web_api 的路径 `/<plugin_name>/status` */
 const STATUS_ENDPOINT = 'status'
 
+/** 对应后端 `/<plugin_name>/config`（GET 读 / POST 写）*/
+const CONFIG_ENDPOINT = 'config'
+
 /**
- * 拉取状态概览。后端该接口默认查询线上，属慢请求，调用方需处理 loading / 错误态；
- * `options.refresh` 为 true 时带 refresh=1 跳过后端短期缓存。
+ * 获取状态概览。后端该接口默认查询线上，属慢请求，调用方需处理 loading / 错误态。
+ * `options.refresh` 为 true 时带 refresh=1，让后端跳过短期缓存。
  * 本地 `pnpm dev` 没有 bridge 时退回 mock；真实环境请求失败直接抛出，不静默兜底。
  */
 export async function fetchStatus(options: { refresh?: boolean } = {}): Promise<StatusResponse> {
@@ -25,4 +28,27 @@ export async function fetchStatus(options: { refresh?: boolean } = {}): Promise<
   }
   const params = options.refresh ? { refresh: 1 } : undefined
   return (await bridge.apiGet(STATUS_ENDPOINT, params)) as StatusResponse
+}
+
+/** 读取插件配置（secret 只返回掩码）；本地无 bridge 时退回 mock */
+export async function fetchConfig(): Promise<PluginConfigResponse> {
+  const bridge = getBridge()
+  if (!bridge) {
+    return MOCK_CONFIG
+  }
+  return (await bridge.apiGet(CONFIG_ENDPOINT)) as PluginConfigResponse
+}
+
+/**
+ * 写回插件配置，返回落库后的配置（同样只含掩码）。
+ *
+ * 校验失败时后端返回错误响应，bridge 会把它转成 Error，调用方直接展示 message 即可。
+ * 本地无 bridge 时抛错：不允许在没有后端的开发环境里伪造"保存成功"。
+ */
+export async function saveConfig(payload: PluginConfigPayload): Promise<PluginConfigResponse> {
+  const bridge = getBridge()
+  if (!bridge) {
+    throw new Error('no backend: config saving is unavailable in local dev')
+  }
+  return (await bridge.apiPost(CONFIG_ENDPOINT, payload)) as PluginConfigResponse
 }

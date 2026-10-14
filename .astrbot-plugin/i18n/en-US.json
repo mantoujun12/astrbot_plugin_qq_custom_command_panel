@@ -17,7 +17,7 @@
     },
     "qq_platforms": {
       "description": "QQ Official bot platform credentials",
-      "hint": "Fill in appid + clientSecret to sync command panels directly, independent of whether qq_official adapter is configured in AstrBot dashboard. Add multiple entries for multiple bots. ⚠️ secret is saved in plain text, DO NOT screenshot share.",
+      "hint": "The plugin can only read credentials from here: AstrBot does not expose platform adapter bot info to plugins, so appid + clientSecret must be filled in manually. Add multiple entries for multiple bots. ⚠️ secret is saved in plain text, DO NOT screenshot share.",
       "templates": {
         "qq_platform": {
           "name": "QQ Bot",
@@ -45,7 +45,7 @@
     },
     "selected_commands": {
       "description": "Custom command entries to show in the QQ command panel",
-      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars.",
+      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars. You can also maintain them on the Settings page of the plugin view.",
       "templates": {
         "command": {
           "name": "Command entry",
@@ -63,10 +63,10 @@
       }
     }
   },
-  "views": {
+  "pages": {
     "dashboard": {
       "title": "Command Panel",
-      "description": "Visually configure the entries written to the QQ Official bot command panel.",
+      "description": "Configure the entries written to the QQ Official bot command panel and watch the sync progress.",
       "nav": {
         "status": "Overview",
         "settings": "Settings",
@@ -90,31 +90,79 @@
           "commands": "Command entries",
           "panels": "Online panels"
         },
-        "source": {
-          "schema": "Plugin config",
-          "context": "AstrBot platform config"
-        },
         "state": {
           "synced": "Synced",
           "duplicate": "Duplicate panels",
           "missing": "Missing online",
           "failed": "Query failed"
         },
+        "sync": {
+          "title": "Sync panel",
+          "subtitle": "Write the configured entries to the QQ panel, with live progress.",
+          "action": "Sync panel",
+          "running": "Syncing…",
+          "progress": "Progress {completed}/{total}",
+          "done": "Sync finished: {succeeded} platform(s) succeeded, {failed} failed",
+          "retry": "Retry",
+          "empty": "No sync run yet.",
+          "disabledMock": "The AstrBot backend is unavailable in local dev, so syncing is disabled."
+        },
         "empty": {
           "platforms": {
             "title": "No QQ platform available yet",
-            "description": "Fill in appid / ClientSecret under qq_platforms in the plugin config, or enable a qq_official adapter in the AstrBot platform settings."
+            "description": "Fill in appid / ClientSecret under qq_platforms on the Settings page. The plugin cannot read bot credentials from AstrBot platform adapters, so this is the only place to configure them."
           },
           "commands": {
-            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands in the plugin config."
+            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands on the Settings page."
           }
         }
       },
       "settings": {
         "title": "Settings",
-        "subtitle": "Panel entries and platform credentials are kept on the plugin config page.",
-        "placeholderTitle": "Configuration still lives on the plugin config page",
-        "placeholder": "This page is not implemented yet. Change the current options on the plugin config page of the AstrBot WebUI and reload the plugin to apply them."
+        "subtitle": "Maintain the panel entries and platform credentials here; saving takes effect immediately.",
+        "reload": "Reload",
+        "save": "Save",
+        "saveAndSync": "Save and sync",
+        "saved": "Config saved and applied.",
+        "mockHint": "Local dev environment: showing mock data, saving is disabled.",
+        "basicTitle": "Basics",
+        "basicSubtitle": "The log language only affects plugin logs; scenes decide where the command panel is visible.",
+        "language": "Log language",
+        "scenes": "Active scenes",
+        "scene": {
+          "c2c": "Private chat",
+          "group": "Group chat",
+          "channel": "Text channel",
+          "dm": "Channel DM"
+        },
+        "platformsTitle": "QQ platform credentials",
+        "platformsSubtitle": "The plugin can only read credentials from here; bots configured in AstrBot platform adapters are not synced over. Leave ClientSecret empty to keep the current value.",
+        "addPlatform": "Add platform",
+        "platformName": "Label (optional)",
+        "platformSecret": "ClientSecret",
+        "platformType": "Platform type",
+        "platformTypeName": {
+          "qq_official": "QQ Official Bot",
+          "qq_official_webhook": "QQ Official Bot Webhook"
+        },
+        "secretKeep": "Leave empty to keep the current value",
+        "secretRequired": "Required for a new platform",
+        "secretSaved": "Current: {masked}",
+        "noPlatforms": "No platform yet; add one with appid + ClientSecret.",
+        "remove": "Remove",
+        "commandsTitle": "Command entries",
+        "commandsSubtitle": "At most {items} entries; name ≤ {name} chars, desc ≤ {desc} chars.",
+        "addCommand": "Add entry",
+        "commandName": "Command name",
+        "commandDesc": "Command description",
+        "noCommands": "Without command entries, syncing deletes the panels created by this plugin.",
+        "notLoaded": "Config is not loaded yet.",
+        "commandsTooMany": "Too many command entries.",
+        "commandNameRequired": "Command name is required.",
+        "commandNameTooLong": "Command name is too long.",
+        "commandDescTooLong": "Command description is too long.",
+        "platformAppidRequired": "Platform appid is required.",
+        "platformSecretRequired": "ClientSecret is required for a new platform."
       }
     }
   }

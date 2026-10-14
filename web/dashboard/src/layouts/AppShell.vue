@@ -42,19 +42,19 @@ const sidebarToggleIcon = computed(() => {
 
 const sidebarToggleLabel = computed(() => {
   if (mobile.value) {
-    return t('views.dashboard.nav.closeDrawer', '关闭侧边栏')
+    return t('pages.dashboard.nav.closeDrawer', '关闭侧边栏')
   }
   return railActive.value
-    ? t('views.dashboard.nav.expand', '展开侧边栏')
-    : t('views.dashboard.nav.collapse', '收起侧边栏')
+    ? t('pages.dashboard.nav.expand', '展开侧边栏')
+    : t('pages.dashboard.nav.collapse', '收起侧边栏')
 })
 
-// pageTitle 是视图标题 (views.dashboard.title)，displayName 是插件名
+// pageTitle 是视图标题 (pages.dashboard.title)，displayName 是插件名
 const title = computed(
   () =>
     context.value?.pageTitle ??
     context.value?.displayName ??
-    t('views.dashboard.title', '指令面板'),
+    t('pages.dashboard.title', '指令面板'),
 )
 </script>
 
@@ -87,7 +87,7 @@ const title = computed(
     <v-app-bar v-if="mobile" flat border>
       <v-app-bar-nav-icon
         :icon="mdiMenu"
-        :aria-label="t('views.dashboard.nav.openDrawer', '打开侧边栏')"
+        :aria-label="t('pages.dashboard.nav.openDrawer', '打开侧边栏')"
         @click="drawer = true"
       />
       <v-app-bar-title>{{ title }}</v-app-bar-title>

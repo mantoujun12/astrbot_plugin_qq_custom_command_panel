@@ -24,7 +24,7 @@ const noteText = computed(() => {
   if (props.note !== undefined) {
     return props.note
   }
-  return props.max === undefined ? undefined : `${t('views.dashboard.status.limit', '上限')} ${props.max}`
+  return props.max === undefined ? undefined : `${t('pages.dashboard.status.limit', '上限')} ${props.max}`
 })
 </script>
 

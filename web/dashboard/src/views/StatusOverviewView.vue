@@ -14,6 +14,7 @@ import { fetchStatus } from '../api/dashboard'
 import PlatformStatusCard from '../components/status/PlatformStatusCard.vue'
 import SetupGuide from '../components/status/SetupGuide.vue'
 import StatCard from '../components/status/StatCard.vue'
+import SyncPanel from '../components/status/SyncPanel.vue'
 import { useBridge } from '../composables/useBridge'
 import type { StatusResponse } from '../types/dashboard'
 
@@ -72,11 +73,11 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
   <v-container fluid class="qc-page pa-4 pa-md-6">
     <div class="qc-header">
       <div>
-        <h1 class="qc-title">{{ t('views.dashboard.status.title', '状态概览') }}</h1>
+        <h1 class="qc-title">{{ t('pages.dashboard.status.title', '状态概览') }}</h1>
         <p class="qc-subtitle">
           {{
             t(
-              'views.dashboard.status.subtitle',
+              'pages.dashboard.status.subtitle',
               '查看各 QQ 平台与线上指令面板的当前状态。',
             )
           }}
@@ -91,10 +92,12 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
           :prepend-icon="mdiRefresh"
           @click="load({ refresh: true })"
         >
-          {{ t('views.dashboard.status.refresh', '刷新') }}
+          {{ t('pages.dashboard.status.refresh', '刷新') }}
         </v-btn>
       </div>
     </div>
+
+    <SyncPanel v-if="ready" class="mb-2" @finished="load({ refresh: true })" />
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
@@ -108,7 +111,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
     >
       {{
         t(
-          'views.dashboard.status.mockHint',
+          'pages.dashboard.status.mockHint',
           '本地开发环境：展示的是 mock 数据，未连接 AstrBot 后端。',
         )
       }}
@@ -121,7 +124,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
       class="mb-4"
       :prepend-icon="mdiAlertCircleOutline"
     >
-      {{ t('views.dashboard.status.loadFailed', '获取状态失败') }}: {{ error }}
+      {{ t('pages.dashboard.status.loadFailed', '获取状态失败') }}: {{ error }}
     </v-alert>
 
     <template v-if="status">
@@ -129,14 +132,14 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
         <v-col cols="12" sm="6" lg="3">
           <StatCard
             :icon="mdiServerOutline"
-            :title="t('views.dashboard.status.cards.platforms', 'QQ 平台')"
+            :title="t('pages.dashboard.status.cards.platforms', 'QQ 平台')"
             :value="status.platforms.length"
           />
         </v-col>
         <v-col cols="12" sm="6" lg="3">
           <StatCard
             :icon="mdiForumOutline"
-            :title="t('views.dashboard.status.cards.scenes', '生效场景')"
+            :title="t('pages.dashboard.status.cards.scenes', '生效场景')"
             :value="status.scenes.length"
             :note="status.scenes.join(' / ')"
           />
@@ -144,7 +147,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
         <v-col cols="12" sm="6" lg="3">
           <StatCard
             :icon="mdiFormatListBulleted"
-            :title="t('views.dashboard.status.cards.commands', '指令条目')"
+            :title="t('pages.dashboard.status.cards.commands', '指令条目')"
             :value="status.items.count"
             :max="status.items.max"
             emphasize-at-limit
@@ -153,12 +156,12 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
         <v-col cols="12" sm="6" lg="3">
           <StatCard
             :icon="mdiViewGridOutline"
-            :title="t('views.dashboard.status.cards.panels', '线上面板')"
+            :title="t('pages.dashboard.status.cards.panels', '线上面板')"
             :value="status.panels.total"
             :max="status.panels.partial ? undefined : status.panels.max"
             :note="
               status.panels.partial
-                ? t('views.dashboard.status.panelsPartial', '部分场景查询失败，该值为下限')
+                ? t('pages.dashboard.status.panelsPartial', '部分场景查询失败，该值为下限')
                 : undefined
             "
             emphasize-at-limit
@@ -169,11 +172,11 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
       <SetupGuide
         v-if="!hasPlatforms"
         :icon="mdiTuneVariant"
-        :title="t('views.dashboard.status.empty.platforms.title', '还没有可用的 QQ 平台')"
+        :title="t('pages.dashboard.status.empty.platforms.title', '还没有可用的 QQ 平台')"
         :description="
           t(
-            'views.dashboard.status.empty.platforms.description',
-            '在插件配置的 qq_platforms 里填写 appid / ClientSecret，或在 AstrBot 平台配置里启用 qq_official 适配器。',
+            'pages.dashboard.status.empty.platforms.description',
+            '到「设置」页填写 qq_platforms 的 appid / ClientSecret。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。',
           )
         "
       />
@@ -188,8 +191,8 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
         >
           {{
             t(
-              'views.dashboard.status.empty.commands.description',
-              '尚未配置指令条目，同步会清空本插件创建的面板。请在插件配置的 selected_commands 里添加条目。',
+              'pages.dashboard.status.empty.commands.description',
+              '尚未配置指令条目，同步会清空本插件创建的面板。请到「设置」页添加 selected_commands。',
             )
           }}
         </v-alert>
