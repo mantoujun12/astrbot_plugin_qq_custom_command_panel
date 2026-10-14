@@ -7,7 +7,7 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 - Python 3.10+（代码里有 X | None、from __future__ import annotations）
 - aiohttp(HTTP 客户端，10s 超时)
 - AstrBot Star 插件体系(@register / @filter.command / Context / AstrBotConfig)
-- 插件视图前端：Vue 3 + TypeScript + Vite + Vuetify 4 + vue-router(hash)，源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`
+- 插件视图前端：Vue 3 + TypeScript + Vite + Vuetify 4 + vue-router(hash) + Vitest，源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`
 - 无第三方数据库，本地状态存 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/`
 
 #### 开发命令
@@ -35,9 +35,11 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 
 插件视图前端（在 `web/dashboard/` 下）：
 
-`pnpm install` / `pnpm dev` / `pnpm build`
+`pnpm install` / `pnpm dev` / `pnpm build` / `pnpm test` / `pnpm test:coverage` / `pnpm test:report` / `pnpm test:codecov`
 
 `pnpm build` 会先跑 `vue-tsc` 类型检查，产物直接写入仓库根目录的 `pages/dashboard/`（见 `vite.config.ts` 的 `build.outDir`），不需要手工拷贝，产物需要一起提交。
+
+`pnpm test` 跑 vitest 单元测试（配置见 `vitest.config.ts`，测试文件与被测代码同目录、命名 `*.test.ts`）；`pnpm test:codecov` 是 CI 用的入口，一次产出 `coverage/lcov.info` 与 `test-report.junit.xml`，由 `.github/workflows/codecov-dashboard.yml` 分两次以 flag `dashboard` 上传 Codecov（覆盖率 + Test Analytics）。Python 侧对应 `.github/workflows/codecov-core.yml`，flag 为 `unittests`。
 
 #### 架构约定
 

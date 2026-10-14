@@ -1,4 +1,4 @@
-# pre-commit.ci 在每个 PR 上自动运行，CI (ci.yml) 对 push 到 main/master 兜底运行同一套 hooks
+# pre-commit.ci 在每个 PR 上自动运行以下 hooks
 # 本地：pip install pre-commit && pre-commit run --all-files
 ci:
   autofix_commit_msg: "style: pre-commit autofix"
