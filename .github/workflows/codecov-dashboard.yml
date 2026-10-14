@@ -1,0 +1,61 @@
+name: Codecov Dashboard
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  codecov:
+    name: Dashboard - Codecov (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["24"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+          cache-dependency-path: web/dashboard/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web/dashboard
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests with coverage and JUnit report
+        working-directory: web/dashboard
+        run: pnpm test:codecov
+
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./web/dashboard/coverage/lcov.info
+          flags: dashboard
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./web/dashboard/test-report.junit.xml
+          flags: dashboard
+          report_type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
