@@ -648,8 +648,10 @@ async def test_page_sync_start_streams_structured_events() -> None:
     events = [event async for event in bundle.runner.stream(0)]
 
     types = [event["type"] for event in events]
-    assert types[0] == "message"
-    assert "start" in types
+    # start 先到：dashboard 收到 start 会清空日志，开场文本必须排在其后
+    assert types[0] == "start"
+    assert types[1] == "message"
+    assert "message" in types
     assert "platform" in types
     assert types[-1] == "finish"
 

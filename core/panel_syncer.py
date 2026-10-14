@@ -552,10 +552,8 @@ class PanelSyncer:
         if not items:
             logger.info(f"{LOG_TAG} {t('log.selected_commands_empty')}")
             total = len(clients)
-            await self._emit_progress(
-                on_progress,
-                t("progress.sync_clearing_start", platforms=total),
-            )
+            # 结构化 start 先于开场文本：dashboard 收到 start 会清空日志，
+            # 开场文本紧跟其后才不会被丢掉。
             await self._emit_event(
                 on_event,
                 {
@@ -565,6 +563,10 @@ class PanelSyncer:
                     "scenes": len(scenes),
                     "items": 0,
                 },
+            )
+            await self._emit_progress(
+                on_progress,
+                t("progress.sync_clearing_start", platforms=total),
             )
             cleared = 0
             clear_failed = 0
@@ -629,15 +631,8 @@ class PanelSyncer:
 
         logger.info(f"{LOG_TAG} " + t("log.prepare_write_items", count=len(items), scenes=scenes))
         total = len(clients)
-        await self._emit_progress(
-            on_progress,
-            t(
-                "progress.sync_start",
-                platforms=total,
-                scenes=len(scenes),
-                items=len(items),
-            ),
-        )
+        # 结构化 start 先于开场文本：dashboard 收到 start 会清空日志，
+        # 开场文本紧跟其后才不会被丢掉。
         await self._emit_event(
             on_event,
             {
@@ -647,6 +642,15 @@ class PanelSyncer:
                 "scenes": len(scenes),
                 "items": len(items),
             },
+        )
+        await self._emit_progress(
+            on_progress,
+            t(
+                "progress.sync_start",
+                platforms=total,
+                scenes=len(scenes),
+                items=len(items),
+            ),
         )
 
         result: dict[str, dict[str, str]] = {}
