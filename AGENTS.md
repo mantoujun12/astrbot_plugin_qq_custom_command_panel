@@ -46,21 +46,26 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 1. QQ API GET /v2/panels 必须带 scope 参数
 2. 面板同步中任一场景拉取失败要中止，不许吞异常（否则会重复创建面板）
 3. PanelSyncer 通过 build_clients / list_all_panels 等公开方法暴露能力；外部禁止直接访问 _ 前缀私有方法
-4. 配置解析逻辑整合到 core/config.py 的 helper 函数(get_platforms_from_schema / get_platforms_from_context / get_configured_platforms)，不要散落在 main.py
+4. 配置解析逻辑整合到 core/config.py 的 helper 函数(get_platforms_from_schema / get_configured_platforms / export_config / normalize_config_payload)，不要散落在 main.py
 5. 指令用 @filter.command 注册，描述取 handler docstring 第一行（除非显式传 description）
 6. 异步一律 async/await，不用回调风格
 7. 日志统一 from astrbot.api import logger，前缀 [qq-command-panel]
+8. 平台凭证只来自插件自己的 `qq_platforms`：AstrBot 不向插件暴露平台适配器的机器人信息，禁止再写从 context 回退读取 appid / clientSecret 的逻辑
+9. 面板同步的结构化进度走 `PanelSyncer.sync_all(on_event=...)`，后台任务与事件缓冲由 `core/sync_runner.py` 的 `SyncRunner` 负责；同一时间只允许一个同步任务
 
 #### 插件视图 (web/dashboard)
 
 1. 视图必须保留 `base: './'` 与 hash 路由。宿主按真实文件路径下发资源（带令牌前缀），绝对路径 `/assets/...` 会 404，history 路由刷新也会 404。
 2. 数据访问集中在 `src/api/` 并通过 bridge(`window.AstrBotPluginView`)调后端；本地 dev 没有 bridge 时退回 mock(`src/api/mock.ts`)，且必须在页面上标注，不许把假数据伪装成真实状态。
-3. 文案走 `bridge.t(key, fallback)`，key 写在 `.astrbot-plugin/i18n/<locale>.json` 的 `views.<view>.*`。产物**不含**翻译，只编译进 fallback 文案；所以改文案只需改 JSON + 重载插件，不用重新 build，但 key 和 fallback 要成对维护。
+3. 文案走 `bridge.t(key, fallback)`，key 写在 `.astrbot-plugin/i18n/<locale>.json` 的 `pages.<view>.*`（宿主按 `pages.<目录名>.title` 取视图标题，写成 `views` 会让标题回退成目录名）。产物**不含**翻译，只编译进 fallback 文案；所以改文案只需改 JSON + 重载插件，不用重新 build，但 key 和 fallback 要成对维护。
 4. 主题与配色跟随宿主：用 bridge context 的 `isDark` 切 `<v-app :theme>`，色值抄宿主 `dashboard/src/theme/*.ts`。插件视图跑在 iframe 里，宿主的 `--v-theme-*` 不会继承进来。
 5. iframe 是 sandbox 的（没有 `allow-same-origin`），禁止访问 `localStorage` / cookies / 父页面 DOM；需要持久化的状态放后端。
 6. 不做 SCSS 定制层。只有宿主靠 SCSS 才拿得到的值（如卡片 16px 圆角），在 `src/styles/dashboard.css` 里直接写数值。
 7. 产物文件名不带内容哈希（宿主对所有视图资源都返回 `Cache-Control: no-store`），且产物视为生成文件 —— 冲突时重新 `pnpm build`，不要手工合并（见 `.gitattributes`）。
 8. 后端接口用 `context.register_web_api()` + `astrbot.api.web`(json_response / error_response / stream_response / request)，不要把 FastAPI/Quart 的原始请求对象暴露给业务代码。
+9. 视图接口固定为 `status`(GET) / `config`(GET+POST) / `sync`(POST) / `sync/events`(GET, SSE)，统一在 `core/web_api.py` 的 `WebApiBundle` 里注册，路径前缀是插件名。
+10. 写回配置只走 `POST config` → `AstrBotConfig.update()` + `save_config_async()`；`GET config` 只回 secret 掩码，明文 secret 不允许出现在响应、日志或前端里，前端提交时留空表示沿用原值。
+11. 同步进度用 SSE：后端从 `SyncRunner.stream(since)` 产事件（`data: {...}\n\n`），前端用 `bridge.subscribeSSE` 订阅、收到 `finish` 后自行退订；宿主不会通知流被关闭。
 
 #### 代码风格
 

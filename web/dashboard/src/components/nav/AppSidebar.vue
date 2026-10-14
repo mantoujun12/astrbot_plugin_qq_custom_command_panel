@@ -18,7 +18,7 @@ const mainItems = [
   {
     to: '/status',
     icon: mdiViewDashboardOutline,
-    labelKey: 'views.dashboard.nav.status',
+    labelKey: 'pages.dashboard.nav.status',
     fallback: '状态概览',
   },
 ]
@@ -27,7 +27,7 @@ const bottomItems = [
   {
     to: '/settings',
     icon: mdiCogOutline,
-    labelKey: 'views.dashboard.nav.settings',
+    labelKey: 'pages.dashboard.nav.settings',
     fallback: '设置',
   },
 ]

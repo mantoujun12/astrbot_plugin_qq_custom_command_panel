@@ -17,6 +17,21 @@ export interface PluginViewContext {
 }
 
 /** 只声明本视图用到的 bridge 能力，其余 API 用到时再补 */
+/** SSE 消息：raw 是原始字符串，内容是 JSON 时 parsed 为解析后的对象 */
+export interface PluginViewSSEMessage {
+  raw: string
+  parsed: unknown
+  eventType: string
+  lastEventId?: string
+}
+
+/** subscribeSSE 的回调集合，宿主通过这些回调转发事件 */
+export interface PluginViewSSEHandlers {
+  onOpen?(): void
+  onMessage?(event: PluginViewSSEMessage): void
+  onError?(): void
+}
+
 export interface PluginViewBridge {
   ready(): Promise<PluginViewContext>
   getContext(): PluginViewContext | null
@@ -25,6 +40,12 @@ export interface PluginViewBridge {
   onContext(handler: () => void): () => void
   apiGet(endpoint: string, params?: Record<string, unknown>): Promise<unknown>
   apiPost(endpoint: string, body?: unknown): Promise<unknown>
+  subscribeSSE(
+    endpoint: string,
+    handlers?: PluginViewSSEHandlers,
+    params?: Record<string, unknown>,
+  ): Promise<string>
+  unsubscribeSSE(subscriptionId: string): Promise<unknown>
 }
 
 declare global {

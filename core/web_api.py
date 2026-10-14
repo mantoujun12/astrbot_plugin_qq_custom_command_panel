@@ -1,13 +1,20 @@
 """插件可视化视图 (Dashboard) 的后端 Web API。
 
-只提供视图当前需要的只读接口 `GET /<plugin_name>/status`，返回结构与
-`web/dashboard/src/types/dashboard.ts` 的 StatusResponse 对应。数据取自 core 的
-公开能力，视图层不重复业务逻辑。
+注册的视图接口（视图内用相对路径调用，bridge 会补上插件名前缀）：
+
+- ``GET  /<plugin_name>/status``      状态概览，对应 types/dashboard.ts 的 StatusResponse
+- ``GET  /<plugin_name>/config``      读取插件配置（secret 只回掩码）
+- ``POST /<plugin_name>/config``      校验并写回插件配置，保存后立即生效
+- ``POST /<plugin_name>/sync``        触发一次面板同步（后台任务，单飞）
+- ``GET  /<plugin_name>/sync/events`` SSE 推送同步进度（结构化事件 + 本地化文本）
+
+业务逻辑都留在 core 的配置 / 同步模块里，视图层只做组装与协议转换。
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -17,23 +24,39 @@ from astrbot.api.star import Context
 
 from .config import (
     PANEL_MAX_ITEMS,
+    export_config,
     get_configured_platforms,
     get_enabled_scenes,
     get_selected_commands,
+    normalize_config_payload,
 )
 from .i18n import LOG_TAG, t
 from .panel_syncer import PanelSyncer
 from .paths import PLUGIN_NAME, PLUGIN_VERSION
+from .sync_runner import SyncRunner
 
-# 视图状态接口的路由后缀；完整路由为 /<PLUGIN_NAME>/status
+# 视图接口路由后缀，完整路径为 /<PLUGIN_NAME>/<suffix>
 STATUS_ROUTE_SUFFIX = "status"
+CONFIG_ROUTE_SUFFIX = "config"
+SYNC_ROUTE_SUFFIX = "sync"
+SYNC_EVENTS_ROUTE_SUFFIX = "sync/events"
 
-# 状态结果缓存时长（秒）：面板查询慢且消耗 QQ 配额，重复/并发请求复用同一结果
+# 状态结果缓存时间（秒）：连续查询不重复打 QQ API，刷新/保存配置时绕过或失效
 STATUS_CACHE_TTL = 5.0
 
 
+def _web() -> Any:
+    """延迟导入 astrbot.api.web
+
+    较早的 AstrBot 版本没有该模块，导入失败时由调用方降级（register 里会先探测）。
+    """
+    from astrbot.api import web
+
+    return web
+
+
 def mask_appid(appid: Any) -> str:
-    """appid 脱敏：保留前 3 位与后 2 位，中间打码；过短则整体打码"""
+    """appid 脱敏：保留前 3 位与后 2 位，中间打码；过短整体打码"""
     text = str(appid or "")
     if len(text) <= 6:
         return "*" * len(text)
@@ -41,7 +64,7 @@ def mask_appid(appid: Any) -> str:
 
 
 def panel_items_count(panel: dict[str, Any]) -> int:
-    """统计面板 record 的指令条目数，结构异常时返回 0（兼容 items 嵌套或扁平）"""
+    """统计面板 record 的指令条目数，结构异常时返回 0（items 嵌套或扁平）"""
     content = panel.get("panel")
     items = content.get("items") if isinstance(content, dict) else panel.get("items")
     return len(items) if isinstance(items, list) else 0
@@ -52,23 +75,22 @@ async def _platform_status(
     pf_id: str,
     client: Any,
     info: dict[str, str],
-    source: str,
     scenes: list[str],
 ) -> tuple[dict[str, Any], int, bool]:
-    """构造单个平台的状态，返回（payload，线上已知面板数，计数是否完整）
+    """构造单个平台的状态，返回（payload，已知面板数，列表是否完整）
 
-    计数不完整（有场景查询失败）时，调用方不应把它当作精确的在线总数。
-    场景状态：synced=线上恰有一条本插件面板，duplicate=同场景存在多条，
-    missing=该场景无本插件面板，failed=查询该场景失败。
+    任一场景列表查询失败都会计入 failed_scopes，此时该平台视为不完整，
+    用返回的布尔值让调用方判断总数是否只是下限。
+    Scene 状态：synced=该场景恰好一个插件面板，duplicate=同场景存在多个，
+    missing=该场景无插件面板，failed=查询该场景失败。
     """
     raw_appid = info.get("appid")
-    # 未配备注名时 pf_id 会回退成 appid，同样需要脱敏
+    # 未配备注时 pf_id 会退化成 appid，展示时同样需要脱敏
     display_pf_id = mask_appid(raw_appid) if raw_appid and str(raw_appid) == pf_id else pf_id
 
     payload: dict[str, Any] = {
         "pf_id": display_pf_id,
         "appid": mask_appid(raw_appid),
-        "source": source,
         "platform": info.get("platform") or getattr(client, "platform_label", "qq"),
         "scenes": [],
     }
@@ -76,7 +98,7 @@ async def _platform_status(
     try:
         panels, failed_scopes = await syncer.list_all_panels(client)
     except Exception as exc:
-        # list_all_panels 已逐场景兜底，这里只防意外；单平台失败不能让整个接口 500
+        # list_all_panels 吞场景级异常，这里只兜底；单平台失败不拖垮整个接口
         logger.error(
             f"{LOG_TAG} " + t("log.status_platform_failed", pf_id=pf_id, exc=exc),
             exc_info=True,
@@ -115,31 +137,31 @@ async def build_status(
 ) -> dict[str, Any]:
     """组装状态概览响应体（对应 types/dashboard.ts 的 StatusResponse）
 
-    该接口默认查询线上，每个平台对所有场景各调一次 QQ API，属慢请求，
-    视图只在进入页面/手动刷新时调用。
+    该接口默认查询线上，每个平台按场景各查一次 QQ API，所以视图只在进入页面时取。
+    平台凭证只来自插件配置：插件读不到 AstrBot 平台适配器的机器人信息。
     """
-    platforms, source = get_configured_platforms(config, syncer.context)
+    platforms = get_configured_platforms(config)
     scenes = get_enabled_scenes(config)
     items = get_selected_commands(config)
-    # 用当前配置构建客户端，与上面的平台元数据同源，避免 syncer 内部配置过期
+    # 用当前配置构造客户端，保证和平台元信息同源（不读 syncer 内部配置）
     clients = syncer.build_clients(config)
 
-    # 各平台互不依赖，并发查询缩短耗时；单平台失败只影响它自己的 payload
+    # 各平台并发查询，慢查询互不阻塞；单平台失败只影响它自己的 payload
     results = await asyncio.gather(
         *(
-            _platform_status(syncer, pf_id, client, platforms.get(pf_id, {}), source, scenes)
+            _platform_status(syncer, pf_id, client, platforms.get(pf_id, {}), scenes)
             for pf_id, client in clients.items()
         )
     )
 
     panels: dict[str, Any] = {
         "total": sum(count for _, count, _ in results),
-        # 有场景查询失败时 total 只是下限，明确标记给视图，不能当成精确值
+        # 有场景查询失败时 total 只是下限，明确告诉视图不要当精确值展示
         "partial": any(not complete for _, _, complete in results),
     }
     platform_count = len(clients)
     if platform_count:
-        # 聚合面板数的有效上限 = 单机器人上限 × 机器人数；没有平台时省略 max
+        # 综合容量上限= 平台数 × 单平台上限；没有平台时省略 max
         panels["max"] = PANEL_MAX_ITEMS * platform_count
 
     return {
@@ -152,10 +174,10 @@ async def build_status(
 
 
 class StatusCache:
-    """状态结果的单飞 (single-flight) 加短期缓存
+    """状态结果的单飞 (single-flight) 内存缓存
 
-    并发请求复用正在计算或刚算完的结果，TTL 内命中缓存，不重复打 QQ API；
-    force=True（视图手动刷新）时跳过缓存。
+    并发请求只计算一次，TTL 内复用，避免重复打 QQ API；
+    force=True（视图手动刷新）时绕过缓存，invalidate() 在配置写回后主动失效。
     """
 
     def __init__(self, ttl: float = STATUS_CACHE_TTL) -> None:
@@ -175,7 +197,7 @@ class StatusCache:
             return cached
 
         async with self._lock:
-            # 等锁期间可能已有别的请求算好并写入缓存，这里再判一次
+            # 等锁期间可能已有别的请求算完，double check 后直接复用
             cached = self._peek(force)
             if cached is not None:
                 return cached
@@ -184,8 +206,13 @@ class StatusCache:
             self._expires_at = time.monotonic() + self._ttl
             return value
 
+    def invalidate(self) -> None:
+        """主动失效缓存（配置变更后调用）"""
+        self._value = None
+        self._expires_at = 0.0
+
     def _peek(self, force: bool) -> dict[str, Any] | None:
-        """命中未过期的缓存则返回结果，否则返回 None"""
+        """命中未过期缓存则返回结果，否则返回 None"""
         if force or not self._is_fresh():
             return None
         return self._value
@@ -194,62 +221,213 @@ class StatusCache:
         return self._value is not None and time.monotonic() < self._expires_at
 
 
-def register_status_api(
+class WebApiBundle:
+    """插件视图 Web API 的 handler 集合，以及它们共享的缓存 / 任务状态
+
+    syncer 在 initialize() 才创建，config 也会被保存流程刷新，所以这里用 provider
+    回调在每次请求时取最新值；宿主缺少 astrbot.api.web 或 register_web_api 时
+    register() 只记 warning 返回 False，不影响插件本体同步。
+    """
+
+    def __init__(
+        self,
+        get_syncer: Callable[[], PanelSyncer | None],
+        get_config: Callable[[], dict[str, Any]],
+        *,
+        save_config: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        version: str = PLUGIN_VERSION,
+        cache_ttl: float = STATUS_CACHE_TTL,
+    ) -> None:
+        self._get_syncer = get_syncer
+        self._get_config = get_config
+        self._save_config = save_config
+        self._version = version
+        self.cache = StatusCache(cache_ttl)
+        self.runner = SyncRunner()
+
+    # ------------------------------------------------------------------
+    # 注册
+    # ------------------------------------------------------------------
+
+    def register(self, context: Context) -> bool:
+        """注册全部视图接口，成功返回 True"""
+        try:
+            from astrbot.api import web  # noqa: F401
+        except Exception as exc:  # pragma: no cover - 依赖宿主版本，测试覆盖降级分支
+            logger.warning(f"{LOG_TAG} " + t("log.web_api_unavailable", exc=exc))
+            return False
+
+        if not callable(getattr(context, "register_web_api", None)):
+            logger.warning(
+                f"{LOG_TAG} " + t("log.web_api_unavailable", exc="context.register_web_api missing")
+            )
+            return False
+
+        prefix = f"/{PLUGIN_NAME}"
+        context.register_web_api(
+            f"{prefix}/{STATUS_ROUTE_SUFFIX}",
+            self.page_status,
+            ["GET"],
+            "Plugin dashboard status overview",
+        )
+        context.register_web_api(
+            f"{prefix}/{CONFIG_ROUTE_SUFFIX}",
+            self.page_config_get,
+            ["GET"],
+            "Plugin dashboard config read",
+        )
+        context.register_web_api(
+            f"{prefix}/{CONFIG_ROUTE_SUFFIX}",
+            self.page_config_save,
+            ["POST"],
+            "Plugin dashboard config save",
+        )
+        context.register_web_api(
+            f"{prefix}/{SYNC_ROUTE_SUFFIX}",
+            self.page_sync_start,
+            ["POST"],
+            "Plugin dashboard panel sync",
+        )
+        context.register_web_api(
+            f"{prefix}/{SYNC_EVENTS_ROUTE_SUFFIX}",
+            self.page_sync_events,
+            ["GET"],
+            "Plugin dashboard panel sync progress (SSE)",
+        )
+        return True
+
+    # ------------------------------------------------------------------
+    # 状态概览
+    # ------------------------------------------------------------------
+
+    async def page_status(self) -> Any:
+        web = _web()
+        syncer = self._get_syncer()
+        if syncer is None:
+            return web.error_response(t("web.not_ready"), status_code=503)
+        # 视图手动刷新传 refresh=1 时绕过缓存
+        raw_refresh = web.request.query.get("refresh", "")
+        force = str(raw_refresh).strip().lower() in ("1", "true", "yes")
+        payload = await self.cache.get(
+            lambda: build_status(syncer, self._get_config(), self._version),
+            force=force,
+        )
+        return web.json_response(payload)
+
+    # ------------------------------------------------------------------
+    # 配置读写
+    # ------------------------------------------------------------------
+
+    async def page_config_get(self) -> Any:
+        web = _web()
+        return web.json_response(export_config(self._get_config()))
+
+    async def page_config_save(self) -> Any:
+        web = _web()
+        if self._save_config is None:
+            return web.error_response(t("web.config_unavailable"), status_code=503)
+
+        payload = await web.request.json(default={})
+        if not isinstance(payload, dict):
+            return web.error_response(t("web.config_invalid_body"), status_code=400)
+
+        values, errors = normalize_config_payload(self._get_config(), payload)
+        if errors:
+            return web.error_response("；".join(errors), status_code=400)
+
+        try:
+            await self._save_config(values)
+        except Exception as exc:
+            logger.error(f"{LOG_TAG} " + t("log.config_save_failed", exc=exc), exc_info=True)
+            return web.error_response(t("web.config_save_failed", exc=exc), status_code=500)
+
+        # 配置变了，状态缓存里的平台/场景信息随即过期
+        self.cache.invalidate()
+        return web.json_response(export_config(self._get_config()))
+
+    # ------------------------------------------------------------------
+    # 同步入口 + 进度流
+    # ------------------------------------------------------------------
+
+    async def page_sync_start(self) -> Any:
+        """触发一次同步；已有任务在跑时返回 busy，不排队"""
+        web = _web()
+        syncer = self._get_syncer()
+        if syncer is None:
+            return web.error_response(t("web.not_ready"), status_code=503)
+        started = self.runner.start(self._make_run(syncer))
+        return web.json_response({"started": started, "busy": not started})
+
+    async def page_sync_events(self) -> Any:
+        """SSE 推送同步进度；since 用于断线重连后回放已错过的事件"""
+        web = _web()
+        syncer = self._get_syncer()
+        if syncer is None:
+            return web.error_response(t("web.not_ready"), status_code=503)
+
+        raw_since = web.request.query.get("since", "")
+        try:
+            since = max(0, int(raw_since))
+        except (TypeError, ValueError):
+            since = 0
+
+        runner = self.runner
+
+        async def events():  # noqa: ANN202 - astrbot.api.web 的流式响应体
+            async for event in runner.stream(since):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+        return web.stream_response(events())
+
+    def _make_run(
+        self,
+        syncer: PanelSyncer,
+    ) -> Callable[[Callable[[dict[str, Any]], Awaitable[None]]], Awaitable[Any]]:
+        """构造同步任务执行体：先刷新配置，再同时推送文本与结构化事件"""
+
+        async def run(emit: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+            syncer.set_config(self._get_config())
+
+            async def push_text(message: str) -> None:
+                await emit({"type": "message", "text": message})
+
+            return await syncer.sync_all(on_progress=push_text, on_event=emit)
+
+        return run
+
+
+def register_web_apis(
     context: Context,
     get_syncer: Callable[[], PanelSyncer | None],
     get_config: Callable[[], dict[str, Any]],
-    version: str = PLUGIN_VERSION,
     *,
+    save_config: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    version: str = PLUGIN_VERSION,
     cache_ttl: float = STATUS_CACHE_TTL,
-) -> bool:
-    """注册视图用的只读 Web API 路由，成功返回 True
-
-    syncer 到 initialize() 才创建，config 也会在运行期刷新，因此用 provider
-    回调在每次请求时取最新值。老版本 AstrBot 缺少 astrbot.api.web 或
-    register_web_api 时只记 warning 并跳过，不影响面板同步。
-    """
-    try:
-        from astrbot.api.web import error_response, json_response, request
-    except Exception as exc:  # pragma: no cover - 依赖宿主版本，无法在离线测试覆盖
-        logger.warning(f"{LOG_TAG} " + t("log.web_api_unavailable", exc=exc))
-        return False
-
-    if not callable(getattr(context, "register_web_api", None)):
-        logger.warning(
-            f"{LOG_TAG} " + t("log.web_api_unavailable", exc="context.register_web_api missing")
-        )
-        return False
-
-    cache = StatusCache(cache_ttl)
-
-    async def page_status():  # noqa: ANN202 - 返回值由 astrbot.api.web 决定
-        syncer = get_syncer()
-        if syncer is None:
-            return error_response(t("web.not_ready"), status_code=503)
-        # 视图手动刷新带 refresh=1 时跳过缓存
-        raw_refresh = request.query.get("refresh", "")
-        force = str(raw_refresh).strip().lower() in ("1", "true", "yes")
-        payload = await cache.get(
-            lambda: build_status(syncer, get_config(), version),
-            force=force,
-        )
-        return json_response(payload)
-
-    context.register_web_api(
-        f"/{PLUGIN_NAME}/{STATUS_ROUTE_SUFFIX}",
-        page_status,
-        ["GET"],
-        "Plugin dashboard status overview",
+) -> WebApiBundle | None:
+    """注册插件视图 Web API，成功返回 bundle，宿主不支持时返回 None"""
+    bundle = WebApiBundle(
+        get_syncer,
+        get_config,
+        save_config=save_config,
+        version=version,
+        cache_ttl=cache_ttl,
     )
-    return True
+    if not bundle.register(context):
+        return None
+    return bundle
 
 
 __all__ = [
+    "CONFIG_ROUTE_SUFFIX",
     "STATUS_CACHE_TTL",
     "STATUS_ROUTE_SUFFIX",
+    "SYNC_EVENTS_ROUTE_SUFFIX",
+    "SYNC_ROUTE_SUFFIX",
     "StatusCache",
+    "WebApiBundle",
     "build_status",
     "mask_appid",
     "panel_items_count",
-    "register_status_api",
+    "register_web_apis",
 ]

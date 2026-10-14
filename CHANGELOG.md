@@ -5,6 +5,20 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- 可视化视图新增「同步」入口：状态页点「同步面板」即可按当前配置同步，进度通过 SSE 实时推送（进度条 + 逐平台状态 + 日志）；任务跑在后台，刷新或切页后回来还能续看结果
+- 可视化视图的设置页改为可编辑：language / scenes / qq_platforms / selected_commands 都能在页面上维护并写回插件配置（保存后立即生效），另有「保存并同步」
+- 视图后端新增 `GET /<plugin>/config`、`POST /<plugin>/config`、`POST /<plugin>/sync`、`GET /<plugin>/sync/events`(SSE) 四个接口
+- `PanelSyncer.sync_all` 新增结构化进度回调 `on_event`；新增 `SyncRunner` 负责单飞的后台同步任务与事件缓冲
+
+### 修复
+
+- 修正视图 i18n 根键：`views.<view>` 改为 `pages.<view>`，面板标题不再回退成目录名 `dashboard`，视图内文案与语言切换恢复生效
+- 平台凭证只从插件配置读取：删除从 AstrBot context 回退读取平台适配器信息的逻辑（插件拿不到适配器里的机器人信息），状态接口与前端类型移除 `source` 字段，mock 数据同步更新
+
 ## [v0.5.0] - 2026-10-13
 
 > **内嵌面板（AstrBot WebUI 可视化视图）目前处于测试阶段**，界面布局与状态接口仍可能继续调整，使用中遇到问题欢迎反馈。

@@ -156,3 +156,29 @@
     align-items: flex-start;
   }
 }
+
+/* 同步进度：日志区固定高度滚动，避免长日志把卡片撑高 */
+.qc-sync-log {
+  max-height: 220px;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--qc-border);
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.06);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.qc-sync-log-line {
+  color: var(--qc-text);
+}
+
+/* 设置页的平台/指令条目卡片：和 qc-card 同一视觉层级，间距更紧凑 */
+.qc-config-item {
+  padding: 16px;
+  border: 1px solid var(--qc-border);
+  border-radius: 16px;
+}

@@ -1,8 +1,7 @@
 """core.web_api 的单元测试
 
-覆盖视图状态接口 (GET /<plugin>/status) 的组装逻辑：字段契约、脱敏、条目计数、
-重复面板标记、计数不完整标记，StatusCache 缓存，以及 register_status_api 的
-路由注册与降级。
+覆盖状态接口的组装逻辑、配置读写（含 secret 掩码与校验）、同步入口的忙闲分支，
+以及 WebApiBundle 的路由注册与降级行为。
 """
 
 from __future__ import annotations
@@ -19,16 +18,32 @@ from core.config import PANEL_MAX_ITEMS, SCENES
 from core.panel_syncer import PanelSyncer
 from core.paths import PLUGIN_NAME, PLUGIN_VERSION
 from core.web_api import (
+    CONFIG_ROUTE_SUFFIX,
     STATUS_ROUTE_SUFFIX,
+    SYNC_EVENTS_ROUTE_SUFFIX,
+    SYNC_ROUTE_SUFFIX,
     StatusCache,
+    WebApiBundle,
     build_status,
     mask_appid,
     panel_items_count,
-    register_status_api,
+    register_web_apis,
 )
 from tests.fakes import FakeQQClient
 
 REMARK_PREFIX = PanelSyncer.REMARK_PREFIX
+
+
+@pytest.fixture(autouse=True)
+def _reset_web_request() -> Any:
+    """每个用例都从干净的 query / body 开始"""
+    from astrbot.api.web import request
+
+    request.query.set_values({})
+    request.payload = {}
+    yield
+    request.query.set_values({})
+    request.payload = {}
 
 
 def owned_panel(
@@ -36,7 +51,7 @@ def owned_panel(
     panel_id: str,
     items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """构造一个带本插件 remark 前缀的面板 record"""
+    """构造一条带本插件 remark 前缀的面板 record"""
     return {
         "panel_id": panel_id,
         "scope": scope,
@@ -45,7 +60,7 @@ def owned_panel(
 
 
 def make_syncer(config: dict[str, Any] | None = None) -> PanelSyncer:
-    """构造 PanelSyncer, context 用 SimpleNamespace 代替（无平台配置时回退 context）"""
+    """构造 PanelSyncer，context 用 SimpleNamespace 占位（平台信息只来自 config）"""
     return PanelSyncer(
         SimpleNamespace(),  # type: ignore[arg-type]
         http=None,
@@ -55,7 +70,7 @@ def make_syncer(config: dict[str, Any] | None = None) -> PanelSyncer:
 
 
 def stub_clients(syncer: PanelSyncer, clients: dict[str, FakeQQClient]) -> PanelSyncer:
-    """把 build_clients 替换为固定返回值，避免真实构造 QQClient"""
+    """把 build_clients 替换为固定返回值，避免真实创建 QQClient"""
     syncer.build_clients = lambda config=None: clients  # type: ignore[method-assign]
     return syncer
 
@@ -64,7 +79,7 @@ def schema_config(**overrides: Any) -> dict[str, Any]:
     config: dict[str, Any] = {
         "scenes": ["c2c", "group"],
         "qq_platforms": [{"name": "pf1", "appid": "1023456789", "secret": "s"}],
-        "selected_commands": [{"name": "help", "desc": "帮助"}],
+        "selected_commands": [{"name": "help", "desc": "说明"}],
     }
     config.update(overrides)
     return config
@@ -122,14 +137,15 @@ async def test_build_status_reports_scene_states() -> None:
     assert payload["plugin"]["version"] == PLUGIN_VERSION
     assert payload["scenes"] == ["c2c", "group", "channel"]
     assert payload["items"] == {"count": 1, "max": PANEL_MAX_ITEMS}
-    # channel 查询失败 => 计数不完整，partial 为 True；max = 单机上 20 × 1 台
+    # channel 查询失败 => 总量只是下限，partial 为 True；max = 单平台 20 × 1 台
     assert payload["panels"] == {"total": 1, "max": PANEL_MAX_ITEMS, "partial": True}
 
     platform = payload["platforms"][0]
     assert platform["pf_id"] == "pf1"
     assert platform["appid"] == "102*****89"
-    assert platform["source"] == "schema"
     assert platform["platform"] == "qq_official"
+    # 插件只能读自己的配置，状态里不再有平台来源字段
+    assert "source" not in platform
     assert "error" not in platform
 
     states = {scene["scope"]: scene["state"] for scene in platform["scenes"]}
@@ -142,7 +158,7 @@ async def test_build_status_reports_scene_states() -> None:
 
 @pytest.mark.asyncio
 async def test_build_status_marks_incomplete_total_on_platform_failure() -> None:
-    """平台级异常时计数为下限，partial 必须置位"""
+    """平台整体异常时总量为下限，partial 用于位置提示"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
 
@@ -150,9 +166,7 @@ async def test_build_status_marks_incomplete_total_on_platform_failure() -> None
         async def list_panels(self, scope: str) -> list[dict[str, Any]]:
             raise RuntimeError("boom")
 
-    client = BoomClient()
-    # list_all_panels 会逐场景兜底，不会抛；所有场景都进 failed_scopes
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"pf1": BoomClient()})
 
     payload = await build_status(syncer, config)
 
@@ -162,7 +176,7 @@ async def test_build_status_marks_incomplete_total_on_platform_failure() -> None
 
 @pytest.mark.asyncio
 async def test_build_status_flags_duplicate_owned_panels() -> None:
-    """同一 scope 出现多条本插件面板时标记为 duplicate，而非正常 synced"""
+    """同一 scope 下有多条本插件面板时标为 duplicate，否则是 synced"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
@@ -172,13 +186,13 @@ async def test_build_status_flags_duplicate_owned_panels() -> None:
 
     scene = payload["platforms"][0]["scenes"][0]
     assert scene["state"] == "duplicate"
-    assert scene["panel_id"] == "p1"  # 取第一条，不再被后面的覆盖
+    assert scene["panel_id"] == "p1"  # 取第一个，避免暴露多余的副本
     assert payload["panels"] == {"total": 2, "max": PANEL_MAX_ITEMS, "partial": False}
 
 
 @pytest.mark.asyncio
 async def test_build_status_ignores_foreign_panels() -> None:
-    """他方面板不算本插件已同步"""
+    """别人的面板不计入本插件同步"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     foreign = {"panel_id": "x", "scope": "c2c", "panel": {"items": [], "remark": "other"}}
@@ -187,7 +201,7 @@ async def test_build_status_ignores_foreign_panels() -> None:
     payload = await build_status(syncer, config)
 
     assert payload["platforms"][0]["scenes"][0]["state"] == "missing"
-    assert payload["panels"]["total"] == 1  # 线上面板总数包含他方面板
+    assert payload["panels"]["total"] == 1  # 别人家的面板仍算线上总量
     assert payload["panels"]["partial"] is False
 
 
@@ -200,7 +214,7 @@ async def test_build_status_without_platforms() -> None:
 
     assert payload["platforms"] == []
     assert payload["items"]["count"] == 0
-    # 没有平台时不应给出聚合上限（避免 0/0 被当作「已达上限」）
+    # 没有平台时不应有综合上限，避免 "0/0" 被当成"已达上限"
     assert payload["panels"] == {"total": 0, "partial": False}
 
 
@@ -225,13 +239,13 @@ async def test_build_status_summarizes_multiple_platforms() -> None:
     payload = await build_status(syncer, config)
 
     assert {p["pf_id"] for p in payload["platforms"]} == {"pf1", "pf2"}
-    # 聚合上限 = 单机上 20 × 2 台
+    # 综合上限 = 平台数 20 × 2 台
     assert payload["panels"] == {"total": 2, "max": PANEL_MAX_ITEMS * 2, "partial": False}
 
 
 @pytest.mark.asyncio
 async def test_build_status_masks_pf_id_when_it_falls_back_to_appid() -> None:
-    """未配备注名时 pf_id 回退成 appid，展示值必须同样脱敏"""
+    """未配备注时 pf_id 会退化成 appid，展示值同样脱敏"""
     config = schema_config(
         scenes=["c2c"],
         qq_platforms=[{"appid": "1112223334", "secret": "s"}],
@@ -248,7 +262,7 @@ async def test_build_status_masks_pf_id_when_it_falls_back_to_appid() -> None:
 
 @pytest.mark.asyncio
 async def test_build_status_uses_current_config_for_clients() -> None:
-    """客户端必须按当前请求的 config 构建，而不是 syncer 内部可能过期的配置"""
+    """客户端必须按当前传入的 config 构造，避免 syncer 内部配置过期"""
     stale = schema_config(
         scenes=["c2c"],
         qq_platforms=[{"name": "old", "appid": "0000000000", "secret": "s"}],
@@ -313,8 +327,26 @@ async def test_status_cache_force_recomputes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_status_cache_invalidate_drops_value() -> None:
+    cache = StatusCache(ttl=60)
+    calls = 0
+
+    async def compute() -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {"n": calls}
+
+    await cache.get(compute)
+    cache.invalidate()
+    again = await cache.get(compute)
+
+    assert again == {"n": 2}
+    assert calls == 2
+
+
+@pytest.mark.asyncio
 async def test_status_cache_coalesces_concurrent_calls() -> None:
-    """并发请求只计算一次 (single-flight)，不会各发一轮 QQ API"""
+    """并发请求只计算一次 (single-flight)，避免重复打 QQ API"""
     cache = StatusCache(ttl=60)
     calls = 0
     started = asyncio.Event()
@@ -330,7 +362,7 @@ async def test_status_cache_coalesces_concurrent_calls() -> None:
     first = asyncio.create_task(cache.get(compute))
     await started.wait()
     second = asyncio.create_task(cache.get(compute))
-    await asyncio.sleep(0)  # 让第二个请求进入等锁状态
+    await asyncio.sleep(0)  # 让第二个请求进入等待状态
     release.set()
 
     r1, r2 = await asyncio.gather(first, second)
@@ -340,7 +372,7 @@ async def test_status_cache_coalesces_concurrent_calls() -> None:
 
 
 # ---------------------------------------------------------------------------
-# register_status_api
+# WebApiBundle：状态 / 配置
 # ---------------------------------------------------------------------------
 
 
@@ -354,27 +386,16 @@ class FakeContext:
         self.routes.append((route, handler, methods, desc))
 
 
-@pytest.mark.asyncio
-async def test_register_status_api_registers_and_serves() -> None:
-    config = schema_config(scenes=["c2c"])
-    syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
-    context = FakeContext()
-
-    assert register_status_api(context, lambda: syncer, lambda: config) is True
-
-    route, handler, methods, _desc = context.routes[0]
-    assert route == f"/{PLUGIN_NAME}/{STATUS_ROUTE_SUFFIX}"
-    assert methods == ["GET"]
-
-    response = await handler()
-    assert response["__json__"] is True
-    assert response["data"]["platforms"][0]["pf_id"] == "pf1"
+def make_bundle(
+    config: dict[str, Any],
+    syncer: PanelSyncer,
+    save_config: Any = None,
+) -> WebApiBundle:
+    return WebApiBundle(lambda: syncer, lambda: config, save_config=save_config)
 
 
 @pytest.mark.asyncio
-async def test_status_handler_caches_between_calls() -> None:
-    """重复请求复用缓存，不会重复打 QQ API"""
+async def test_page_status_returns_payload_and_uses_cache() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
 
@@ -389,30 +410,318 @@ async def test_status_handler_caches_between_calls() -> None:
 
     client = CountingClient(existing={})
     stub_clients(syncer, {"pf1": client})
-    context = FakeContext()
-    register_status_api(context, lambda: syncer, lambda: config)
+    bundle = make_bundle(config, syncer)
 
-    _route, handler, _methods, _desc = context.routes[0]
-    first = await handler()
-    second = await handler()
+    first = await bundle.page_status()
+    second = await bundle.page_status()
 
+    assert first["__json__"] is True
+    assert first["data"]["platforms"][0]["pf_id"] == "pf1"
     assert first["data"] == second["data"]
-    # 每轮状态查询对 SCENES 各查一次；缓存命中后第二次不再查询
+    # 每个状态查询按 SCENES 各查一次，第二次走缓存
     assert client.list_calls == len(SCENES)
 
 
 @pytest.mark.asyncio
-async def test_status_handler_reports_not_ready() -> None:
-    context = FakeContext()
-    register_status_api(context, lambda: None, lambda: {})
+async def test_page_status_reports_not_ready() -> None:
+    bundle = WebApiBundle(lambda: None, lambda: {})
 
-    _route, handler, _methods, _desc = context.routes[0]
-    response = await handler()
+    response = await bundle.page_status()
 
     assert response["__error__"] is True
     assert response["status_code"] == 503
 
 
-def test_register_status_api_skips_without_host_method() -> None:
-    """老版本 AstrBot 的 context 没有 register_web_api 时应降级，不抛异常"""
-    assert register_status_api(SimpleNamespace(), lambda: None, lambda: {}) is False
+@pytest.mark.asyncio
+async def test_page_status_refresh_param_bypasses_cache() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+
+    class CountingClient(FakeQQClient):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self.list_calls = 0
+
+        async def list_panels(self, scope: str) -> list[dict[str, Any]]:
+            self.list_calls += 1
+            return await super().list_panels(scope)
+
+    client = CountingClient(existing={})
+    stub_clients(syncer, {"pf1": client})
+    bundle = make_bundle(config, syncer)
+
+    await bundle.page_status()
+    cached_calls = client.list_calls
+    await bundle.page_status()  # 走缓存，不增加查询次数
+    assert client.list_calls == cached_calls
+
+    request.query.set_values({"refresh": "1"})
+    await bundle.page_status()
+
+    # refresh=1 绕过缓存，按场景重新查询
+    assert client.list_calls == cached_calls + len(SCENES)
+
+
+@pytest.mark.asyncio
+async def test_page_config_get_masks_secret() -> None:
+    config = schema_config(
+        qq_platforms=[{"name": "pf1", "appid": "1023456789", "secret": "plain-secret-value"}],
+    )
+    bundle = make_bundle(config, make_syncer(config))
+
+    response = await bundle.page_config_get()
+
+    assert response["__json__"] is True
+    platform = response["data"]["qq_platforms"][0]
+    assert platform["appid"] == "1023456789"
+    assert platform["secret_set"] is True
+    assert "plain-secret-value" not in str(response["data"])
+    assert platform["secret_masked"].startswith("pla")
+
+
+@pytest.mark.asyncio
+async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config(
+        qq_platforms=[{"name": "pf1", "appid": "1023456789", "secret": "old-secret"}],
+    )
+    syncer = make_syncer(config)
+    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+
+    saved: dict[str, Any] = {}
+
+    async def save_config(values: dict[str, Any]) -> None:
+        saved.update(values)
+        config.clear()
+        config.update(values)
+
+    bundle = make_bundle(config, syncer, save_config)
+
+    # 先算一次状态，缓存里才有东西可失效
+    await bundle.page_status()
+    assert bundle.cache._is_fresh() is True
+
+    request.payload = {
+        "scenes": ["group"],
+        "qq_platforms": [
+            {"name": "renamed", "appid": "1023456789", "secret": "", "platform": "qq_official"},
+        ],
+        "selected_commands": [{"name": "ping", "desc": "Pong"}],
+    }
+
+    response = await bundle.page_config_save()
+
+    assert response["__json__"] is True
+    # secret 留空 => 沿用原值
+    assert saved["qq_platforms"][0]["secret"] == "old-secret"
+    assert saved["scenes"] == ["group"]
+    assert config["scenes"] == ["group"]
+    # 配置变了，状态缓存必须失效
+    assert bundle.cache._is_fresh() is False
+    assert response["data"]["scenes"] == ["group"]
+
+
+@pytest.mark.asyncio
+async def test_page_config_save_rejects_invalid_payload() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config()
+
+    async def save_config(_values: dict[str, Any]) -> None:  # pragma: no cover - 不应被调用
+        raise AssertionError("invalid payload must not be persisted")
+
+    bundle = make_bundle(config, make_syncer(config), save_config)
+    request.payload = {"language": "fr-FR"}
+
+    response = await bundle.page_config_save()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 400
+    assert "language" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_config_save_rejects_non_object_body() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config()
+
+    async def save_config(_values: dict[str, Any]) -> None:  # pragma: no cover - 不应被调用
+        raise AssertionError("invalid payload must not be persisted")
+
+    bundle = make_bundle(config, make_syncer(config), save_config)
+    request.payload = ["nope"]
+
+    response = await bundle.page_config_save()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 400
+
+
+@pytest.mark.asyncio
+async def test_page_config_save_without_persistence_is_unavailable() -> None:
+    config = schema_config()
+    bundle = make_bundle(config, make_syncer(config))
+
+    response = await bundle.page_config_save()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 503
+
+
+@pytest.mark.asyncio
+async def test_page_config_save_reports_save_failure() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config()
+    bundle = make_bundle(config, make_syncer(config))
+
+    async def boom(_values: dict[str, Any]) -> None:
+        raise RuntimeError("disk full")
+
+    bundle._save_config = boom  # type: ignore[attr-defined]
+    request.payload = {"scenes": ["c2c"]}
+
+    response = await bundle.page_config_save()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 500
+    assert "disk full" in response["message"]
+
+
+# ---------------------------------------------------------------------------
+# WebApiBundle：同步入口
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_page_sync_start_and_busy() -> None:
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    client = FakeQQClient(existing={})
+    stub_clients(syncer, {"pf1": client})
+    bundle = make_bundle(config, syncer)
+
+    first = await bundle.page_sync_start()
+    assert first["__json__"] is True
+    assert first["data"] == {"started": True, "busy": False}
+    await bundle.runner.join()
+    assert client.created  # 同步确实写入了 FakeQQClient
+
+    # 挂一个不结束的任务，验证"已有任务在跑"的分支
+    release = asyncio.Event()
+
+    async def slow_run(_emit: Any) -> dict[str, Any]:
+        await release.wait()
+        return {}
+
+    assert bundle.runner.start(slow_run) is True
+    second = await bundle.page_sync_start()
+    assert second["data"] == {"started": False, "busy": True}
+
+    release.set()
+    await bundle.runner.join()
+
+
+@pytest.mark.asyncio
+async def test_page_sync_start_not_ready() -> None:
+    bundle = WebApiBundle(lambda: None, lambda: {})
+
+    response = await bundle.page_sync_start()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 503
+
+
+@pytest.mark.asyncio
+async def test_page_sync_start_streams_structured_events() -> None:
+    """同步任务的进度事件：message + start/platform/finish 结构化事件"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    bundle = make_bundle(config, syncer)
+
+    await bundle.page_sync_start()
+    events = [event async for event in bundle.runner.stream(0)]
+
+    types = [event["type"] for event in events]
+    # start 先到：dashboard 收到 start 会清空日志，开场文本必须排在其后
+    assert types[0] == "start"
+    assert types[1] == "message"
+    assert "message" in types
+    assert "platform" in types
+    assert types[-1] == "finish"
+
+    start = next(event for event in events if event["type"] == "start")
+    assert start["platforms"] == 1
+    assert start["scenes"] == 1
+    assert start["items"] == 1
+
+    platform_event = next(event for event in events if event["type"] == "platform")
+    assert platform_event["pf_id"] == "pf1"
+    assert platform_event["status"] == "ok"
+    assert platform_event["index"] == 1
+    assert platform_event["total"] == 1
+
+    finish = events[-1]
+    assert finish["ok"] is True
+    assert finish["succeeded"] == 1
+    assert finish["failed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_page_sync_events_returns_stream_and_honours_since() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    bundle = make_bundle(config, syncer)
+
+    await bundle.page_sync_start()
+    request.query.set_values({"since": str(bundle.runner.last_seq)})
+
+    response = await bundle.page_sync_events()
+
+    assert response["__stream__"] is True
+
+
+@pytest.mark.asyncio
+async def test_page_sync_events_not_ready() -> None:
+    bundle = WebApiBundle(lambda: None, lambda: {})
+
+    response = await bundle.page_sync_events()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 503
+
+
+# ---------------------------------------------------------------------------
+# register_web_apis
+# ---------------------------------------------------------------------------
+
+
+def test_register_web_apis_registers_all_routes() -> None:
+    config = schema_config()
+    syncer = make_syncer(config)
+    context = FakeContext()
+
+    bundle = register_web_apis(context, lambda: syncer, lambda: config)
+
+    assert bundle is not None
+    routes = {(route, tuple(methods)) for route, _h, methods, _d in context.routes}
+    assert routes == {
+        (f"/{PLUGIN_NAME}/{STATUS_ROUTE_SUFFIX}", ("GET",)),
+        (f"/{PLUGIN_NAME}/{CONFIG_ROUTE_SUFFIX}", ("GET",)),
+        (f"/{PLUGIN_NAME}/{CONFIG_ROUTE_SUFFIX}", ("POST",)),
+        (f"/{PLUGIN_NAME}/{SYNC_ROUTE_SUFFIX}", ("POST",)),
+        (f"/{PLUGIN_NAME}/{SYNC_EVENTS_ROUTE_SUFFIX}", ("GET",)),
+    }
+
+
+def test_register_web_apis_skips_without_host_method() -> None:
+    """老版本 AstrBot 的 context 没有 register_web_api 时应静默降级"""
+    assert register_web_apis(SimpleNamespace(), lambda: None, lambda: {}) is None

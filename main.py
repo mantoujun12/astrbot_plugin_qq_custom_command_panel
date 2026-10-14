@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import aiohttp
 from astrbot.api import logger
 from astrbot.api.star import Context, Star, register
@@ -20,7 +22,8 @@ from .core import (
     PLUGIN_VERSION,
     SCENES,
     PanelSyncer,
-    register_status_api,
+    WebApiBundle,
+    register_web_apis,
     resolve_plugin_data_dir,
 )
 from .core.i18n import LOG_TAG, t
@@ -44,13 +47,36 @@ class QQCommandPanelPlugin(Star):
         self.data_dir = resolve_plugin_data_dir(context, PLUGIN_NAME)
         self._http: aiohttp.ClientSession | None = None
         self._syncer: PanelSyncer | None = None
-        # 注册视图 (Dashboard) 的只读状态接口；syncer 到 initialize() 才创建，
-        # 因此 handler 在每次请求时再取最新的 syncer / config
-        register_status_api(
+        self._web_api: WebApiBundle | None = None
+        # 注册视图 (Dashboard) 的 Web API：状态概览、配置读写、同步入口；
+        # syncer 到 initialize() 才创建，因此 handler 在每次请求时再取最新的 syncer / config
+        self._web_api = register_web_apis(
             self.context,
             lambda: self._syncer,
             lambda: dict(self.config),
+            save_config=self._save_config,
         )
+
+    async def _save_config(self, values: dict[str, Any]) -> None:
+        """把 dashboard 提交的配置写回 AstrBotConfig 并立即生效
+
+        AstrBot 的插件配置是 AstrBotConfig（dict 子类）并负责落盘，
+        这里先确认宿主提供了持久化接口，再更新内存并写回，
+        避免出现"只改内存、没落盘"的假成功。
+        """
+        save_async = getattr(self.config, "save_config_async", None)
+        save_sync = getattr(self.config, "save_config", None)
+        if not callable(save_async) and not callable(save_sync):
+            raise RuntimeError(t("web.config_unavailable"))
+
+        self.config.update(values)
+        if callable(save_async):
+            await save_async()
+        else:
+            save_sync()
+
+        if self._syncer is not None:
+            self._syncer.set_config(dict(self.config))
 
     async def initialize(self) -> None:
         """插件初始化：启动时同步一次面板"""
@@ -71,6 +97,10 @@ class QQCommandPanelPlugin(Star):
 
     async def terminate(self) -> None:
         """插件销毁：关闭 HTTP 会话"""
+        # 同步任务跑在后台，卸载时先取消，避免请求打到已关闭的 HTTP 会话
+        if self._web_api is not None:
+            await self._web_api.runner.cancel()
+            self._web_api = None
         if self._http and not self._http.closed:
             await self._http.close()
             self._http = None

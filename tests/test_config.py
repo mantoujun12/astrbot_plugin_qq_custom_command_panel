@@ -1,4 +1,4 @@
-"""core.config 的单元测试（纯函数，无 IO）"""
+"""core.config 的单元测试（纯函数，不做任何 IO）"""
 
 from __future__ import annotations
 
@@ -9,11 +9,15 @@ from core.config import (
     PANEL_ITEM_DESC_MAX,
     PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
+    SCENES,
+    export_config,
     get_configured_platforms,
     get_enabled_scenes,
-    get_platforms_from_context,
+    get_platform_entries,
     get_platforms_from_schema,
     get_selected_commands,
+    mask_secret,
+    normalize_config_payload,
 )
 
 # ---------------------------------------------------------------------------
@@ -60,7 +64,7 @@ def test_get_selected_commands_skips_invalid_entries() -> None:
             42,
             {"desc": "no name"},
             {"name": "", "desc": "empty name"},
-            {"name": "ok", "desc": 123},  # desc 非字符串 → 置空
+            {"name": "ok", "desc": 123},  # desc 非字符串 → 该条变空描述
             {"name": "fine", "desc": "good"},
         ]
     }
@@ -85,8 +89,27 @@ def test_get_selected_commands_non_list_returns_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 平台解析：schema / context / fallback
+# 平台配置读取：只有 schema qq_platforms 一个来源
 # ---------------------------------------------------------------------------
+
+
+def test_get_platform_entries_keeps_name_and_defaults() -> None:
+    config = {
+        "qq_platforms": [
+            {"appid": "222", "secret": "s2", "platform": "qq"},
+        ]
+    }
+    entries = get_platform_entries(config)
+    # 没填 name/platform 时 pf_id 取 appid，platform 归一成 qq_official
+    assert entries == [
+        {
+            "pf_id": "222",
+            "name": "",
+            "appid": "222",
+            "secret": "s2",
+            "platform": "qq_official",
+        }
+    ]
 
 
 def test_get_platforms_from_schema_basic() -> None:
@@ -95,22 +118,8 @@ def test_get_platforms_from_schema_basic() -> None:
             {"name": "小号", "appid": "111", "secret": "s1", "platform": "qq_official"},
         ]
     }
-    platforms = get_platforms_from_schema(config)
-    assert platforms == {
+    assert get_platforms_from_schema(config) == {
         "小号": {"appid": "111", "secret": "s1", "platform": "qq_official"},
-    }
-
-
-def test_get_platforms_from_schema_alias_and_defaults() -> None:
-    config = {
-        "qq_platforms": [
-            # 无 name/platform → pf_id 取 appid，platform 归一化为 qq_official
-            {"appid": "222", "secret": "s2", "platform": "qq"},
-        ]
-    }
-    platforms = get_platforms_from_schema(config)
-    assert platforms == {
-        "222": {"appid": "222", "secret": "s2", "platform": "qq_official"},
     }
 
 
@@ -139,95 +148,242 @@ def test_get_platforms_from_schema_skips_incomplete() -> None:
     assert get_platforms_from_schema(config) == {}
 
 
-def test_get_platforms_from_context_platform_settings() -> None:
-    context = SimpleNamespacePlatform(
-        platform_settings=[
-            {"enable": True, "type": "qq_official", "id": "ctx1", "appid": "a", "secret": "b"},
-            {"enable": False, "type": "qq_official", "id": "ctx2", "appid": "c", "secret": "d"},
-        ]
-    )
-    platforms = get_platforms_from_context(context)
-    # enable=False 的平台被跳过
-    assert platforms == {
-        "ctx1": {"appid": "a", "secret": "b", "platform": "qq_official"},
-    }
-
-
-def test_get_platforms_from_context_via_config_dict() -> None:
-    context = SimpleNamespacePlatform(
-        astrbot_config={
-            "platform_settings": [
-                {"enable": True, "type": "qq_official_webhook", "appid": "w1", "secret": "ws"},
-            ]
-        }
-    )
-    platforms = get_platforms_from_context(context)
-    assert platforms == {
-        "w1": {"appid": "w1", "secret": "ws", "platform": "qq_official_webhook"},
-    }
-
-
-def test_get_platforms_from_context_empty_object() -> None:
-    assert get_platforms_from_context(SimpleNamespacePlatform()) == {}
-    assert get_platforms_from_context(None) == {}
-
-
-def test_get_configured_platforms_prefers_schema() -> None:
+def test_get_configured_platforms_reads_schema_only() -> None:
     config = {
         "qq_platforms": [
             {"name": "schema_pf", "appid": "s_app", "secret": "s_sec"},
         ]
     }
-    context = SimpleNamespacePlatform(
-        platform_settings=[
-            {
-                "enable": True,
-                "type": "qq_official",
-                "id": "ctx_pf",
-                "appid": "c_app",
-                "secret": "c_sec",
-            },
-        ]
-    )
-    platforms, source = get_configured_platforms(config, context)
-    assert source == "schema"
+    platforms = get_configured_platforms(config)
     assert list(platforms) == ["schema_pf"]
+    assert platforms["schema_pf"]["appid"] == "s_app"
 
 
-def test_get_configured_platforms_falls_back_to_context() -> None:
-    context = SimpleNamespacePlatform(
-        platform_settings=[
-            {
-                "enable": True,
-                "type": "qq_official",
-                "id": "ctx_pf",
-                "appid": "c_app",
-                "secret": "c_sec",
-            },
-        ]
+def test_get_configured_platforms_empty_without_qq_platforms() -> None:
+    # 插件读不到平台适配器的机器人信息，没有 qq_platforms 就是没有平台
+    assert get_configured_platforms({}) == {}
+    assert get_configured_platforms({"qq_platforms": []}) == {}
+
+
+# ---------------------------------------------------------------------------
+# mask_secret / export_config
+# ---------------------------------------------------------------------------
+
+
+def test_mask_secret_keeps_head_and_tail() -> None:
+    assert mask_secret("abcdefghij") == "abc*****ij"
+
+
+def test_mask_secret_short_and_empty() -> None:
+    assert mask_secret("abc") == "***"
+    assert mask_secret(None) == ""
+    assert mask_secret("") == ""
+
+
+def test_export_config_never_leaks_secret() -> None:
+    config = {
+        "language": "en-US",
+        "scenes": ["c2c"],
+        "qq_platforms": [
+            {"name": "pf1", "appid": "1023456789", "secret": "super-secret-value"},
+        ],
+        "selected_commands": [{"name": "help", "desc": "说明"}],
+    }
+    exported = export_config(config)
+
+    assert exported["language"] == "en-US"
+    assert exported["scenes"] == ["c2c"]
+    assert exported["available_scenes"] == list(SCENES)
+    assert exported["limits"] == {
+        "name_max": PANEL_ITEM_NAME_MAX,
+        "desc_max": PANEL_ITEM_DESC_MAX,
+        "items_max": PANEL_MAX_ITEMS,
+    }
+    platform = exported["qq_platforms"][0]
+    assert platform["name"] == "pf1"
+    assert platform["appid"] == "1023456789"
+    assert platform["secret_set"] is True
+    masked = platform["secret_masked"]
+    assert len(masked) == len("super-secret-value")
+    assert masked.startswith("sup") and masked.endswith("ue")
+    assert set(masked[3:-2]) == {"*"}
+    # 明文 secret 不得出现在导出结果里
+    assert "super-secret-value" not in str(exported)
+    assert exported["selected_commands"] == [{"name": "help", "desc": "说明"}]
+
+
+def test_export_config_normalizes_language_and_skips_invalid_commands() -> None:
+    exported = export_config(
+        {
+            "language": "xx-XX",
+            "selected_commands": [{"name": "ok"}, {"desc": "no name"}, "junk"],
+        }
     )
-    platforms, source = get_configured_platforms({}, context)
-    assert source == "context"
-    assert list(platforms) == ["ctx_pf"]
+    assert exported["language"] == "zh-CN"
+    assert exported["selected_commands"] == [{"name": "ok", "desc": ""}]
+    assert exported["qq_platforms"] == []
 
 
-def test_get_configured_platforms_none() -> None:
-    platforms, source = get_configured_platforms({}, None)
-    assert platforms == {}
-    assert source == "none"
+# ---------------------------------------------------------------------------
+# normalize_config_payload
+# ---------------------------------------------------------------------------
 
 
-class SimpleNamespacePlatform:
-    """模拟 AstrBot Context: 按 getattr 探测的属性容器"""
+def make_existing() -> dict[str, Any]:
+    return {
+        "language": "zh-CN",
+        "scenes": ["c2c", "group"],
+        "qq_platforms": [
+            {
+                "name": "pf1",
+                "appid": "1023456789",
+                "secret": "old-secret",
+                "platform": "qq_official",
+            },
+        ],
+        "selected_commands": [{"name": "help", "desc": "说明"}],
+    }
 
-    def __init__(self, **attrs: Any) -> None:
-        for key, value in attrs.items():
-            setattr(self, key, value)
+
+def test_normalize_config_payload_accepts_full_payload() -> None:
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "language": "en-US",
+            "scenes": ["group", "unknown"],
+            "qq_platforms": [
+                {
+                    "name": "pf2",
+                    "appid": "9999999999",
+                    "secret": "new-secret",
+                    "platform": "qq_official_webhook",
+                }
+            ],
+            "selected_commands": [{"name": "ping", "desc": "Pong"}],
+        },
+    )
+
+    assert errors == []
+    assert values["language"] == "en-US"
+    assert values["scenes"] == ["group"]
+    assert values["qq_platforms"] == [
+        {
+            "name": "pf2",
+            "appid": "9999999999",
+            "secret": "new-secret",
+            "platform": "qq_official_webhook",
+        }
+    ]
+    assert values["selected_commands"] == [{"name": "ping", "desc": "Pong"}]
 
 
-# 严谨起见确认常量值（截断逻辑依赖它们）
+def test_normalize_config_payload_keeps_existing_secret_when_blank() -> None:
+    """页面只回掩码，secret 留空表示沿用原配置"""
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "qq_platforms": [
+                {"name": "renamed", "appid": "1023456789", "secret": "", "platform": "qq_official"},
+            ]
+        },
+    )
+
+    assert errors == []
+    assert values["qq_platforms"] == [
+        {
+            "name": "renamed",
+            "appid": "1023456789",
+            "secret": "old-secret",
+            "platform": "qq_official",
+        }
+    ]
+    # 未提交的字段沿用旧配置
+    assert values["language"] == "zh-CN"
+    assert values["scenes"] == ["c2c", "group"]
+    assert values["selected_commands"] == [{"name": "help", "desc": "说明"}]
+
+
+def test_normalize_config_payload_requires_secret_for_new_platform() -> None:
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "qq_platforms": [
+                {"name": "fresh", "appid": "1234567890", "secret": "", "platform": "qq_official"},
+            ]
+        },
+    )
+
+    assert values["qq_platforms"] == []
+    assert len(errors) == 1
+    assert "clientSecret" in errors[0]
+
+
+def test_normalize_config_payload_rejects_invalid_language() -> None:
+    _values, errors = normalize_config_payload(make_existing(), {"language": "fr-FR"})
+    assert len(errors) == 1
+    assert "language" in errors[0]
+
+
+def test_normalize_config_payload_rejects_bad_platform_entries() -> None:
+    _values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "qq_platforms": [
+                "not a dict",
+                {"secret": "s"},
+                {"appid": "1", "secret": "s", "platform": "aiocqhttp"},
+                {"appid": "1", "secret": "s"},
+                {"appid": "1", "secret": "s2"},
+            ]
+        },
+    )
+    joined = " | ".join(errors)
+    assert "条目必须是对象" in joined
+    assert "appid 不能为空" in joined
+    assert "不支持的平台类型" in joined
+    assert "重复" in joined
+
+
+def test_normalize_config_payload_rejects_oversized_commands() -> None:
+    _values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "selected_commands": [
+                {"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "ok"},
+                {"name": "ok", "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)},
+                {"desc": "no name"},
+                "not a dict",
+            ]
+        },
+    )
+    joined = " | ".join(errors)
+    assert "name 最多" in joined
+    assert "desc 最多" in joined
+    assert "name 不能为空" in joined
+    assert "条目必须是对象" in joined
+
+
+def test_normalize_config_payload_rejects_too_many_commands() -> None:
+    _values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "selected_commands": [
+                {"name": f"cmd{i}", "desc": ""} for i in range(PANEL_MAX_ITEMS + 1)
+            ]
+        },
+    )
+    assert len(errors) == 1
+    assert str(PANEL_MAX_ITEMS) in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# 常量
+# ---------------------------------------------------------------------------
+
+
 def test_panel_limits_values() -> None:
     assert PANEL_ITEM_NAME_MAX == 14
     assert PANEL_ITEM_DESC_MAX == 30
     assert PANEL_MAX_ITEMS == 20
     assert DEFAULT_SCENES == ["c2c", "group"]
+    assert SCENES == ("c2c", "group", "channel", "dm")

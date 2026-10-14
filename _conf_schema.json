@@ -18,7 +18,7 @@
     "type": "template_list",
     "default": [],
     "obvious_hint": true,
-    "hint": "直接填写 appid + clientSecret 后即可同步指令面板，不依赖 AstrBot 后台是否配置了 qq_official 适配器。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
+    "hint": "插件只能读取这里的凭证：AstrBot 不向插件暴露平台适配器的机器人信息，所以必须手动填写 appid + clientSecret。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
     "templates": {
       "qq_platform": {
         "name": "QQ 机器人",
