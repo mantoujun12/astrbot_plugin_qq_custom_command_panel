@@ -5,7 +5,7 @@ import {
   startSync,
   subscribeSyncRun,
 } from './sync'
-import { createBridge } from './dashboard.test'
+import { createBridgeStub } from '../test/helpers'
 import type { SyncEvent } from '../types/dashboard'
 
 afterEach(() => {
@@ -138,7 +138,7 @@ describe('startSync', () => {
   })
 
   it('posts the sync endpoint', async () => {
-    const bridge = createBridge()
+    const bridge = createBridgeStub()
     window.AstrBotPluginView = bridge
     vi.mocked(bridge.apiPost).mockResolvedValue({ started: true, busy: false })
 
@@ -149,11 +149,12 @@ describe('startSync', () => {
 
 describe('subscribeSyncRun', () => {
   it('subscribes with since and forwards parsed events', async () => {
-    const bridge = createBridge()
+    const bridge = createBridgeStub()
     window.AstrBotPluginView = bridge
     const onEvent = vi.fn()
+    const onOpen = vi.fn()
 
-    const subscription = await subscribeSyncRun({ since: 7, onEvent })
+    const subscription = await subscribeSyncRun({ since: 7, onEvent, onOpen })
 
     expect(bridge.subscribeSSE).toHaveBeenCalledWith(
       'sync/events',
@@ -163,6 +164,8 @@ describe('subscribeSyncRun', () => {
 
     // 宿主 SDK 传进来的是 { raw, parsed, ... }，parsed 已经是 JSON 对象
     const handlers = vi.mocked(bridge.subscribeSSE).mock.calls[0][1]
+    handlers?.onOpen?.()
+    expect(onOpen).toHaveBeenCalledTimes(1)
     handlers?.onMessage?.({
       raw: '{"type":"finish"}',
       parsed: { type: 'finish', seq: 8, ok: true, platforms: 1, succeeded: 1, failed: 0 },
@@ -181,7 +184,7 @@ describe('subscribeSyncRun', () => {
   })
 
   it('reports stream errors through onError', async () => {
-    const bridge = createBridge()
+    const bridge = createBridgeStub()
     window.AstrBotPluginView = bridge
     const onError = vi.fn()
 
