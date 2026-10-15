@@ -13,6 +13,7 @@
 - 可视化视图的设置页改为可编辑：language / scenes / qq_platforms / selected_commands 都能在页面上维护并写回插件配置（保存后立即生效），另有「保存并同步」
 - 视图后端新增 `GET /<plugin>/config`、`POST /<plugin>/config`、`POST /<plugin>/sync`、`GET /<plugin>/sync/events`(SSE) 四个接口
 - `PanelSyncer.sync_all` 新增结构化进度回调 `on_event`；新增 `SyncRunner` 负责单飞的后台同步任务与事件缓冲
+- 新增 `scripts/bump_version.py`：一条命令同步 metadata.yaml、core/paths.py 与 web/dashboard/package.json 的版本号，支持交互式选择与 `patch` / `minor` / `major` / 指定版本，另有 `--dry-run` 预览与 `--check` 一致性校验
 
 ### 修复
 
