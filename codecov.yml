@@ -1,0 +1,80 @@
+# Codecov 配置：core（pytest，flag: unittests）与 dashboard（vitest，flag: dashboard）两条上传链路
+# 参考 https://docs.codecov.com/docs/codecovyml-reference，改动后用 https://api.codecov.io/validate 校验
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    after_n_builds: 2
+
+# dashboard 的 lcov 路径是相对 web/dashboard 的（src/api/sync.ts），需补前缀
+fixes:
+  - "src/::web/dashboard/src/"
+
+coverage:
+  precision: 2
+  round: down
+  range: "60...100"
+  status:
+    project:
+      # 整仓库：dashboard 组件层没测，单次改动就能拉动整体 1～4 个点，阈值给宽一点
+      default:
+        target: auto
+        threshold: 2%
+        if_ci_failed: error
+      unittests:
+        flags:
+          - unittests
+        target: 85%
+        threshold: 2%
+      # 组件层无测试（当前约 22%），按现状下调为绝对下限，不按“不许倒退”卡
+      dashboard:
+        flags:
+          - dashboard
+        target: 20%
+        threshold: 2%
+    patch:
+      # 关掉整仓库 patch：auto 会拿整体覆盖率（约 68%）当门槛，卡死 dashboard 改动
+      default: off
+      unittests:
+        flags:
+          - unittests
+        target: 80%
+        threshold: 5%
+      # Vue 组件尚无测试，先只提示不拦门禁
+      dashboard:
+        flags:
+          - dashboard
+        target: auto
+        threshold: 0%
+        informational: true
+
+flags:
+  unittests:
+    paths:
+      - core/
+      - main.py
+      - scripts/
+    carryforward: false
+  dashboard:
+    paths:
+      - web/dashboard/src/
+    carryforward: false
+
+ignore:
+  - "tests/**"
+  - "**/*.test.ts"
+  - "pages/**"
+
+test_analytics:
+  flake_detection: true
+
+comment:
+  layout: "header, diff, flags, files, footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+  after_n_builds: 2
+
+github_checks:
+  annotations: true
