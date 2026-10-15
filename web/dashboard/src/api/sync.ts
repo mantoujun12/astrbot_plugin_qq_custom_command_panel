@@ -6,6 +6,7 @@
  */
 
 import { getBridge } from '../bridge'
+import { toPlain } from './serialize'
 import type { SyncEvent, SyncRunState } from '../types/dashboard'
 
 /** 对应后端 `/<plugin_name>/sync` */
@@ -138,7 +139,7 @@ export async function subscribeSyncRun(options: {
       },
       onError: () => options.onError?.(new Error('sync stream error')),
     },
-    { since: options.since ?? 0 },
+    toPlain({ since: options.since ?? 0 }),
   )
 
   return {

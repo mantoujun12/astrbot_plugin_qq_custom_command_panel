@@ -8,6 +8,7 @@
 
 import { getBridge } from '../bridge'
 import { MOCK_CONFIG, MOCK_STATUS } from './mock'
+import { toPlain } from './serialize'
 import type { PluginConfigPayload, PluginConfigResponse, StatusResponse } from '../types/dashboard'
 
 /** 对应后端 register_web_api 的路径 `/<plugin_name>/status` */
@@ -27,7 +28,7 @@ export async function fetchStatus(options: { refresh?: boolean } = {}): Promise<
     return MOCK_STATUS
   }
   const params = options.refresh ? { refresh: 1 } : undefined
-  return (await bridge.apiGet(STATUS_ENDPOINT, params)) as StatusResponse
+  return (await bridge.apiGet(STATUS_ENDPOINT, toPlain(params))) as StatusResponse
 }
 
 /** 读取插件配置（secret 只返回掩码）；本地无 bridge 时退回 mock */
@@ -44,11 +45,12 @@ export async function fetchConfig(): Promise<PluginConfigResponse> {
  *
  * 校验失败时后端返回错误响应，bridge 会把它转成 Error，调用方直接展示 message 即可。
  * 本地无 bridge 时抛错：不允许在没有后端的开发环境里伪造"保存成功"。
+ * payload 允许是视图里的响应式对象，这里会先快照成纯数据（见 toPlain）。
  */
 export async function saveConfig(payload: PluginConfigPayload): Promise<PluginConfigResponse> {
   const bridge = getBridge()
   if (!bridge) {
     throw new Error('no backend: config saving is unavailable in local dev')
   }
-  return (await bridge.apiPost(CONFIG_ENDPOINT, payload)) as PluginConfigResponse
+  return (await bridge.apiPost(CONFIG_ENDPOINT, toPlain(payload))) as PluginConfigResponse
 }
