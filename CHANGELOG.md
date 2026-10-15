@@ -5,20 +5,28 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.5.1] - 2026-10-15
 
 ### 新增
 
-- 可视化视图新增「同步」入口：状态页点「同步面板」即可按当前配置同步，进度通过 SSE 实时推送（进度条 + 逐平台状态 + 日志）；任务跑在后台，刷新或切页后回来还能续看结果
-- 可视化视图的设置页改为可编辑：language / scenes / qq_platforms / selected_commands 都能在页面上维护并写回插件配置（保存后立即生效），另有「保存并同步」
-- 视图后端新增 `GET /<plugin>/config`、`POST /<plugin>/config`、`POST /<plugin>/sync`、`GET /<plugin>/sync/events`(SSE) 四个接口
-- `PanelSyncer.sync_all` 新增结构化进度回调 `on_event`；新增 `SyncRunner` 负责单飞的后台同步任务与事件缓冲
-- 新增 `scripts/bump_version.py`：一条命令同步 metadata.yaml、core/paths.py 与 web/dashboard/package.json 的版本号，支持交互式选择与 `patch` / `minor` / `major` / 指定版本，另有 `--dry-run` 预览与 `--check` 一致性校验
+- 可视化视图新增「同步」入口：状态页点「同步面板」即可按当前配置同步，进度通过 SSE 实时推送（进度条 + 逐平台状态 + 日志）；任务跑在后台，刷新或切页后回来还能续看结果 (#39)
+- 可视化视图的设置页改为可编辑：language / scenes / qq_platforms / selected_commands 都能在页面上维护并写回插件配置（保存后立即生效），另有「保存并同步」 (#39)
+- 视图后端新增 `GET /<plugin>/config`、`POST /<plugin>/config`、`POST /<plugin>/sync`、`GET /<plugin>/sync/events`(SSE) 四个接口 (#39)
+- `PanelSyncer.sync_all` 新增结构化进度回调 `on_event`；新增 `SyncRunner` 负责单飞的后台同步任务与事件缓冲 (#39)
+- 新增 `scripts/package_plugin.py`：按 AstrBot 实际读取的文件白名单打包发布 zip（含 LICENSE，排除 `__pycache__` / `*.pyc`），仅依赖标准库、固定时间戳以保证产物可复现，自动发布工作流改用该脚本 (#40)
+- 新增 `scripts/bump_version.py`：一条命令同步 metadata.yaml、core/paths.py 与 web/dashboard/package.json 的版本号，支持交互式选择与 `patch` / `minor` / `major` / 指定版本，另有 `--dry-run` 预览与 `--check` 一致性校验 (#44)
+
+### 变更
+
+- 前端视图新增 vitest 单元测试，并把 dashboard 的覆盖率与测试结果接入 Codecov（flag `dashboard`），核心 pytest 也接入 `codecov.yml` 覆盖率门禁 (#38, #42, #43)
+- 统一全仓库中英文标点：中文使用全角，英文与代码使用半角 (#37)
 
 ### 修复
 
-- 修正视图 i18n 根键：`views.<view>` 改为 `pages.<view>`，面板标题不再回退成目录名 `dashboard`，视图内文案与语言切换恢复生效
-- 平台凭证只从插件配置读取：删除从 AstrBot context 回退读取平台适配器信息的逻辑（插件拿不到适配器里的机器人信息），状态接口与前端类型移除 `source` 字段，mock 数据同步更新
+- 修正视图 i18n 根键：`views.<view>` 改为 `pages.<view>`，面板标题不再回退成目录名 `dashboard`，视图内文案与语言切换恢复生效 (#39)
+- 平台凭证只从插件配置读取：删除从 AstrBot context 回退读取平台适配器信息的逻辑（插件拿不到适配器里的机器人信息），状态接口与前端类型移除 `source` 字段，mock 数据同步更新 (#39)
+- 修复可视化视图保存配置时抛出 `DataCloneError` 的问题：提交前把 Vue 响应式对象快照为可结构化克隆的普通数据 (#41)
+- 修复自动发布工作流在 v0.5.0 合并时未被触发且无法重跑的问题：改由 tag / release 是否存在决定是否发布，新增 `workflow_dispatch` 手动补发，并在打 tag 前校验三处版本号一致 (#36)
 
 ## [v0.5.0] - 2026-10-13
 
@@ -123,6 +131,7 @@
 
 - 首次发布：QQ 官方机器人指令面板同步功能 (#1)
 
+[v0.5.1]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.4...v0.5.0
 [v0.4.4]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.3...v0.4.4
 [v0.4.3]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.2...v0.4.3
