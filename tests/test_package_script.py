@@ -1,7 +1,7 @@
 """scripts/package_plugin.py 的离线测试。
 
-验证打包脚本只收录 AstrBot 会读取的文件，并剔除测试 / 构建产物。
-脚本不是包，用 importlib 按文件路径加载。
+验证打包脚本只收录 AstrBot 会读取的文件（外加必须随源码分发的 LICENSE），
+并剔除测试 / 构建产物。脚本不是包，用 importlib 按文件路径加载。
 """
 
 from __future__ import annotations
@@ -50,11 +50,12 @@ def test_build_package_only_includes_astrbot_files(tmp_path: Path) -> None:
     assert f"{prefix}core/web_api.py" in names
     assert f"{prefix}.astrbot-plugin/i18n/zh-CN.json" in names
     assert f"{prefix}pages/dashboard/index.html" in names
+    # 分发源码必须随附 AGPL-3.0 文本
+    assert f"{prefix}LICENSE" in names
 
     relative = {name[len(prefix) :] for name in names}
     for excluded in (
         "pyproject.toml",
-        "LICENSE",
         "CHANGELOG.md",
         "requirements-dev.txt",
         "AGENTS.md",
@@ -112,6 +113,30 @@ def test_build_package_requires_metadata(tmp_path: Path) -> None:
     empty.mkdir()
     with pytest.raises(SystemExit):
         package_plugin.build_package(tmp_path / "out", root=empty)
+
+
+def test_metadata_yml_is_not_supported(tmp_path: Path) -> None:
+    """元数据文件名以 metadata.yaml 为准：metadata.yml 既不被接受也不被打包"""
+    only_yml = tmp_path / "only_yml"
+    only_yml.mkdir()
+    (only_yml / "metadata.yml").write_text("name: demo\nversion: v1.0.0\n", encoding="utf-8")
+    (only_yml / "main.py").write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        package_plugin.build_package(tmp_path / "out", root=only_yml)
+
+    both = tmp_path / "both"
+    both.mkdir()
+    (both / "metadata.yaml").write_text("name: demo\nversion: v1.0.0\n", encoding="utf-8")
+    (both / "metadata.yml").write_text("name: demo\nversion: v2.0.0\n", encoding="utf-8")
+    (both / "main.py").write_text("", encoding="utf-8")
+
+    zip_path = package_plugin.build_package(tmp_path / "out", root=both)
+    with zipfile.ZipFile(zip_path) as archive:
+        # 版本号取自 metadata.yaml，且 metadata.yml 不进入包内
+        assert set(archive.namelist()) == {
+            "demo-v1.0.0/metadata.yaml",
+            "demo-v1.0.0/main.py",
+        }
 
 
 def test_main_prints_zip_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """打包 AstrBot 插件 Release zip。
 
-只把 AstrBot 在安装 / 运行 / 展示插件时真正会读取的内容打进 zip：
+只把 AstrBot 在安装 / 运行 / 展示插件时真正会读取的内容打进 zip，
+外加分发插件源码时必须随附的 LICENSE（AGPL-3.0）文本：
 
-| 文件 / 目录           | AstrBot 用途                                     |
+| 文件 / 目录           | 用途                                             |
 | --------------------- | ------------------------------------------------ |
 | metadata.yaml         | 插件元数据（名称 / 版本 / 作者 / 视图列表）      |
 | main.py               | 插件入口模块                                     |
@@ -11,12 +12,13 @@
 | requirements.txt      | 运行时依赖清单（插件管理器据此 pip install）     |
 | logo.png              | WebUI 插件图标                                   |
 | README.md             | 插件详情页展示的说明                             |
+| LICENSE               | AGPL-3.0 文本，AstrBot 不读但要随源码分发        |
 | core/                 | main.py 依赖的插件自身 Python 包                 |
 | .astrbot-plugin/      | WebUI metadata / config 的 i18n 翻译             |
 | pages/（或 views/）   | 插件可视化视图静态产物                           |
 
-仓库里的 tests/、web/、.github/、pyproject.toml、LICENSE、CHANGELOG.md 等
-都不是 AstrBot 读取的内容，不会被打进 zip。
+仓库里的 tests/、web/、.github/、pyproject.toml、CHANGELOG.md 等
+都不会被打进 zip。
 
 用法：
     python scripts/package_plugin.py                 # 输出到 dist/
@@ -39,15 +41,18 @@ __all__ = ["PLUGIN_DIRS", "PLUGIN_FILES", "build_package", "main"]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# AstrBot 会读取的顶层文件，存在才打包
+# 打包的顶层文件，存在才收录。
+# 除 LICENSE 外的条目都是 AstrBot 读取的内容；LICENSE 是分发源码时必须随附的
+# AGPL-3.0 文本，AstrBot 自己不读。
+# 元数据只支持 metadata.yaml（与 build_package 读版本号的文件名保持一致）。
 PLUGIN_FILES: tuple[str, ...] = (
     "metadata.yaml",
-    "metadata.yml",
     "main.py",
     "_conf_schema.json",
     "requirements.txt",
     "logo.png",
     "README.md",
+    "LICENSE",
 )
 # AstrBot 会读取的顶层目录，存在才打包（pages 与 views 互为别名）
 PLUGIN_DIRS: tuple[str, ...] = (
