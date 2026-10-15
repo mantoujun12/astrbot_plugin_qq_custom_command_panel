@@ -9,6 +9,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SCENES, type SceneState } from '../types/dashboard'
+import { MESSAGES } from '../views/settingsForm'
 
 type Dict = Record<string, unknown>
 
@@ -68,6 +69,12 @@ function staticCalls(): { file: string; key: string; fallback: string }[] {
     for (const match of source.matchAll(STATIC_CALL)) {
       calls.push({ file, key: match[1], fallback: match[2] })
     }
+  }
+  // settingsForm.ts 把文案存成 ['key', 'fallback'] 元组后经变量传给 t，
+  // 匹配不到字面量调用；这里显式补上，让它们和静态调用受同等校验
+  const settingsForm = join(SRC_DIR, 'views', 'settingsForm.ts')
+  for (const [key, fallback] of Object.values(MESSAGES)) {
+    calls.push({ file: settingsForm, key, fallback })
   }
   return calls
 }

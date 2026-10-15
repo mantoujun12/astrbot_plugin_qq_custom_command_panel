@@ -21,8 +21,8 @@ export const DEFAULT_LIMITS: ConfigLimits = { name_max: 14, desc_max: 30, items_
 /** 与 `bridge.t(key, fallback)` 同形，便于在纯函数里取文案 */
 export type Translate = (key: string, fallback?: string) => string
 
-/** 校验不通过时返回给页面展示的文案 */
-const MESSAGES = {
+/** 校验不通过时返回给页面展示的文案；key 与 fallback 成对维护，i18n 对账用例会遍历校验 */
+export const MESSAGES = {
   notLoaded: ['pages.dashboard.settings.notLoaded', '配置尚未载入。'],
   commandsTooMany: ['pages.dashboard.settings.commandsTooMany', '指令条目超出上限。'],
   commandNameRequired: ['pages.dashboard.settings.commandNameRequired', '指令名不能为空。'],
