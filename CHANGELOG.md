@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.5.2] - 2026-10-16
+
+### 变更
+
+- 将 `aiohttp` 依赖要求由 `==3.14.3` 放宽为 `>=3.14.3`，避免与 AstrBot 主环境已安装的其他版本产生冲突 (#46)
+
 ## [v0.5.1] - 2026-10-15
 
 ### 新增
@@ -131,6 +137,7 @@
 
 - 首次发布：QQ 官方机器人指令面板同步功能 (#1)
 
+[v0.5.2]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.1...v0.5.2
 [v0.5.1]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.4...v0.5.0
 [v0.4.4]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.4.3...v0.4.4
