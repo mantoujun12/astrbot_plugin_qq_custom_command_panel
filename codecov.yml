@@ -16,7 +16,7 @@ coverage:
   range: "60...100"
   status:
     project:
-      # 整仓库：dashboard 组件层没测，单次改动就能拉动整体 1～4 个点，阈值给宽一点
+      # 整仓库：dashboard 组件层已补测，整体覆盖率趋于稳定，阈值仍留 2% 兜底
       default:
         target: auto
         threshold: 2%
@@ -40,7 +40,7 @@ coverage:
           - unittests
         target: 80%
         threshold: 5%
-      # Vue 组件尚无测试，先只提示不拦门禁
+      # 组件层已补测，patch 仍只提示不拦门禁
       dashboard:
         flags:
           - dashboard
