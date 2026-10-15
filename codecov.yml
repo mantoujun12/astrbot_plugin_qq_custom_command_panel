@@ -26,11 +26,11 @@ coverage:
           - unittests
         target: 85%
         threshold: 2%
-      # 组件层无测试（当前约 22%），按现状下调为绝对下限，不按“不许倒退”卡
+      # 组件层已补测（当前约 99%），这里作绝对下限兜底，硬门在 vitest 的 coverage.thresholds
       dashboard:
         flags:
           - dashboard
-        target: 20%
+        target: 60%
         threshold: 2%
     patch:
       # 关掉整仓库 patch：auto 会拿整体覆盖率（约 68%）当门槛，卡死 dashboard 改动
