@@ -91,35 +91,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ steps.version_check.outputs.version }}"
-          PKG_NAME="astrbot_plugin_qq_custom_command_panel-${VERSION}"
-          BUILD_DIR="build/${PKG_NAME}"
-
-          mkdir -p "${BUILD_DIR}"
-
-          # Copy plugin source files (keep directory structure)
-          cp metadata.yaml "${BUILD_DIR}/"
-          cp main.py "${BUILD_DIR}/"
-          cp README.md "${BUILD_DIR}/" 2>/dev/null || true
-          cp LICENSE "${BUILD_DIR}/" 2>/dev/null || true
-          cp logo.png "${BUILD_DIR}/" 2>/dev/null || true
-          cp _conf_schema.json "${BUILD_DIR}/" 2>/dev/null || true
-          cp requirements.txt "${BUILD_DIR}/" 2>/dev/null || true
-          cp pyproject.toml "${BUILD_DIR}/" 2>/dev/null || true
-          if [ -d core ]; then cp -R core "${BUILD_DIR}/"; fi
-          if [ -d .astrbot-plugin ]; then cp -R .astrbot-plugin "${BUILD_DIR}/"; fi
-          # 可视化视图（pages/ 是 views/ 的兼容别名），AstrBot 直接从插件目录读取
-          if [ -d pages ]; then cp -R pages "${BUILD_DIR}/"; fi
-
-          # Create zip archive (at repo root so softprops action can find it easily)
-          ZIP_FILE="${PKG_NAME}.zip"
-          cd build
-          zip -r "../${ZIP_FILE}" "${PKG_NAME}" > /dev/null
-          cd ..
-          rm -rf build
+          # 打包收敛到 scripts/package_plugin.py，只收录 AstrBot 会读取的文件
+          # （metadata.yaml / main.py / core / pages / .astrbot-plugin 等），
+          # 避免把 tests/、web/、pyproject.toml 等无关内容带进发布包
+          ZIP_FILE=$(python3 scripts/package_plugin.py)
 
           echo "zip_path=${ZIP_FILE}" >> "$GITHUB_OUTPUT"
-          echo "zip_name=${ZIP_FILE}" >> "$GITHUB_OUTPUT"
           echo "::notice::Created plugin package: ${ZIP_FILE}"
 
       - name: Push version tag
@@ -151,6 +128,6 @@ jobs:
           # 资源没匹配上时直接失败，免得发出一个没有附件的 release
           fail_on_unmatched_files: true
           files: |
-            ${{ steps.build_package.outputs.zip_name }}
+            ${{ steps.build_package.outputs.zip_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
