@@ -66,6 +66,7 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 9. 视图接口固定为 `status`(GET) / `config`(GET+POST) / `sync`(POST) / `sync/events`(GET, SSE)，统一在 `core/web_api.py` 的 `WebApiBundle` 里注册，路径前缀是插件名。
 10. 写回配置只走 `POST config` → `AstrBotConfig.update()` + `save_config_async()`；`GET config` 只回 secret 掩码，明文 secret 不允许出现在响应、日志或前端里，前端提交时留空表示沿用原值。
 11. 同步进度用 SSE：后端从 `SyncRunner.stream(since)` 产事件（`data: {...}\n\n`），前端用 `bridge.subscribeSSE` 订阅、收到 `finish` 后自行退订；宿主不会通知流被关闭。
+12. 视图代码改动要带同目录同名 `*.test.ts`：挂载走 `src/test/helpers.ts` 的 `mountView`，断言只看文案/自有 class/属性/emit，不要断言 Vuetify 内部结构；`pnpm test:coverage` 不得低于 `vitest.config.ts` 的 `coverage.thresholds`。
 
 #### 代码风格
 

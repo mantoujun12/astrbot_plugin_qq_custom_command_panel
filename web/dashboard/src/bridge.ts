@@ -55,8 +55,16 @@ declare global {
   }
 }
 
-/** 读取 bridge；不在 AstrBot 里（或 SDK 还没注入）时返回 null */
+/**
+ * 读取 bridge；不在 AstrBot 里（或 SDK 还没注入）时返回 null。
+ *
+ * `waitForBridge` 的轮询可能延续到页面已经不存在之后（例如宿主卸载视图、单测
+ * 环境被拆除），那时连 window 都没有，直接当作「没有 bridge」处理。
+ */
 export function getBridge(): PluginViewBridge | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
   return window.AstrBotPluginView ?? window.AstrBotPluginPage ?? null
 }
 

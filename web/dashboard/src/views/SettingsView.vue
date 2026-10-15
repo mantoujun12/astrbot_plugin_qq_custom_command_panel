@@ -12,13 +12,15 @@ import {
 import { fetchConfig, saveConfig } from '../api/dashboard'
 import { useBridge } from '../composables/useBridge'
 import { useSyncRun } from '../composables/useSyncRun'
-import type {
-  ConfigCommand,
-  ConfigPlatformPayload,
-  PluginConfigPayload,
-  PluginConfigResponse,
-  Scene,
-} from '../types/dashboard'
+import {
+  DEFAULT_LIMITS,
+  indexSavedPlatforms,
+  newCommand,
+  newPlatform,
+  toForm,
+  validateForm,
+} from './settingsForm'
+import type { PluginConfigPayload, PluginConfigResponse, Scene } from '../types/dashboard'
 
 const { t, ready, hasBackend } = useBridge()
 const router = useRouter()
@@ -53,31 +55,13 @@ const platformTypeItems = PLATFORM_TYPES.map((value) => ({
   value,
 }))
 
-const limits = computed(
-  () => config.value?.limits ?? { name_max: 14, desc_max: 30, items_max: 20 },
-)
+const limits = computed(() => config.value?.limits ?? DEFAULT_LIMITS)
 
 /** 已保存平台按 appid 建索引：新增/删除行会改变下标，占位与提示要按 appid 跟随当前行 */
-const savedPlatforms = computed(
-  () => new Map((config.value?.qq_platforms ?? []).map((platform) => [platform.appid, platform])),
-)
+const savedPlatforms = computed(() => indexSavedPlatforms(config.value?.qq_platforms))
 
 function savedPlatform(appid: string) {
   return savedPlatforms.value.get(appid.trim())
-}
-
-function toForm(source: PluginConfigResponse): PluginConfigPayload {
-  return {
-    language: source.language,
-    scenes: [...source.scenes],
-    qq_platforms: source.qq_platforms.map((platform) => ({
-      name: platform.name,
-      appid: platform.appid,
-      platform: platform.platform,
-      secret: '',
-    })),
-    selected_commands: source.selected_commands.map((command) => ({ ...command })),
-  }
 }
 
 async function load(): Promise<void> {
@@ -107,12 +91,7 @@ watch(
 )
 
 function addPlatform(): void {
-  form.value?.qq_platforms.push({
-    name: '',
-    appid: '',
-    platform: 'qq_official',
-    secret: '',
-  })
+  form.value?.qq_platforms.push(newPlatform())
 }
 
 function removePlatform(index: number): void {
@@ -123,78 +102,32 @@ function addCommand(): void {
   if (!form.value || form.value.selected_commands.length >= limits.value.items_max) {
     return
   }
-  form.value.selected_commands.push({ name: '', desc: '' })
+  form.value.selected_commands.push(newCommand())
 }
 
 function removeCommand(index: number): void {
   form.value?.selected_commands.splice(index, 1)
 }
 
-/** 与后端 normalize_config_payload 对齐的本地校验，尽早给出提示 */
-function validate(): string {
-  const payload = form.value
-  if (!payload) {
-    return t('pages.dashboard.settings.notLoaded', '配置尚未载入。')
-  }
-  if (payload.selected_commands.length > limits.value.items_max) {
-    return t('pages.dashboard.settings.commandsTooMany', '指令条目超出上限。')
-  }
-  const commands: ConfigCommand[] = []
-  for (const command of payload.selected_commands) {
-    if (!command.name.trim()) {
-      return t('pages.dashboard.settings.commandNameRequired', '指令名不能为空。')
-    }
-    if (command.name.length > limits.value.name_max) {
-      return t('pages.dashboard.settings.commandNameTooLong', '指令名超出长度上限。')
-    }
-    if (command.desc.length > limits.value.desc_max) {
-      return t('pages.dashboard.settings.commandDescTooLong', '指令描述超出长度上限。')
-    }
-    commands.push({ name: command.name.trim(), desc: command.desc.trim() })
-  }
-  const platforms: ConfigPlatformPayload[] = []
-  const savedSecret = new Map(
-    (config.value?.qq_platforms ?? []).map((platform) => [platform.appid, platform]),
-  )
-  for (const platform of payload.qq_platforms) {
-    const appid = platform.appid.trim()
-    if (!appid) {
-      return t('pages.dashboard.settings.platformAppidRequired', '平台 appid 不能为空。')
-    }
-    if (!platform.secret.trim() && !savedSecret.get(appid)?.secret_set) {
-      return t(
-        'pages.dashboard.settings.platformSecretRequired',
-        '新增平台必须填写 ClientSecret。',
-      )
-    }
-    platforms.push({
-      name: platform.name.trim(),
-      appid,
-      platform: platform.platform,
-      secret: platform.secret.trim(),
-    })
-  }
-  payload.selected_commands = commands
-  payload.qq_platforms = platforms
-  return ''
-}
-
+/** 校验交给 settingsForm.ts 的纯函数，这里只把结果映射到页面状态 */
 async function save(options: { sync?: boolean } = {}): Promise<void> {
-  if (!form.value || !hasBackend.value) {
+  if (!hasBackend.value) {
     return
   }
-  const problem = validate()
-  if (problem) {
-    error.value = problem
+  const checked = validateForm(form.value, config.value?.qq_platforms ?? [], limits.value, t)
+  if (!checked.ok) {
+    error.value = checked.reason
     notice.value = ''
     return
   }
+  // 用规范化后的载荷提交，页面上的输入框同步显示 trim 后的值
+  form.value = checked.payload
 
   saving.value = true
   error.value = ''
   notice.value = ''
   try {
-    const next = await saveConfig(form.value)
+    const next = await saveConfig(checked.payload)
     config.value = next
     form.value = toForm(next)
     notice.value = t('pages.dashboard.settings.saved', '配置已保存并生效。')
