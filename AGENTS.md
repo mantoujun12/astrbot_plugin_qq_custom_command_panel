@@ -33,6 +33,12 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中配�
 
 `pre-commit run --all-files`
 
+升级版本号（metadata.yaml 是唯一版本源，`core/paths.py` 与 `web/dashboard/package.json` 必须同步，否则 release.yml 会拒绝发布）：
+
+`python scripts/bump_version.py`
+
+不带参数是交互式选择 patch / minor / major / 自定义；也可直接 `python scripts/bump_version.py minor` 或 `v0.6.0`，另有 `--dry-run` 预览、`--check` 只校验三处是否一致。
+
 插件视图前端（在 `web/dashboard/` 下）：
 
 `pnpm install` / `pnpm dev` / `pnpm build` / `pnpm test` / `pnpm test:coverage` / `pnpm test:report` / `pnpm test:codecov`
