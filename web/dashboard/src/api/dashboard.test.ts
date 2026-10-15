@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import { fetchConfig, fetchStatus, saveConfig } from './dashboard'
 import { MOCK_CONFIG, MOCK_STATUS } from './mock'
 import type { PluginViewBridge } from '../bridge'
@@ -104,6 +105,19 @@ describe('saveConfig', () => {
 
     expect(result).toBe(MOCK_CONFIG)
     expect(bridge.apiPost).toHaveBeenCalledWith('config', payload)
+  })
+
+  it('snapshots a reactive payload into cloneable data before posting', async () => {
+    const bridge = createBridge()
+    window.AstrBotPluginView = bridge
+    vi.mocked(bridge.apiPost).mockResolvedValue(MOCK_CONFIG)
+
+    await saveConfig(reactive(configPayload()))
+
+    const [, body] = vi.mocked(bridge.apiPost).mock.calls[0]
+    // 视图传进来的是 Vue 的 Proxy，postMessage 的结构化克隆无法处理
+    expect(() => structuredClone(body)).not.toThrow()
+    expect(body).toEqual(configPayload())
   })
 
   it('propagates validation errors from the backend', async () => {
