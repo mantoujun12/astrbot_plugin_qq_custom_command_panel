@@ -42,6 +42,7 @@ describe('getBridge', () => {
 
     expect(getBridge()).toBe(legacy)
   })
+
 })
 
 describe('waitForBridge', () => {
