@@ -61,6 +61,9 @@ const importLoading = ref(false)
 const importing = ref(false)
 const importError = ref('')
 const legacyAppidsText = ref('')
+const createDialog = ref(false)
+const createForm = ref<RobotConfigForm>(emptyRobotDraft())
+const createError = ref('')
 
 let draftSeq = 0
 
@@ -178,19 +181,44 @@ function selectRobot(key: string): void {
   selectedKey.value = key
 }
 
-function addRobot(): void {
-  if (!hasBackend.value || mockMode.value) return
+/** 新增机器人走弹窗：先填基础信息，创建后再去配各场景的指令条目。
+    mock 下也允许打开与创建——这里只动本地草稿，不落库，可以放心预览。 */
+function openCreate(): void {
+  createForm.value = emptyRobotDraft()
+  createError.value = ''
+  createDialog.value = true
+}
+
+function closeCreate(): void {
+  createDialog.value = false
+  createError.value = ''
+}
+
+function confirmCreate(): void {
+  const checked = validateRobotForm(createForm.value, limits.value, t)
+  if (!checked.ok) {
+    createError.value = checked.reason
+    return
+  }
+  const secret = createForm.value.secret.trim()
   const draft: RobotDraft = {
     key: `new:${++draftSeq}`,
-    form: emptyRobotDraft(),
+    form: {
+      ...emptyRobotDraft(),
+      name: createForm.value.name.trim(),
+      appid: createForm.value.appid.trim(),
+      platform: createForm.value.platform,
+      secret,
+    },
     secretMasked: '',
-    secretSet: false,
+    secretSet: Boolean(secret),
   }
   drafts.value.push(draft)
   selectedKey.value = draft.key
   delete robotErrors.value[draft.key]
   error.value = ''
   notice.value = ''
+  closeCreate()
 }
 
 function removeSelectedRobot(): void {
@@ -327,7 +355,8 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
 }
 
 async function openImport(): Promise<void> {
-  if (!hasBackend.value) return
+  // mock 下也允许打开：fetchConfig 会回退到 mock 数据，可以先看流程；
+  // 真正的导入动作仍需要后端，由弹窗里的按钮单独把关
   importPanel.value = true
   importError.value = ''
   importLoading.value = true
@@ -403,7 +432,7 @@ async function importLegacy(): Promise<void> {
 <template>
   <v-container fluid class="qc-page pa-4 pa-md-6">
     <div class="qc-header">
-      <div>
+      <div class="qc-header-main">
         <h1 class="qc-title">{{ t('pages.dashboard.robots.title', '机器人') }}</h1>
         <p class="qc-subtitle">
           {{
@@ -429,7 +458,7 @@ async function importLegacy(): Promise<void> {
           variant="tonal"
           color="primary"
           :prepend-icon="mdiImport"
-          :disabled="!hasBackend || saving || importing"
+          :disabled="saving || importing"
           @click="openImport"
         >
           {{ t('pages.dashboard.robots.importLegacy', '从兼容配置导入') }}
@@ -438,13 +467,13 @@ async function importLegacy(): Promise<void> {
           variant="tonal"
           color="primary"
           :prepend-icon="mdiPlus"
-          :disabled="!hasBackend || mockMode || saving"
-          @click="addRobot"
+          :disabled="saving"
+          @click="openCreate"
         >
           {{ t('pages.dashboard.robots.addRobot', '新增机器人') }}
         </v-btn>
         <v-btn
-          variant="flat"
+          variant="tonal"
           color="primary"
           :prepend-icon="mdiContentSave"
           :loading="saving"
@@ -454,7 +483,7 @@ async function importLegacy(): Promise<void> {
           {{ t('pages.dashboard.robots.save', '保存') }}
         </v-btn>
         <v-btn
-          variant="flat"
+          variant="tonal"
           color="primary"
           :prepend-icon="mdiSync"
           :loading="saving"
@@ -490,53 +519,126 @@ async function importLegacy(): Promise<void> {
       {{ notice }}
     </v-alert>
 
-    <v-card v-if="importPanel" class="qc-card qc-import-panel mb-4" variant="outlined">
-      <v-card-item class="px-5 pt-5">
-        <v-card-title class="text-body-large">
-          {{ t('pages.dashboard.robots.importTitle', '从兼容配置导入') }}
-        </v-card-title>
-        <v-card-subtitle>
-          {{
-            t(
-              'pages.dashboard.robots.importSubtitle',
-              '选择或填写要导入的旧版平台 AppID，每个 AppID 单独一行或使用逗号分隔。',
-            )
-          }}
-        </v-card-subtitle>
-      </v-card-item>
-      <v-card-text class="px-5 pt-2">
-        <v-textarea
-          v-model="legacyAppidsText"
-          class="qc-import-appids"
-          data-field="legacy-appids"
-          :disabled="importing"
-          :loading="importLoading"
-          :label="t('pages.dashboard.robots.importAppids', 'AppID 列表')"
-          variant="outlined"
-          density="comfortable"
-          rows="4"
-          hide-details
-        />
-        <v-alert v-if="importError" class="mt-3" type="error" variant="tonal" density="compact">
-          {{ importError }}
-        </v-alert>
-      </v-card-text>
-      <v-card-actions class="px-5 pb-5">
-        <v-spacer />
-        <v-btn variant="text" :disabled="importing" @click="closeImport">
-          {{ t('pages.dashboard.robots.cancel', '取消') }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          :loading="importing"
-          :disabled="!hasBackend || importLoading"
-          @click="importLegacy"
-        >
-          {{ t('pages.dashboard.robots.importConfirm', '导入') }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
+    <v-dialog v-model="importPanel" max-width="560">
+      <v-card class="qc-import-panel" variant="flat" rounded="lg">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">
+            {{ t('pages.dashboard.robots.importTitle', '从兼容配置导入') }}
+          </v-card-title>
+          <v-card-subtitle>
+            {{
+              t(
+                'pages.dashboard.robots.importSubtitle',
+                '选择或填写要导入的旧版平台 AppID，每个 AppID 单独一行或使用逗号分隔。',
+              )
+            }}
+          </v-card-subtitle>
+        </v-card-item>
+        <v-card-text class="px-5 pt-2">
+          <v-textarea
+            v-model="legacyAppidsText"
+            class="qc-import-appids"
+            data-field="legacy-appids"
+            :disabled="importing"
+            :loading="importLoading"
+            :label="t('pages.dashboard.robots.importAppids', 'AppID 列表')"
+            variant="outlined"
+            density="compact"
+            rows="4"
+            hide-details
+          />
+          <v-alert v-if="importError" class="mt-3" type="error" variant="tonal" density="compact">
+            {{ importError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="importing" @click="closeImport">
+            {{ t('pages.dashboard.robots.cancel', '取消') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="importing"
+            :disabled="!hasBackend || importLoading"
+            @click="importLegacy"
+          >
+            {{ t('pages.dashboard.robots.importConfirm', '导入') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="createDialog" max-width="560">
+      <v-card class="qc-robot-create" variant="flat" rounded="lg">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">
+            {{ t('pages.dashboard.robots.addRobot', '新增机器人') }}
+          </v-card-title>
+          <v-card-subtitle>
+            {{
+              t(
+                'pages.dashboard.robots.createSubtitle',
+                '先填名称与平台凭证；创建后再去配置各场景的指令条目。',
+              )
+            }}
+          </v-card-subtitle>
+        </v-card-item>
+        <v-card-text class="px-5 pt-2">
+          <v-text-field
+            v-model="createForm.name"
+            class="mb-3"
+            data-field="create-name"
+            :maxlength="limits.name_max"
+            :counter="limits.name_max"
+            :label="t('pages.dashboard.robots.name', '机器人名称')"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+          <v-text-field
+            v-model="createForm.appid"
+            class="mb-3"
+            data-field="create-appid"
+            label="AppID"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+          <v-text-field
+            v-model="createForm.secret"
+            class="mb-3"
+            data-field="create-secret"
+            type="password"
+            :label="t('pages.dashboard.robots.secret', 'ClientSecret')"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+          <v-select
+            v-model="createForm.platform"
+            data-field="create-platform"
+            :items="platformTypeItems"
+            :label="t('pages.dashboard.robots.platformType', '平台类型')"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+          <v-alert v-if="createError" class="mt-3" type="error" variant="tonal" density="compact">
+            {{ createError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-5">
+          <v-spacer />
+          <v-btn variant="text" @click="closeCreate">
+            {{ t('pages.dashboard.robots.cancel', '取消') }}
+          </v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmCreate">
+            {{ t('pages.dashboard.robots.createConfirm', '创建') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-row class="qc-robots-layout">
       <v-col cols="12" md="4" lg="3">
@@ -637,7 +739,7 @@ async function importLegacy(): Promise<void> {
                     :counter="limits.name_max"
                     :label="t('pages.dashboard.robots.name', '机器人名称')"
                     variant="outlined"
-                    density="comfortable"
+                    density="compact"
                     hide-details
                   />
                 </v-col>
@@ -648,7 +750,7 @@ async function importLegacy(): Promise<void> {
                     :disabled="!editable"
                     :label="t('pages.dashboard.robots.appid', 'AppID')"
                     variant="outlined"
-                    density="comfortable"
+                    density="compact"
                     hide-details
                   />
                 </v-col>
@@ -663,7 +765,7 @@ async function importLegacy(): Promise<void> {
                     persistent-hint
                     :label="t('pages.dashboard.robots.secret', 'ClientSecret')"
                     variant="outlined"
-                    density="comfortable"
+                    density="compact"
                   />
                 </v-col>
                 <v-col cols="12" md="4">
@@ -674,7 +776,7 @@ async function importLegacy(): Promise<void> {
                     :items="platformTypeItems"
                     :label="t('pages.dashboard.robots.platformType', '平台类型')"
                     variant="outlined"
-                    density="comfortable"
+                    density="compact"
                     hide-details
                   />
                 </v-col>
@@ -746,7 +848,7 @@ async function importLegacy(): Promise<void> {
                           :counter="limits.name_max"
                           :label="t('pages.dashboard.robots.scene.commandName', '指令名')"
                           variant="outlined"
-                          density="comfortable"
+                          density="compact"
                           hide-details
                         />
                       </v-col>
@@ -759,13 +861,14 @@ async function importLegacy(): Promise<void> {
                           :counter="limits.desc_max"
                           :label="t('pages.dashboard.robots.scene.commandDesc', '指令描述')"
                           variant="outlined"
-                          density="comfortable"
+                          density="compact"
                           hide-details
                         />
                       </v-col>
                       <v-col cols="12" md="1" class="d-flex align-center justify-end">
                         <v-btn
                           icon
+                          size="small"
                           variant="text"
                           color="error"
                           data-action="remove-command"

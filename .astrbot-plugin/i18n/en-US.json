@@ -197,6 +197,8 @@
         "reload": "Reload",
         "importLegacy": "Import from compatibility",
         "addRobot": "Add robot",
+        "createSubtitle": "Fill in the name and platform credentials first; configure each scene's command entries after creating it.",
+        "createConfirm": "Create",
         "save": "Save",
         "saveAndSync": "Save and sync",
         "saved": "Robot configuration saved.",

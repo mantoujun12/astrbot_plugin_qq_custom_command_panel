@@ -197,6 +197,8 @@
         "reload": "重新载入",
         "importLegacy": "从兼容配置导入",
         "addRobot": "新增机器人",
+        "createSubtitle": "先填名称与平台凭证；创建后再去配置各场景的指令条目。",
+        "createConfirm": "创建",
         "save": "保存",
         "saveAndSync": "保存并同步",
         "saved": "机器人配置已保存。",
