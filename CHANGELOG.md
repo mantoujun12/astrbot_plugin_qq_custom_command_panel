@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复从可视化视图保存配置后，AstrBot 插件配置页的 `qq_platforms` / `selected_commands` 报「找不到对应模板，请删除后重新添加。」的问题：写回 `template_list` 字段时补上 AstrBot 用于匹配模板的 `__template_key`（本插件为 `qq_platform` / `command`），提交项缺失或携带非法 key 时一律纠正为插件声明的模板 key；旧版本写坏的配置在下一次保存时会被补齐 (#47)
+
 ## [v0.5.2] - 2026-10-16
 
 ### 变更

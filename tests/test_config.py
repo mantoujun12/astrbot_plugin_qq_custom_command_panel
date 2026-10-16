@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from core.config import (
+    COMMAND_TEMPLATE_KEY,
     DEFAULT_SCENES,
     PANEL_ITEM_DESC_MAX,
     PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
+    QQ_PLATFORM_TEMPLATE_KEY,
     SCENES,
     export_config,
     get_configured_platforms,
@@ -19,6 +23,8 @@ from core.config import (
     mask_secret,
     normalize_config_payload,
 )
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------------------
 # get_enabled_scenes
@@ -268,13 +274,16 @@ def test_normalize_config_payload_accepts_full_payload() -> None:
     assert values["scenes"] == ["group"]
     assert values["qq_platforms"] == [
         {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
             "name": "pf2",
             "appid": "9999999999",
             "secret": "new-secret",
             "platform": "qq_official_webhook",
         }
     ]
-    assert values["selected_commands"] == [{"name": "ping", "desc": "Pong"}]
+    assert values["selected_commands"] == [
+        {"__template_key": COMMAND_TEMPLATE_KEY, "name": "ping", "desc": "Pong"}
+    ]
 
 
 def test_normalize_config_payload_keeps_existing_secret_when_blank() -> None:
@@ -291,6 +300,7 @@ def test_normalize_config_payload_keeps_existing_secret_when_blank() -> None:
     assert errors == []
     assert values["qq_platforms"] == [
         {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
             "name": "renamed",
             "appid": "1023456789",
             "secret": "old-secret",
@@ -300,7 +310,9 @@ def test_normalize_config_payload_keeps_existing_secret_when_blank() -> None:
     # 未提交的字段沿用旧配置
     assert values["language"] == "zh-CN"
     assert values["scenes"] == ["c2c", "group"]
-    assert values["selected_commands"] == [{"name": "help", "desc": "说明"}]
+    assert values["selected_commands"] == [
+        {"__template_key": COMMAND_TEMPLATE_KEY, "name": "help", "desc": "说明"}
+    ]
 
 
 def test_normalize_config_payload_requires_secret_for_new_platform() -> None:
@@ -316,6 +328,76 @@ def test_normalize_config_payload_requires_secret_for_new_platform() -> None:
     assert values["qq_platforms"] == []
     assert len(errors) == 1
     assert "clientSecret" in errors[0]
+
+
+def test_normalize_config_payload_writes_template_key() -> None:
+    """写回的 template_list 条目必须带 __template_key，否则宿主配置页报找不到模板
+
+    这里断言完整的条目列表：只检查保留下来的条目是不够的，若规范化器把带伪造
+    模板键的条目整条丢掉，断言同样会通过，等于放走了真正的 bug。
+    """
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "qq_platforms": [
+                # 提交项自带非法 key
+                {
+                    "__template_key": "bogus",
+                    "name": "pf2",
+                    "appid": "9999999999",
+                    "secret": "s",
+                    "platform": "qq_official",
+                },
+                # 提交项完全不带 key
+                {"name": "pf3", "appid": "8888888888", "secret": "s", "platform": "qq_official"},
+            ],
+            "selected_commands": [{"name": "ping", "desc": "Pong"}],
+        },
+    )
+
+    assert errors == []
+    # 两条都必须保留，且数据原样、模板键被纠正
+    assert values["qq_platforms"] == [
+        {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
+            "name": "pf2",
+            "appid": "9999999999",
+            "secret": "s",
+            "platform": "qq_official",
+        },
+        {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
+            "name": "pf3",
+            "appid": "8888888888",
+            "secret": "s",
+            "platform": "qq_official",
+        },
+    ]
+    assert values["selected_commands"] == [
+        {"__template_key": COMMAND_TEMPLATE_KEY, "name": "ping", "desc": "Pong"}
+    ]
+
+
+def test_normalize_config_payload_backfills_template_key_for_untouched_fields() -> None:
+    """旧版本写坏的配置（缺 __template_key）在局部提交时会被补齐"""
+    broken = make_existing()
+    broken["qq_platforms"] = [{"name": "pf1", "appid": "1023456789", "secret": "s"}]
+    broken["selected_commands"] = [{"name": "help", "desc": "说明"}]
+
+    values, errors = normalize_config_payload(broken, {"language": "en-US"})
+
+    assert errors == []
+    assert values["qq_platforms"] == [
+        {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
+            "name": "pf1",
+            "appid": "1023456789",
+            "secret": "s",
+        }
+    ]
+    assert values["selected_commands"] == [
+        {"__template_key": COMMAND_TEMPLATE_KEY, "name": "help", "desc": "说明"}
+    ]
 
 
 def test_normalize_config_payload_rejects_invalid_language() -> None:
@@ -387,3 +469,10 @@ def test_panel_limits_values() -> None:
     assert PANEL_MAX_ITEMS == 20
     assert DEFAULT_SCENES == ["c2c", "group"]
     assert SCENES == ("c2c", "group", "channel", "dm")
+
+
+def test_template_keys_match_conf_schema() -> None:
+    """写回用的模板 key 必须和 _conf_schema.json 的 templates 对上"""
+    schema = json.loads((REPO_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+    assert QQ_PLATFORM_TEMPLATE_KEY in schema["qq_platforms"]["templates"]
+    assert COMMAND_TEMPLATE_KEY in schema["selected_commands"]["templates"]
