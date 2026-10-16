@@ -17,8 +17,11 @@ import pytest
 from core.config import PANEL_MAX_ITEMS, SCENES
 from core.panel_syncer import PanelSyncer
 from core.paths import PLUGIN_NAME, PLUGIN_VERSION
+from core.robot_config import RobotConfigError, load_robot_config
 from core.web_api import (
     CONFIG_ROUTE_SUFFIX,
+    ROBOTS_IMPORT_ROUTE_SUFFIX,
+    ROBOTS_ROUTE_SUFFIX,
     STATUS_ROUTE_SUFFIX,
     SYNC_EVENTS_ROUTE_SUFFIX,
     SYNC_ROUTE_SUFFIX,
@@ -71,7 +74,7 @@ def make_syncer(config: dict[str, Any] | None = None) -> PanelSyncer:
 
 def stub_clients(syncer: PanelSyncer, clients: dict[str, FakeQQClient]) -> PanelSyncer:
     """把 build_clients 替换为固定返回值，避免真实创建 QQClient"""
-    syncer.build_clients = lambda config=None: clients  # type: ignore[method-assign]
+    syncer.build_clients = lambda config=None, **kwargs: clients  # type: ignore[method-assign]
     return syncer
 
 
@@ -83,6 +86,10 @@ def schema_config(**overrides: Any) -> dict[str, Any]:
     }
     config.update(overrides)
     return config
+
+
+async def _async_status_payload() -> dict[str, Any]:
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +282,7 @@ async def test_build_status_uses_current_config_for_clients() -> None:
     fake = FakeQQClient(existing={})
     captured: dict[str, Any] = {}
 
-    def build_clients(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    def build_clients(config: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
         captured["config"] = config
         return {"new": fake}
 
@@ -430,6 +437,23 @@ async def test_page_status_reports_not_ready() -> None:
 
     assert response["__error__"] is True
     assert response["status_code"] == 503
+
+
+@pytest.mark.asyncio
+async def test_page_status_reports_corrupt_robot_config(tmp_path: Path) -> None:
+    (tmp_path / "robot_config.json").write_text("{broken", encoding="utf-8")
+    syncer = make_syncer({})
+    bundle = WebApiBundle(
+        lambda: syncer,
+        lambda: {},
+        robot_config_dir=tmp_path,
+    )
+
+    response = await bundle.page_status()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 500
+    assert "JSON" in response["message"]
 
 
 @pytest.mark.asyncio
@@ -593,6 +617,294 @@ async def test_page_config_save_reports_save_failure() -> None:
 
 
 # ---------------------------------------------------------------------------
+# WebApiBundle：新版机器人配置
+# ---------------------------------------------------------------------------
+
+
+def make_robot_bundle(
+    config: dict[str, Any],
+    robot_dir: Path | None,
+    *,
+    legacy_config: dict[str, Any] | None = None,
+) -> WebApiBundle:
+    """构造带新版配置目录的 bundle，旧配置默认复用传入的兼容配置。"""
+    return WebApiBundle(
+        lambda: None,
+        lambda: config,
+        robot_config_dir=robot_dir,
+        get_legacy_config=lambda: legacy_config if legacy_config is not None else config,
+    )
+
+
+def scene_config(
+    *, enabled: bool = False, items: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """构造一个完整的新版场景配置。"""
+    return {"enabled": enabled, "items": list(items or [])}
+
+
+def robot_payload(
+    *,
+    appid: str = "1023456789",
+    name: str = "主机器人",
+    secret: str = "plain-secret-value",
+    platform: str = "qq_official",
+    scenes: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """构造一台新版机器人提交项。"""
+    return {
+        "id": "",
+        "name": name,
+        "appid": appid,
+        "platform": platform,
+        "secret": secret,
+        "scenes": scenes
+        or {
+            "c2c": scene_config(enabled=True, items=[{"name": "help", "desc": "帮助"}]),
+            "group": scene_config(),
+            "channel": scene_config(),
+            "dm": scene_config(),
+        },
+    }
+
+
+def assert_robot_export(
+    data: dict[str, Any],
+    count: int = 1,
+    version: int = 1,
+) -> None:
+    """断言新版接口响应符合前端 RobotConfigResponse 契约。"""
+    assert data["version"] == version
+    assert data["available_scenes"] == list(SCENES)
+    assert data["limits"] == {
+        "name_max": 14,
+        "desc_max": 30,
+        "items_max": PANEL_MAX_ITEMS,
+    }
+    assert len(data["robots"]) == count
+
+
+@pytest.mark.asyncio
+async def test_page_robots_get_empty_config(tmp_path: Path) -> None:
+    bundle = make_robot_bundle({}, tmp_path)
+
+    response = await bundle.page_robots_get()
+
+    assert response["__json__"] is True
+    assert_robot_export(response["data"], count=0)
+
+
+@pytest.mark.asyncio
+async def test_page_robots_get_reports_corrupt_config(tmp_path: Path) -> None:
+    (tmp_path / "robot_config.json").write_text("{broken", encoding="utf-8")
+    bundle = make_robot_bundle({}, tmp_path)
+
+    response = await bundle.page_robots_get()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 500
+    assert "JSON" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_creates_robot_with_masked_secret(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+
+    response = await bundle.page_robots_save()
+
+    assert response["__json__"] is True
+    assert_robot_export(response["data"], version=2)
+    robot = response["data"]["robots"][0]
+    assert robot["id"]
+    assert robot["secret_set"] is True
+    assert robot["secret_masked"].startswith("pla")
+    assert "plain-secret-value" not in str(response["data"])
+    stored = load_robot_config(tmp_path)
+    assert stored["robots"][0]["secret"] == "plain-secret-value"
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_invalidates_status_cache(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    await bundle.cache.get(_async_status_payload)
+    assert bundle.cache._is_fresh()
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+
+    response = await bundle.page_robots_save()
+
+    assert response["__json__"] is True
+    assert not bundle.cache._is_fresh()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_kind", ["scene", "duplicate"])
+async def test_page_robots_save_rejects_invalid_payload(
+    tmp_path: Path,
+    invalid_kind: str,
+) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    if invalid_kind == "scene":
+        first = robot_payload(
+            scenes={
+                "c2c": scene_config(enabled=True, items=[]),
+                "group": scene_config(),
+                "channel": scene_config(),
+                "dm": scene_config(),
+            }
+        )
+        payload = {"version": 1, "robots": [first]}
+        expected = "至少需要 1 条"
+    else:
+        payload = {
+            "version": 1,
+            "robots": [robot_payload(), robot_payload(name="重复")],
+        }
+        expected = "重复"
+    request.payload = payload
+
+    response = await bundle.page_robots_save()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 400
+    assert expected in response["message"]
+    assert load_robot_config(tmp_path)["robots"] == []
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_keeps_secret_when_blank(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+    await bundle.page_robots_save()
+
+    request.payload = {"version": 2, "robots": [robot_payload(secret="")]}
+    response = await bundle.page_robots_save()
+
+    assert response["__json__"] is True
+    assert response["data"]["version"] == 3
+    stored = load_robot_config(tmp_path)
+    assert stored["robots"][0]["secret"] == "plain-secret-value"
+    assert response["data"]["robots"][0]["secret_set"] is True
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_rejects_stale_version(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload(name="初次保存")]}
+    first = await bundle.page_robots_save()
+    assert first["data"]["version"] == 2
+
+    request.payload = {"version": 1, "robots": [robot_payload(name="旧页面覆盖")]}
+    stale = await bundle.page_robots_save()
+
+    assert stale["__error__"] is True
+    assert stale["status_code"] == 409
+    assert "重新载入" in stale["message"]
+    assert load_robot_config(tmp_path)["robots"][0]["name"] == "初次保存"
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_legacy_copies_secret_without_response_leak(
+    tmp_path: Path,
+) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    request.payload = {"appid": "1023456789", "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["__json__"] is True
+    assert_robot_export(response["data"], version=2)
+    assert "legacy-secret" not in str(response["data"])
+    stored = load_robot_config(tmp_path)
+    assert stored["robots"][0]["secret"] == "legacy-secret"
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_invalidates_status_cache(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    await bundle.cache.get(_async_status_payload)
+    assert bundle.cache._is_fresh()
+    request.payload = {"appid": "1023456789", "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["__json__"] is True
+    assert not bundle.cache._is_fresh()
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_legacy_rejects_duplicate_appid(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+    saved = await bundle.page_robots_save()
+
+    request.payload = {"appids": ["1023456789"], "version": saved["data"]["version"]}
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 400
+    assert "已存在" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_unavailable_without_config_dir() -> None:
+    from astrbot.api.web import request
+
+    bundle = WebApiBundle(lambda: None, lambda: {})
+    request.payload = {"version": 1, "robots": []}
+
+    get_response = await bundle.page_robots_get()
+    save_response = await bundle.page_robots_save()
+    import_response = await bundle.page_robots_import_legacy()
+
+    for response in (get_response, save_response, import_response):
+        assert response["__error__"] is True
+        assert response["status_code"] == 503
+        assert "尚未启用" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_reports_explicit_loader_errors(tmp_path: Path, monkeypatch: Any) -> None:
+    bundle = make_robot_bundle({}, tmp_path)
+
+    def fail(_data_dir: Path) -> dict[str, Any]:
+        raise RobotConfigError("配置损坏")
+
+    monkeypatch.setattr("core.web_api.load_robot_config", fail)
+
+    response = await bundle.page_robots_get()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 500
+    assert "配置损坏" in response["message"]
+
+
+# ---------------------------------------------------------------------------
 # WebApiBundle：同步入口
 # ---------------------------------------------------------------------------
 
@@ -717,6 +1029,9 @@ def test_register_web_apis_registers_all_routes() -> None:
         (f"/{PLUGIN_NAME}/{STATUS_ROUTE_SUFFIX}", ("GET",)),
         (f"/{PLUGIN_NAME}/{CONFIG_ROUTE_SUFFIX}", ("GET",)),
         (f"/{PLUGIN_NAME}/{CONFIG_ROUTE_SUFFIX}", ("POST",)),
+        (f"/{PLUGIN_NAME}/{ROBOTS_ROUTE_SUFFIX}", ("GET",)),
+        (f"/{PLUGIN_NAME}/{ROBOTS_ROUTE_SUFFIX}", ("POST",)),
+        (f"/{PLUGIN_NAME}/{ROBOTS_IMPORT_ROUTE_SUFFIX}", ("POST",)),
         (f"/{PLUGIN_NAME}/{SYNC_ROUTE_SUFFIX}", ("POST",)),
         (f"/{PLUGIN_NAME}/{SYNC_EVENTS_ROUTE_SUFFIX}", ("GET",)),
     }

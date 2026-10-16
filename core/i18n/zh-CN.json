@@ -46,6 +46,7 @@
   "web.config_unavailable": "当前 AstrBot 版本没有提供配置持久化接口，无法保存配置",
   "web.config_invalid_body": "请求体必须是 JSON 对象",
   "web.config_save_failed": "保存配置失败：{exc}",
+  "web.robot_config_conflict": "机器人配置已被其他操作更新，请重新载入后再保存。",
 
   "log.sync_task_failed": "同步任务异常中止：{exc}",
   "log.config_save_failed": "保存插件配置失败：{exc}",
