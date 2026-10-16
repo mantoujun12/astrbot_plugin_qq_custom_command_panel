@@ -18,7 +18,7 @@ from .config import (
 )
 from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
 from .qq_client import QQClient
-from .robot_config import build_runtime_robots, load_robot_config
+from .robot_config import ROBOT_CONFIG_FILENAME, build_runtime_robots, load_robot_config
 from .state import PanelStateStore
 
 # 面板操作的并发上限。QQ 官方 API 有限流 (HTTP 429)，
@@ -528,7 +528,7 @@ class PanelSyncer:
         # 兼容旧行为：完全没有启用任何场景时直接返回 no_scene，不触碰线上。
         if (
             not get_enabled_scenes(self._config)
-            and not Path(self._data_dir / "robot_config.json").exists()
+            and not Path(self._data_dir / ROBOT_CONFIG_FILENAME).exists()
         ):
             logger.info(f"{LOG_TAG} {t('log.no_scene_enabled')}")
             await self._emit_progress(on_progress, t("progress.sync_no_scene"))

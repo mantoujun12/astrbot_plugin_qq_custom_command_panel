@@ -115,23 +115,6 @@ def panel_items_count(panel: dict[str, Any]) -> int:
     return len(items) if isinstance(items, list) else 0
 
 
-def _runtime_source_map(
-    legacy_config: dict[str, Any],
-    robot_config: dict[str, Any],
-) -> dict[str, dict[str, Any]]:
-    """按 pf_id 索引运行时机器人，附加来源与展示名。
-
-    新版机器人优先；未被新版按 appid 接管的兼容机器人继续使用旧全局配置。
-    返回 {pf_id: {"name": ..., "appid": ..., "platform": ..., "source": ...}}。
-    """
-    source: dict[str, dict[str, Any]] = {}
-    for robot in build_runtime_robots(legacy_config, robot_config):
-        pf_id = str(robot.get("id") or robot.get("appid") or "")
-        if pf_id:
-            source[pf_id] = robot
-    return source
-
-
 async def _platform_status(
     syncer: PanelSyncer,
     pf_id: str,
