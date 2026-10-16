@@ -22,30 +22,50 @@
 
 QQ 官方机器人指令面板内容自定义插件
 
-在 **AstrBot WebUI** 中配置要展示的指令条目，插件会把它们写入 QQ 官方机器人的指令面板，
+在 **AstrBot WebUI** 中按机器人、场景配置要展示的指令条目，插件会把它们写入 QQ 官方机器人的指令面板，
 
-用户在 QQ 输入 `/` 即可看到面板内容。
+用户在 QQ 输入 `/` 即可看到面板内容。新版配置按机器人独立维护 AppID / ClientSecret / platform 与各场景指令，旧的全局配置作为兼容性配置继续可用。
 
 </div>
 
 ## 核心特性
 
-- 用户在 **AstrBot WebUI** 中通过 schema 的 `selected_commands` 字段手动添加指令条目 (name + desc)，面板内容完全由用户决定
+- 新版配置（推荐）：按「机器人 → 场景 → 指令条目」组织，每台机器人独立维护 AppID / ClientSecret / platform，每个场景可以配置不同的指令条目
+- 兼容性配置：保留旧的 `qq_platforms` / `scenes` / `selected_commands` 全局配置，已有用户无需迁移即可继续使用
+- 新旧配置按 AppID 逐机器人覆盖：新版接管某个 AppID 后，该机器人不再使用兼容性配置；未被接管的旧机器人继续使用全局 `scenes` + `selected_commands`
 - 支持 c2c（单聊）、group（群聊）、channel（文字子频道）、dm（频道私信）四种场景
-- 平台凭证只能填在插件自己的 `qq_platforms` 里：AstrBot 不向插件暴露平台适配器的机器人信息，插件无法从 AstrBot 平台配置里读取 appid / clientSecret
-- 配套的可视化视图支持在页面上改配置、一键同步面板，并用 SSE 实时展示逐平台进度
+- 配套可视化视图提供「状态概览」「新版配置」「兼容性」入口，支持机器人配置、从兼容配置导入、一键同步面板，并用 SSE 实时展示同步进度
+- 平台凭证只能填在插件自己的配置中：AstrBot 不向插件暴露平台适配器的机器人信息，插件无法从 AstrBot 平台配置里读取 appid / clientSecret
 - 配置变更后重启 AstrBot 即会自动同步，无需任何指令操作
 
 ## 配置说明
 
-在 AstrBot WebUI -> 插件配置 -> `astrbot_plugin_qq_custom_command_panel` 中：
+插件提供两套配置方式，建议优先使用新版配置。
 
-1. **qq_platforms**: 添加 QQ 机器人，填入 appid / clientSecret（插件只读这里的凭证，必须手动填写）
-2. **scenes**: 选择生效场景，默认 `c2c + group`（单聊 + 群聊）
-3. **selected_commands**: 添加要在 QQ 面板展示的指令条目，每条 {name, desc}，name 最长 14 字符，desc 最长 30 字符，最多 20 条
+### 新版配置（推荐）
+
+在 AstrBot WebUI 的插件视图侧边栏打开「新版配置」，可以创建并维护机器人：
+
+1. **机器人**：填写名称、AppID、ClientSecret 与平台类型，每台机器人独立保存凭证
+2. **场景**：按 c2c（单聊）、group（群聊）、channel（文字子频道）、dm（频道私信）分别启停
+3. **指令条目**：每个已启用场景单独维护 `{name, desc}` 条目；name 最长 14 字符，desc 最长 30 字符，单场景最多 20 条
+
+新版配置保存在插件数据目录的 `plugin_data/astrbot_plugin_qq_custom_command_panel/robot_config.json`，结构为 `{"version": N, "robots": [...]}`。`version` 是配置修订号：保存和导入都会带上版本做乐观并发检查，版本不一致时后端返回 HTTP 409；`robot_config.json` 损坏、编码非法或结构异常时，插件会报错并中止相关操作，不会静默回退到兼容性配置。
+
+已有兼容性配置可以在「新版配置」页点「从兼容配置导入」，按 AppID 导入机器人草稿，再检查并保存。导入只复制配置，不会立即改动 QQ 线上面板；需要同步时再点「保存并同步」或在状态页触发同步。
+
+### 兼容性配置
+
+旧版全局配置保留在侧边栏的「兼容性」页，也可以在 AstrBot WebUI 的插件配置页维护：
+
+1. **qq_platforms**：添加 QQ 机器人，填入 appid / clientSecret（兼容性配置的凭证必须手动填写）
+2. **scenes**：选择生效场景，默认 `c2c + group`（单聊 + 群聊）
+3. **selected_commands**：添加要在 QQ 面板展示的全局指令条目，每条 `{name, desc}`，name 最长 14 字符，desc 最长 30 字符，最多 20 条
+
+兼容性配置仍写回 AstrBotConfig。它与新版配置按 AppID 合并：`robot_config.json` 中定义了某个 AppID，就由新版接管该机器人；没有出现在新版配置里的旧机器人继续使用兼容性配置的全局 `scenes` + `selected_commands`。
 
 > 插件启动时会自动同步一次面板；修改配置后重启插件即可生效。
-> 也可以在插件可视化视图里改这些配置并点「保存并同步」，无需回到插件配置页。
+> 新版配置支持在页面上点「保存并同步」，兼容性配置也保留「保存并同步」入口，无需回到插件配置页。
 
 ## 已知限制
 
@@ -58,7 +78,35 @@ QQ 官方机器人指令面板的 API 限制：
 
 目前项目限制：
 
-- 多个机器人共享相同的面板配置项，但会根据各自的 appid 接收独立的面板
+- 同一个 AppID 只会生效一套配置：新版配置存在该 AppID 时，兼容性配置中的同名机器人会被忽略
+- 某个场景未启用时，同步会清理该场景下本插件创建的面板；任一场景的 `GET /v2/panels` 请求失败时，该机器人整次同步中止
+- ClientSecret 只以明文落盘，后端响应、日志与前端只展示掩码或是否已设置
+
+## 开发与测试
+
+插件通过 AstrBot 加载，功能测试需要在运行的 AstrBot 实例下进行；业务逻辑可以跑离线 pytest 套件，测试会注入 AstrBot stub。
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -q
+ruff check . --fix
+ruff format --check .
+```
+
+插件视图源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`：
+
+```bash
+cd web/dashboard
+pnpm install
+pnpm dev
+pnpm build
+pnpm test
+pnpm test:coverage
+pnpm test:report
+pnpm test:codecov
+```
+
+`pnpm build` 会先执行 `vue-tsc` 类型检查，并直接生成 `pages/dashboard/` 产物；视图本地开发没有 AstrBot bridge 时会显示 mock 数据，保存与同步入口不会伪装成成功。
 
 ## 下一步计划
 
@@ -67,6 +115,7 @@ QQ 官方机器人指令面板的 API 限制：
 - [x] Dashboard - 可视化配置，一键同步 AstrBot 指令列表并按需选择
 - [x] 完善调用入口 - 可视化 + 异步进度反馈
 - [x] Dashboard 改造 - 平台凭证只读插件配置（AstrBot 插件读不到适配器机器人信息），设置页可直接改 `_conf_schema` 配置并写回，修复面板标题回退成 `dashboard` 的 i18n 根键问题
+- [x] 新版机器人配置 - 按机器人 + 场景维护指令条目，支持从兼容配置导入、逐 AppID 覆盖与版本并发保护
 - [ ] 完善配置 - 连接测试等
 
 ## 参考链接
