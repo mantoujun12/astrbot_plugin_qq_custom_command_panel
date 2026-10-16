@@ -72,7 +72,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
 <template>
   <v-container fluid class="qc-page pa-4 pa-md-6">
     <div class="qc-header">
-      <div>
+      <div class="qc-header-main">
         <h1 class="qc-title">{{ t('pages.dashboard.status.title', '状态概览') }}</h1>
         <p class="qc-subtitle">
           {{

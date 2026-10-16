@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { mdiCogOutline, mdiHistory, mdiRobotOutline, mdiViewDashboardOutline } from '@mdi/js'
 import NavItem from './NavItem.vue'
+import { PLUGIN_VERSION } from '../../version'
 
 defineProps<{
   /** 折叠成 rail 图标栏 */
@@ -25,16 +26,16 @@ const mainItems = [
     icon: mdiRobotOutline,
     labelKey: 'pages.dashboard.nav.robots',
     fallback: '机器人',
-  },
+  }
+]
+
+const bottomItems = [
   {
     to: '/compatibility',
     icon: mdiHistory,
     labelKey: 'pages.dashboard.nav.compatibility',
     fallback: '兼容性',
   },
-]
-
-const bottomItems = [
   {
     to: '/settings',
     icon: mdiCogOutline,
@@ -69,8 +70,9 @@ const bottomItems = [
     <v-spacer />
 
     <v-list nav density="comfortable">
-      <v-divider />
       <NavItem v-for="item in bottomItems" :key="item.to" v-bind="item" :rail="rail" />
     </v-list>
+
+    <div v-if="!rail" class="qc-sidebar-version">{{ PLUGIN_VERSION }}</div>
   </div>
 </template>

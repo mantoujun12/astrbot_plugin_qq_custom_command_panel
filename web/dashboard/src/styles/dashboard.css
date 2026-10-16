@@ -1,37 +1,101 @@
-/**
- * 页面层样式：写法对齐 AstrBot 宿主的 src/styles/dashboard-shell.css，从 Vuetify
- * 主题变量派生辅助色，亮暗主题自动适配。
- *
- * 不做 SCSS 定制层，因此宿主靠 $border-radius-root 得到的卡片 16px 圆角
- * 在这里直接写具体数值。
- */
+/* 字体栈对齐宿主 $body-font-family。Outfit 是自带的 @fontsource 变量字体，
+   只含拉丁子集，中文仍走宿主那套 CJK 回退；注册名是 'Outfit Variable'，
+   写成 'Outfit' 会静默回退。--v-font-heading 故意不设，Vuetify 会回退到
+   --v-font-body，等价于宿主 heading 取 body 的做法。 */
+:root {
+  --v-font-body: 'Outfit Variable', 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans CJK SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
+.v-card,
+.v-field,
+.v-alert,
+.v-list-item--rounded {
+  border-radius: 8px;
+}
+
+.v-btn{
+  border-radius: 16px;
+}
+
+
+
+/* $rounded 映射表 */
+.rounded-sm {
+  border-radius: 4px;
+}
+
+.rounded,
+.rounded-md {
+  border-radius: 8px;
+}
+
+.rounded-lg {
+  border-radius: 16px;
+}
+
+.rounded-xl {
+  border-radius: 48px;
+}
+
+.rounded-shaped {
+  border-radius: 48px 0;
+}
+
+/* size="small" 的按钮 Vuetify 会把字号一起压到 12px，比页面上任何交互文字都小
+   （导航项 14 / 列表行 14 / 输入值 16），和同一排的头部按钮（14px）落差也明显。
+   12px 在 Vuetify 的刻度里是 hint / counter 那一档，交互控件不该掉到那里。
+   这里只保留小尺寸的高度，字号跟 default 对齐。 */
+.v-btn--size-small {
+  --v-btn-size: 0.875rem;
+}
+
+/* 卡片标题用的是 .text-body-large：16px / 400 / 字距 0.03em。
+   比正文只大 2px 却更轻，读起来和正文分不出层级；那点字距是给拉丁字母调的，
+   中文用不着。宿主卡片标题是 18px / 600 的分量。 */
+.v-card-title {
+  font-weight: 600;
+  letter-spacing: 0;
+}
 
 .qc-page {
   --qc-text: rgb(var(--v-theme-on-surface));
   --qc-muted: rgba(var(--v-theme-on-surface), 0.68);
   --qc-subtle: rgba(var(--v-theme-on-surface), 0.56);
   --qc-border: rgba(var(--v-theme-on-surface), 0.1);
-  --qc-soft: rgba(var(--v-theme-primary), 0.08);
   min-height: 100%;
   background: rgb(var(--v-theme-background));
   color: var(--qc-text);
 }
 
-/* 平面描边卡：宿主的概览卡也是 1px 描边 + 16px 圆角 + surface 底 */
+/* 平面描边卡 */
 .qc-page .qc-card {
   border-radius: 16px;
   border-color: var(--qc-border);
 }
 
-.qc-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background: var(--qc-soft);
+/* 指标卡改成填充底。flat 只给 surface，而亮色下 surface 与 background 同为 #ffffff，
+   纯 surface 会看不出卡片，混一点 on-surface 让两种主题都读得出边界。 */
+.qc-stat-card {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, rgb(var(--v-theme-surface)) 95%, rgb(var(--v-theme-on-surface)));
+}
+
+/* 图标挪走后，标签原来那 12px 上边距就没有对象了，交给卡片内边距 */
+.qc-stat-card .qc-metric-label {
+  margin-top: 0;
+}
+
+/* 右下角水印图标：去底色、放大、压透明度做层次，位置与透明度对齐宿主 ItemCard 的角标 */
+.qc-stat-watermark {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  opacity: 0.2;
   color: rgb(var(--v-theme-primary));
+  pointer-events: none;
 }
 
 .qc-metric-label {
@@ -58,19 +122,30 @@
   overflow-wrap: anywhere;
 }
 
+/* 标题块与操作区并排。操作区不允许被压窄，放不下时整块换行到下一行，
+   否则按钮会在同一行里折成好几排。标题块给一个固定的 flex-basis，
+   换行点就由操作区的实际宽度决定：按钮多的页面更早换行，不需要按页写断点。 */
 .qc-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 24px;
+  gap: 12px 24px;
   margin-bottom: 24px;
+}
+
+.qc-header-main {
+  flex: 1 1 260px;
+  min-width: 0;
 }
 
 .qc-header-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 /* 侧边栏 brand 行：标题 + 折叠按钮，尺寸与间距对齐宿主 VerticalSidebar 的实现 */
@@ -107,6 +182,53 @@
 
 .qc-sidebar-brand-toggle:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.qc-sidebar .v-list-item {
+  min-height: 36px;
+  margin-bottom: 2px;
+  padding-inline-start: calc(10px + var(--indent-padding, 0px) / 2);
+  border-radius: 8px;
+  color: rgba(var(--v-theme-on-surface), 0.76);
+}
+
+.qc-sidebar .v-list-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+/* 选中态：宿主是在元素上直接铺 primary 淡底、并把文字转成 primary。
+   .v-list-item__overlay 用 currentColor 上色，所以这条必须排在上面两条之后
+   让 color 一起被接管，否则叠出来的仍是 secondary。 */
+.qc-sidebar .v-list-item--active {
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
+}
+
+/* 图标与文字之间默认隔着 32px 的 --v-list-prepend-gap，这是导航项显得松散的
+   主因。宿主把它归零，改由 prepend 的 margin 给 12px。 */
+.qc-sidebar .v-list-item__prepend {
+  min-width: 0;
+  margin-inline-end: 12px;
+}
+
+.qc-sidebar .v-list-item__spacer {
+  width: 0;
+}
+
+.qc-sidebar .v-list-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+/* 底部版本号，对齐宿主 .sidebar-footer-version；左内边距与导航项相同，和上面的图标对齐 */
+.qc-sidebar-version {
+  padding: 0 10px 12px;
+  color: rgba(var(--v-theme-on-surface), 0.46);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .qc-title {
@@ -155,6 +277,15 @@
     flex-direction: column;
     align-items: flex-start;
   }
+
+  /* 主轴变成纵向后 flex-basis 会当成高度用，必须复位，否则标题块被撑到 260px 高 */
+  .qc-header-main {
+    flex-basis: auto;
+  }
+
+  .qc-header-actions {
+    margin-left: 0;
+  }
 }
 
 /* 同步进度：日志区固定高度滚动，避免长日志把卡片撑高 */
@@ -181,4 +312,13 @@
   padding: 16px;
   border: 1px solid var(--qc-border);
   border-radius: 16px;
+}
+
+/* 浮层里的卡片一律给实底。outlined / text 变体在 Vuetify 里是 background: transparent，
+   页面卡片这么写没问题（下面就是页面实色底），但同一套写法搬进弹窗就会透出遮罩、
+   看着像坏了，所以在这里兜住，新加的弹窗不用记这条。
+   投影对齐宿主的浮层卡片（_override.scss 里的 --astrbot-menu-shadow）。 */
+.v-overlay__content > .v-card {
+  background-color: rgb(var(--v-theme-surface));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
 }

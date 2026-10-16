@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mdiCheckCircleOutline } from '@mdi/js'
-import { VIcon } from 'vuetify/components'
+import { VIcon, VRow } from 'vuetify/components'
 import { useDisplay, useTheme } from 'vuetify'
 import { THEME_DARK, THEME_LIGHT } from '../theme'
 import { mountView } from '../test/helpers'
@@ -38,6 +38,18 @@ describe('vuetify instance', () => {
     const themes = wrapper.get('[data-themes]').attributes('data-themes') ?? ''
     expect(themes.split(',')).toContain(THEME_LIGHT)
     expect(themes.split(',')).toContain(THEME_DARK)
+  })
+
+  it('tightens the grid gutter for every row via defaults', () => {
+    const wrapper = mountView(
+      defineComponent({
+        name: 'RowProbe',
+        setup: () => () => h(VRow, null, { default: () => h('div') }),
+      }),
+    )
+
+    // defaults 里没生效的话会是 v-row--density-default（24px 沟槽）
+    expect(wrapper.get('.v-row').classes()).toContain('v-row--density-comfortable')
   })
 
   it('restores the Vuetify 3 breakpoints the host uses', () => {

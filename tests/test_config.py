@@ -439,6 +439,39 @@ def test_normalize_config_payload_backfills_template_key_for_untouched_fields() 
     ]
 
 
+def test_normalize_config_payload_keeps_the_sections_a_page_does_not_own() -> None:
+    """视图按页分工提交，缺省的部分必须原样保留。
+
+    「设置」页只发 language / scenes，「兼容性」页只发平台与指令；任一方漏掉的字段
+    都要沿用已保存的值，否则两个页面会互相覆盖对方刚保存的改动。
+    """
+    values, errors = normalize_config_payload(
+        make_existing(), {"language": "en-US", "scenes": ["c2c"]}
+    )
+
+    assert errors == []
+    assert values["language"] == "en-US"
+    assert values["scenes"] == ["c2c"]
+    assert [p["appid"] for p in values["qq_platforms"]] == ["1023456789"]
+    assert [c["name"] for c in values["selected_commands"]] == ["help"]
+
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "qq_platforms": [
+                {"name": "pf1", "appid": "1023456789", "platform": "qq_official", "secret": ""}
+            ],
+            "selected_commands": [],
+        },
+    )
+
+    assert errors == []
+    assert values["language"] == "zh-CN"
+    assert values["scenes"] == ["c2c", "group"]
+    # 显式传空列表是「清空」，不能被当成缺省而沿用旧值
+    assert values["selected_commands"] == []
+
+
 def test_normalize_config_payload_rejects_invalid_language() -> None:
     _values, errors = normalize_config_payload(make_existing(), {"language": "fr-FR"})
     assert len(errors) == 1

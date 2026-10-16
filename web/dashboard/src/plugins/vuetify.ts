@@ -19,6 +19,11 @@ export const vuetify = createVuetify({
     // 窄屏切换临时抽屉的界线，与宿主页面层的 959.98px 一致
     mobileBreakpoint: 'md',
   },
+  defaults: {
+    // 栅格沟槽整体收紧：Vuetify 默认 24px，宿主页面层用的是 CSS grid 的 gap: 16px。
+    // 放在 defaults 里对全部 v-row 生效，新加的栅格也自动跟上，不用逐个写 density。
+    VRow: { density: 'comfortable' },
+  },
   theme: {
     defaultTheme: THEME_LIGHT,
     themes: {

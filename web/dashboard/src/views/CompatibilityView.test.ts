@@ -84,8 +84,11 @@ describe('CompatibilityView', () => {
     expect(wrapper.findAll('.qc-config-item')).toHaveLength(1)
     expect(wrapper.findAll(NAME_INPUTS)).toHaveLength(2)
     expect(wrapper.findAll(DESC_INPUTS)).toHaveLength(2)
-    expect(wrapper.text()).toContain('日志语言')
     expect(wrapper.text()).toContain('生效场景')
+    expect(wrapper.text()).toContain('QQ 平台凭证')
+    expect(wrapper.text()).toContain('指令条目')
+    // 日志语言在「设置」页
+    expect(wrapper.text()).not.toContain('日志语言')
     // secret 只回掩码：输入框留空，旁边的提示说明沿用原值
     const secret = wrapper.find('input[type="password"]')
     expect((secret.element as HTMLInputElement).value).toBe('')
@@ -206,7 +209,6 @@ describe('CompatibilityView', () => {
     await flush()
 
     expect(api.saveConfig).toHaveBeenCalledWith({
-      language: 'zh-CN',
       scenes: ['c2c', 'group'],
       qq_platforms: [
         { name: '主机器人', appid: '1023456789', platform: 'qq_official', secret: '' },
@@ -244,10 +246,9 @@ describe('CompatibilityView', () => {
     const wrapper = await mount()
     // v-select 的下拉挂在 body 上，直接驱动 model 比点浮层稳
     const selects = wrapper.findAllComponents(VSelect)
-    expect(selects).toHaveLength(3)
-    selects[0]?.vm.$emit('update:modelValue', 'en-US')
-    selects[1]?.vm.$emit('update:modelValue', ['c2c'])
-    selects[2]?.vm.$emit('update:modelValue', 'qq_official_webhook')
+    expect(selects).toHaveLength(2)
+    selects[0]?.vm.$emit('update:modelValue', ['c2c'])
+    selects[1]?.vm.$emit('update:modelValue', 'qq_official_webhook')
 
     const platformFields = wrapper.findAll('.qc-config-item input')
     await platformFields[0]?.setValue('  主号  ')
@@ -258,7 +259,6 @@ describe('CompatibilityView', () => {
     await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
 
     expect(api.saveConfig).toHaveBeenCalledWith({
-      language: 'en-US',
       scenes: ['c2c'],
       qq_platforms: [
         {

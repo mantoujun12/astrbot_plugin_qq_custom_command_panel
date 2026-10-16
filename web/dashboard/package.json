@@ -16,6 +16,7 @@
     "test:codecov": "vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=test-report.junit.xml"
   },
   "dependencies": {
+    "@fontsource-variable/outfit": "^5.3.0",
     "@mdi/js": "^7.4.47",
     "vue": "^3.5.42",
     "vue-router": "^5.4.0"

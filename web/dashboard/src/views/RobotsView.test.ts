@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
+import { VDialog } from 'vuetify/components'
 import type { PluginViewBridge } from '../bridge'
 import type { PluginConfigResponse } from '../types/dashboard'
 import type { RobotConfigResponse } from '../types/robotConfig'
@@ -87,6 +88,54 @@ function button(wrapper: VueWrapper, label: string): DOMWrapper<Element> {
     throw new Error(`button not found: ${label}`)
   }
   return found
+}
+
+/**
+ * 弹窗内容由 v-dialog 挂在 body 上，wrapper 够不到，只能按文档查。
+ * 打开弹窗后先 waitUntil 等到它出现，再操作里面的控件。
+ */
+function dialogEl(selector: string): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>(selector)
+}
+
+/** 弹窗里的按钮：按可见文案精确匹配，语义与 wrapper 版一致 */
+function dialogButton(label: string): Element {
+  const wanted = label.replace(/\s+/g, '')
+  const found = [...document.body.querySelectorAll('button')].find(
+    (node) => (node.textContent ?? '').replace(/\s+/g, '') === wanted,
+  )
+  if (!found) {
+    throw new Error(`dialog button not found: ${label}`)
+  }
+  return found
+}
+
+function clickInDialog(label: string): void {
+  ;(dialogButton(label) as HTMLElement).click()
+}
+
+/** 给弹窗里的输入框赋值并派发 input，等价于 wrapper 上的 setValue */
+async function typeInDialog(selector: string, value: string): Promise<void> {
+  const el = document.body.querySelector<HTMLInputElement>(selector)
+  if (!el) {
+    throw new Error(`dialog input not found: ${selector}`)
+  }
+  el.value = value
+  el.dispatchEvent(new Event('input'))
+  await flush()
+}
+
+/** 模板里「从兼容配置导入」在前、「新增机器人」在后 */
+const IMPORT_DIALOG = 0
+const CREATE_DIALOG = 1
+
+/**
+ * 弹窗是否打开看 v-model，而不是等 DOM 消失。
+ * Vuetify 浮层关闭要走 leave transition，内容只在 onAfterLeave 里回收，而测试环境把
+ * transition stub 掉了、钩子不触发，节点会一直留着——那是实现细节，不是「没关」。
+ */
+function dialogModel(wrapper: VueWrapper, index: number): boolean {
+  return wrapper.findAllComponents(VDialog)[index]?.props('modelValue') as boolean
 }
 
 function field(wrapper: VueWrapper, name: string): DOMWrapper<Element> {
@@ -178,16 +227,19 @@ describe('RobotsView', () => {
     vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
 
     const wrapper = await mount()
+    // 新增机器人走弹窗：先填基础信息，再点创建
     await button(wrapper, '新增机器人').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-create') !== null)
+    await typeInDialog('[data-field="create-name"] input', '新机器人')
+    await typeInDialog('[data-field="create-appid"] input', '1040000000')
+    await typeInDialog('[data-field="create-secret"] input', 'new-secret')
+    clickInDialog('创建')
     await flush()
 
     expect(wrapper.findAll('.qc-robot-item')).toHaveLength(3)
-    expect(wrapper.text()).toContain('未命名机器人')
+    expect(wrapper.text()).toContain('新机器人')
     expect(wrapper.text()).toContain('0/20 条')
 
-    await field(wrapper, 'name').setValue('新机器人')
-    await field(wrapper, 'appid').setValue('1040000000')
-    await field(wrapper, 'secret').setValue('new-secret')
     await scene(wrapper, 'c2c').find('input[type="checkbox"]').setValue(true)
     await scene(wrapper, 'c2c').find('[data-action="add-command"]').trigger('click')
     await flush()
@@ -314,18 +366,33 @@ describe('RobotsView', () => {
     expect(wrapper.text()).toContain('机器人配置已保存。')
   })
 
-  it('labels mock data and disables saving, adding, and importing', async () => {
-    const { api, mount } = await loadView({ withBackend: false })
+  it('keeps saving disabled in mock but still lets both dialogs open', async () => {
+    const { api, legacyApi, mount } = await loadView({ withBackend: false })
     vi.mocked(api.fetchRobots).mockResolvedValue(MOCK_ROBOTS)
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
 
     const wrapper = await mount()
 
     expect(wrapper.text()).toContain('本地开发环境：展示的是 mock 数据，不能保存配置。')
     expect(wrapper.text()).toContain('主机器人')
+    // 落库动作在 mock 下必须禁用
     expect(button(wrapper, '保存').attributes('disabled')).toBeDefined()
     expect(button(wrapper, '保存并同步').attributes('disabled')).toBeDefined()
-    expect(button(wrapper, '新增机器人').attributes('disabled')).toBeDefined()
-    expect(button(wrapper, '从兼容配置导入').attributes('disabled')).toBeDefined()
+
+    // 但两个弹窗要能打开，方便在本地开发环境里点着看
+    expect(button(wrapper, '新增机器人').attributes('disabled')).toBeUndefined()
+    expect(button(wrapper, '从兼容配置导入').attributes('disabled')).toBeUndefined()
+
+    await button(wrapper, '新增机器人').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-create') !== null)
+    clickInDialog('取消')
+    await flush()
+    expect(dialogModel(wrapper, CREATE_DIALOG)).toBe(false)
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    // 导入本身要写后端，mock 下仍然禁用
+    expect(dialogButton('导入').hasAttribute('disabled')).toBe(true)
 
     await button(wrapper, '保存').trigger('click')
     await flush()
@@ -343,13 +410,14 @@ describe('RobotsView', () => {
     vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
 
     await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
     await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
     await flush()
 
-    const textarea = wrapper.find('[data-field="legacy-appids"] textarea')
-    expect((textarea.element as HTMLTextAreaElement).value).toContain('1023456789')
+    const textarea = dialogEl('[data-field="legacy-appids"] textarea') as HTMLTextAreaElement
+    expect(textarea.value).toContain('1023456789')
 
-    await button(wrapper, '导入').trigger('click')
+    clickInDialog('导入')
     await waitUntil(() => vi.mocked(api.fetchRobots).mock.calls.length === 2)
     await flush()
 
@@ -417,12 +485,11 @@ describe('RobotsView', () => {
 
     const wrapper = await mount()
     await button(wrapper, '从兼容配置导入').trigger('click')
-    await flush()
-    expect(wrapper.find('.qc-import-panel').exists()).toBe(true)
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
 
-    await button(wrapper, '取消').trigger('click')
+    clickInDialog('取消')
     await flush()
-    expect(wrapper.find('.qc-import-panel').exists()).toBe(false)
+    expect(dialogModel(wrapper, IMPORT_DIALOG)).toBe(false)
     expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
   })
 

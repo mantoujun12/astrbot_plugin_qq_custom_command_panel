@@ -137,20 +137,24 @@
       "settings": {
         "title": "Settings",
         "subtitle": "Plugin-wide general settings will live here.",
-        "wipTitle": "Under construction",
-        "wipText": "This page is still being built; plugin-wide general settings will be provided later."
+        "reload": "Reload",
+        "save": "Save",
+        "saved": "Settings saved and applied.",
+        "mockHint": "Local dev environment: showing mock data, saving is disabled.",
+        "basicTitle": "Basics",
+        "basicSubtitle": "The log language only affects plugin logs.",
+        "language": "Log language"
       },
       "compatibility": {
         "title": "Compatibility",
-        "subtitle": "Legacy global configuration stays available here. Bots taken over by a robot on the Robots page with the same AppID no longer use these global scenes and commands.",
+        "subtitle": "Legacy global scenes, platform credentials and command entries stay available here. Bots taken over by a robot on the Robots page with the same AppID no longer use this configuration.",
         "reload": "Reload",
         "save": "Save",
         "saveAndSync": "Save and sync",
         "saved": "Config saved and applied.",
         "mockHint": "Local dev environment: showing mock data, saving is disabled.",
         "basicTitle": "Basics",
-        "basicSubtitle": "The log language only affects plugin logs; scenes decide where the command panel is visible.",
-        "language": "Log language",
+        "basicSubtitle": "Scenes decide where the command panel is visible; this only applies to bots not taken over by a robot on the Robots page with the same AppID.",
         "scenes": "Active scenes",
         "scene": {
           "c2c": "Private chat",
@@ -193,6 +197,8 @@
         "reload": "Reload",
         "importLegacy": "Import from compatibility",
         "addRobot": "Add robot",
+        "createSubtitle": "Fill in the name and platform credentials first; configure each scene's command entries after creating it.",
+        "createConfirm": "Create",
         "save": "Save",
         "saveAndSync": "Save and sync",
         "saved": "Robot configuration saved.",

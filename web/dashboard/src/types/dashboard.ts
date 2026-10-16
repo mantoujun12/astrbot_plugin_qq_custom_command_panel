@@ -95,6 +95,13 @@ export interface PluginConfigPayload {
   selected_commands: ConfigCommand[]
 }
 
+/**
+ * 提交给 POST /config 的载荷。后端按字段合并，缺省字段沿用已保存的值
+ * （见 core/config.py 的 normalize_config_payload），所以每个页面只提交自己负责的字段，
+ * 不会把别的页面改过的值覆盖回去。
+ */
+export type PluginConfigSubmit = Partial<PluginConfigPayload>
+
 /** SSE 同步进度事件，和 PanelSyncer.sync_all 的 on_event 一一对应 */
 export interface SyncMessageEvent {
   type: 'message'

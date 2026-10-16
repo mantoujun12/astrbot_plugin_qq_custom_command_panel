@@ -9,7 +9,7 @@
 import { getBridge } from '../bridge'
 import { MOCK_CONFIG, MOCK_STATUS } from './mock'
 import { toPlain } from './serialize'
-import type { PluginConfigPayload, PluginConfigResponse, StatusResponse } from '../types/dashboard'
+import type { PluginConfigResponse, PluginConfigSubmit, StatusResponse } from '../types/dashboard'
 
 /** 对应后端 register_web_api 的路径 `/<plugin_name>/status` */
 const STATUS_ENDPOINT = 'status'
@@ -43,11 +43,13 @@ export async function fetchConfig(): Promise<PluginConfigResponse> {
 /**
  * 写回插件配置，返回落库后的配置（同样只含掩码）。
  *
+ * 载荷允许只带部分字段：后端按字段合并，缺省字段沿用已保存的值（见 core/config.py），
+ * 所以「设置」页只提交 language / scenes，「兼容性」页只提交平台与指令条目。
  * 校验失败时后端返回错误响应，bridge 会把它转成 Error，调用方直接展示 message 即可。
  * 本地无 bridge 时抛错：不允许在没有后端的开发环境里伪造"保存成功"。
  * payload 允许是视图里的响应式对象，这里会先快照成纯数据（见 toPlain）。
  */
-export async function saveConfig(payload: PluginConfigPayload): Promise<PluginConfigResponse> {
+export async function saveConfig(payload: PluginConfigSubmit): Promise<PluginConfigResponse> {
   const bridge = getBridge()
   if (!bridge) {
     throw new Error('no backend: config saving is unavailable in local dev')

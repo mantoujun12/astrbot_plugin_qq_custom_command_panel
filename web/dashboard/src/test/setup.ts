@@ -7,6 +7,28 @@
 
 import { afterEach, vi } from 'vitest'
 
+/**
+ * happy-dom 没实现 visualViewport，而 Vuetify 的浮层（v-dialog / v-menu）会直接引用
+ * 这个全局标识符。它写的是 `visualViewport?.addEventListener(...)`，但可选链只挡
+ * null / undefined，挡不住「标识符未声明」——缺了会抛 ReferenceError 而不是静默跳过。
+ */
+if (!('visualViewport' in window)) {
+  Object.defineProperty(window, 'visualViewport', {
+    configurable: true,
+    value: {
+      width: 0,
+      height: 0,
+      offsetLeft: 0,
+      offsetTop: 0,
+      pageLeft: 0,
+      pageTop: 0,
+      scale: 1,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    },
+  })
+}
+
 afterEach(() => {
   delete window.AstrBotPluginView
   delete window.AstrBotPluginPage
