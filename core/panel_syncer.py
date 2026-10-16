@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import aiohttp
 from astrbot.api import logger
 from astrbot.api.star import Context
 
@@ -21,6 +20,11 @@ from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
 from .qq_client import QQClient
 from .robot_config import ROBOT_CONFIG_FILENAME, build_runtime_robots, load_robot_config
 from .state import PanelStateStore
+
+if TYPE_CHECKING:
+    # 仅用于类型注解：aiohttp 由 AstrBot 宿主环境提供，不在 requirements.txt 里声明，
+    # 所以这里不能在运行期导入，否则离线跑测试会直接 ImportError。
+    import aiohttp
 
 # 面板操作的并发上限。QQ 官方 API 有限流 (HTTP 429)，
 # 单个 appid 同时发太多请求会被短暂封禁，这里留一个保守的默认值。

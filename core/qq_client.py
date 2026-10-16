@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import time
-from typing import Any
-
-import aiohttp
+from typing import TYPE_CHECKING, Any
 
 from .i18n import t
+
+if TYPE_CHECKING:
+    # 仅用于类型注解：aiohttp 由 AstrBot 宿主环境提供，不在 requirements.txt 里声明，
+    # 所以这里不能在运行期导入，否则离线跑测试会直接 ImportError。
+    import aiohttp
 
 QQ_API_BASE = "https://api.bot.qq.com"
 DEFAULT_TOKEN_TTL = 600  # 提前 10 分钟刷新

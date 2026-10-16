@@ -3,3 +3,6 @@ pytest>=8.0
 pytest-asyncio>=0.24
 pytest-cov>=5.0
 ruff>=0.6
+# 运行期由 AstrBot 宿主环境提供（所以 requirements.txt 不声明，避免版本冲突）；
+# 但测试会导入打包后的 main.py，需要真实存在这个模块
+aiohttp>=3.9
