@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import AppSidebar from './AppSidebar.vue'
 import { mountView } from '../../test/helpers'
+import { version } from '../../../package.json'
 
 async function mountSidebar(options: { rail?: boolean } = {}) {
   const { router } = await import('../../router')
@@ -37,6 +38,15 @@ describe('AppSidebar', () => {
 
     expect(wrapper.find('.qc-sidebar-brand-title').exists()).toBe(false)
     expect(wrapper.get('.qc-sidebar-brand').classes()).toContain('qc-sidebar-brand--rail')
+  })
+
+  it('shows the plugin version at the bottom, and hides it in the rail', async () => {
+    const wrapper = await mountSidebar()
+
+    expect(wrapper.get('.qc-sidebar-version').text()).toBe(`v${version}`)
+
+    const railed = await mountSidebar({ rail: true })
+    expect(railed.find('.qc-sidebar-version').exists()).toBe(false)
   })
 
   it('asks the shell to toggle the sidebar', async () => {

@@ -12,6 +12,17 @@ describe('StatCard', () => {
     expect(card.find('.qc-metric-note').exists()).toBe(false)
   })
 
+  it('renders the icon as a corner watermark', () => {
+    const withIcon = mountView(StatCard, {
+      props: { title: 'QQ 平台', value: 2, icon: 'icon-qq' },
+    })
+
+    expect(withIcon.find('.qc-stat-watermark .v-icon').exists()).toBe(true)
+
+    const withoutIcon = mountView(StatCard, { props: { title: 'QQ 平台', value: 2 } })
+    expect(withoutIcon.find('.qc-stat-watermark').exists()).toBe(false)
+  })
+
   it('turns max into a note and keeps the value neutral below the limit', () => {
     const card = mountView(StatCard, { props: { title: '指令条目', value: 3, max: 20 } })
 

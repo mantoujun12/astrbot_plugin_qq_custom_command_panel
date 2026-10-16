@@ -86,7 +86,7 @@ onBeforeUnmount(() => {
             {{ t('pages.dashboard.status.sync.retry', '重试') }}
           </v-btn>
           <v-btn
-            variant="flat"
+            variant="tonal"
             color="primary"
             :disabled="!available"
             :loading="running"

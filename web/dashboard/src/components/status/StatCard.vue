@@ -28,17 +28,17 @@ const noteText = computed(() => {
 })
 </script>
 
-<!-- 卡片结构与宿主概览卡一致：图标色块 -> 标签 -> 数值 -> 备注 -->
+<!-- 指标卡用填充底（机器人卡与同步面板仍是描边），图标做右下角水印 -->
 <template>
-  <v-card class="qc-card h-100" variant="outlined">
+  <v-card class="qc-card qc-stat-card h-100" variant="flat">
     <v-card-text class="pa-5">
-      <span v-if="icon" class="qc-card-icon">
-        <v-icon :icon="icon" size="18" />
-      </span>
-
       <div class="qc-metric-label">{{ title }}</div>
       <div class="qc-metric-value" :class="{ 'text-error': warn }">{{ value }}</div>
       <div v-if="noteText" class="qc-metric-note">{{ noteText }}</div>
     </v-card-text>
+
+    <span v-if="icon" class="qc-stat-watermark">
+      <v-icon :icon="icon" size="64" />
+    </span>
   </v-card>
 </template>

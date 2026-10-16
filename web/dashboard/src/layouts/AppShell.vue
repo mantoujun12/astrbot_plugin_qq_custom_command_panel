@@ -22,6 +22,7 @@ const {
   <!-- 主题跟随宿主：v-app 的 theme prop 会提供到整棵子树 -->
   <v-app :theme="isDark ? THEME_DARK : THEME_LIGHT">
     <v-navigation-drawer
+      class="qc-sidebar"
       :model-value="drawer"
       :permanent="!mobile"
       :temporary="mobile"
