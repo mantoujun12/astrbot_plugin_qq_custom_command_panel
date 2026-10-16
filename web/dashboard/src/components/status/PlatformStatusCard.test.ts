@@ -47,6 +47,38 @@ describe('PlatformStatusCard', () => {
     expect(wrapper.text()).toContain(label)
   })
 
+  it('shows the robot name and the v2 config source chip', () => {
+    const wrapper = mountView(PlatformStatusCard, {
+      props: {
+        platform: platform({
+          name: '主机器人',
+          source: 'v2',
+          scenes: [{ scope: 'c2c', state: 'synced' }],
+        }),
+      },
+    })
+
+    expect(wrapper.text()).toContain('主机器人')
+    const chip = wrapper.get('[data-field="config-source"]')
+    expect(chip.text()).toContain('新版配置')
+  })
+
+  it('labels the legacy config source', () => {
+    const wrapper = mountView(PlatformStatusCard, {
+      props: {
+        platform: platform({ name: '', source: 'legacy', scenes: [] }),
+      },
+    })
+
+    expect(wrapper.get('[data-field="config-source"]').text()).toContain('兼容性配置')
+  })
+
+  it('omits the config source chip when the backend does not provide one', () => {
+    const wrapper = card({ scope: 'c2c', state: 'synced' })
+
+    expect(wrapper.find('[data-field="config-source"]').exists()).toBe(false)
+  })
+
   it('shows a platform level error instead of the scene chip', () => {
     const wrapper = card({ scope: 'c2c', state: 'failed' }, { error: '平台凭证无效' })
 

@@ -1040,3 +1040,41 @@ def test_register_web_apis_registers_all_routes() -> None:
 def test_register_web_apis_skips_without_host_method() -> None:
     """老版本 AstrBot 的 context 没有 register_web_api 时应静默降级"""
     assert register_web_apis(SimpleNamespace(), lambda: None, lambda: {}) is None
+
+
+@pytest.mark.asyncio
+async def test_build_status_reports_v2_source_and_name() -> None:
+    """存在新版机器人时，状态按运行时机器人返回 name 与 source。"""
+    syncer = make_syncer(config={"scenes": [], "qq_platforms": []})
+    client = FakeQQClient(existing={})
+    syncer.build_clients = lambda config=None, **kwargs: {"robot-1": client}  # type: ignore[method-assign]
+    robot_config = {
+        "version": 1,
+        "robots": [
+            {
+                "id": "robot-1",
+                "name": "主机器人",
+                "appid": "app-1",
+                "secret": "sec",
+                "platform": "qq_official",
+                "scenes": {
+                    "c2c": {"enabled": True, "items": [{"name": "help", "desc": ""}]},
+                    "group": {"enabled": False, "items": []},
+                    "channel": {"enabled": False, "items": []},
+                    "dm": {"enabled": False, "items": []},
+                },
+            }
+        ],
+    }
+
+    payload = await build_status(
+        syncer,
+        {"scenes": []},
+        robot_config=robot_config,
+    )
+
+    platform = payload["platforms"][0]
+    assert platform["name"] == "主机器人"
+    assert platform["source"] == "v2"
+    assert payload["scenes"] == ["c2c"]
+    assert payload["items"]["count"] == 1

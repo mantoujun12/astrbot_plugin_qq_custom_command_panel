@@ -128,6 +128,10 @@
           "commands": {
             "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands on the Settings page."
           }
+        },
+        "source": {
+          "v2": "Robot profile",
+          "legacy": "Legacy config"
         }
       },
       "settings": {
