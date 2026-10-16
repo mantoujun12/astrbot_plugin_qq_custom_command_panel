@@ -331,7 +331,11 @@ def test_normalize_config_payload_requires_secret_for_new_platform() -> None:
 
 
 def test_normalize_config_payload_writes_template_key() -> None:
-    """写回的 template_list 条目必须带 __template_key，否则宿主配置页报找不到模板"""
+    """写回的 template_list 条目必须带 __template_key，否则宿主配置页报找不到模板
+
+    这里断言完整的条目列表：只检查保留下来的条目是不够的，若规范化器把带伪造
+    模板键的条目整条丢掉，断言同样会通过，等于放走了真正的 bug。
+    """
     values, errors = normalize_config_payload(
         make_existing(),
         {
@@ -352,10 +356,26 @@ def test_normalize_config_payload_writes_template_key() -> None:
     )
 
     assert errors == []
-    assert all(
-        item["__template_key"] == QQ_PLATFORM_TEMPLATE_KEY for item in values["qq_platforms"]
-    )
-    assert values["selected_commands"][0]["__template_key"] == COMMAND_TEMPLATE_KEY
+    # 两条都必须保留，且数据原样、模板键被纠正
+    assert values["qq_platforms"] == [
+        {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
+            "name": "pf2",
+            "appid": "9999999999",
+            "secret": "s",
+            "platform": "qq_official",
+        },
+        {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
+            "name": "pf3",
+            "appid": "8888888888",
+            "secret": "s",
+            "platform": "qq_official",
+        },
+    ]
+    assert values["selected_commands"] == [
+        {"__template_key": COMMAND_TEMPLATE_KEY, "name": "ping", "desc": "Pong"}
+    ]
 
 
 def test_normalize_config_payload_backfills_template_key_for_untouched_fields() -> None:
@@ -367,8 +387,17 @@ def test_normalize_config_payload_backfills_template_key_for_untouched_fields() 
     values, errors = normalize_config_payload(broken, {"language": "en-US"})
 
     assert errors == []
-    assert values["qq_platforms"][0]["__template_key"] == QQ_PLATFORM_TEMPLATE_KEY
-    assert values["selected_commands"][0]["__template_key"] == COMMAND_TEMPLATE_KEY
+    assert values["qq_platforms"] == [
+        {
+            "__template_key": QQ_PLATFORM_TEMPLATE_KEY,
+            "name": "pf1",
+            "appid": "1023456789",
+            "secret": "s",
+        }
+    ]
+    assert values["selected_commands"] == [
+        {"__template_key": COMMAND_TEMPLATE_KEY, "name": "help", "desc": "说明"}
+    ]
 
 
 def test_normalize_config_payload_rejects_invalid_language() -> None:
