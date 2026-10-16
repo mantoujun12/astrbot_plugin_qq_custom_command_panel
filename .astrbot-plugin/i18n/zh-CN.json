@@ -137,20 +137,24 @@
       "settings": {
         "title": "设置",
         "subtitle": "插件级通用设置会集中在这里。",
-        "wipTitle": "功能施工中",
-        "wipText": "这个页面还在建设中，后续会提供插件级通用设置。"
+        "reload": "重新载入",
+        "save": "保存",
+        "saved": "设置已保存并生效。",
+        "mockHint": "本地开发环境：展示的是 mock 数据，不能保存配置。",
+        "basicTitle": "基础配置",
+        "basicSubtitle": "日志语言只影响插件日志。",
+        "language": "日志语言"
       },
       "compatibility": {
         "title": "兼容性",
-        "subtitle": "旧版全局配置仍可在这里维护；已被「机器人」页按 AppID 接管的机器人不会使用这里的场景和指令。",
+        "subtitle": "旧版全局配置的场景、平台与指令条目仍可在这里维护；已被「机器人」页按 AppID 接管的机器人不会使用这里的配置。",
         "reload": "重新载入",
         "save": "保存",
         "saveAndSync": "保存并同步",
         "saved": "配置已保存并生效。",
         "mockHint": "本地开发环境：展示的是 mock 数据，不能保存配置。",
         "basicTitle": "基础配置",
-        "basicSubtitle": "日志语言只影响插件日志；场景决定指令面板在哪些会话里生效。",
-        "language": "日志语言",
+        "basicSubtitle": "场景决定指令面板在哪些会话里生效；只对未被「机器人」页按 AppID 接管的机器人生效。",
         "scenes": "生效场景",
         "scene": {
           "c2c": "单聊",

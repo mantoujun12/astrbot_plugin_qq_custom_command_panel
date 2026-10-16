@@ -26,7 +26,6 @@ const { t, ready, hasBackend } = useBridge()
 const router = useRouter()
 const { start: startSync } = useSyncRun()
 
-const LANGUAGE_OPTIONS: string[] = ['zh-CN', 'en-US']
 const PLATFORM_TYPES = ['qq_official', 'qq_official_webhook'] as const
 
 const config = ref<PluginConfigResponse | null>(null)
@@ -127,7 +126,12 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
   error.value = ''
   notice.value = ''
   try {
-    const next = await saveConfig(checked.payload)
+    // 只提交本页负责的字段：language 归「设置」页，后端按字段合并，两页不会互相覆盖
+    const next = await saveConfig({
+      scenes: [...checked.payload.scenes],
+      qq_platforms: checked.payload.qq_platforms,
+      selected_commands: checked.payload.selected_commands,
+    })
     config.value = next
     form.value = toForm(next)
     notice.value = t('pages.dashboard.compatibility.saved', '配置已保存并生效。')
@@ -147,13 +151,13 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
 <template>
   <v-container fluid class="qc-page pa-4 pa-md-6">
     <div class="qc-header">
-      <div>
+      <div class="qc-header-main">
         <h1 class="qc-title">{{ t('pages.dashboard.compatibility.title', '兼容性') }}</h1>
         <p class="qc-subtitle">
           {{
             t(
               'pages.dashboard.compatibility.subtitle',
-              '旧版全局配置仍可在这里维护；已被「机器人」页按 AppID 接管的机器人不会使用这里的场景和指令。',
+              '旧版全局配置的场景、平台与指令条目仍可在这里维护；已被「机器人」页按 AppID 接管的机器人不会使用这里的配置。',
             )
           }}
         </p>
@@ -179,7 +183,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
           {{ t('pages.dashboard.compatibility.saveAndSync', '保存并同步') }}
         </v-btn>
         <v-btn
-          variant="flat"
+          variant="tonal"
           color="primary"
           :loading="saving"
           :disabled="!editable"
@@ -241,24 +245,13 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
             {{
               t(
                 'pages.dashboard.compatibility.basicSubtitle',
-                '日志语言只影响插件日志；场景决定指令面板在哪些会话里生效。',
+                '场景决定指令面板在哪些会话里生效；只对未被「机器人」页按 AppID 接管的机器人生效。',
               )
             }}
           </v-card-subtitle>
         </v-card-item>
         <v-card-text class="px-5 pb-5 pt-3">
           <v-row>
-            <v-col cols="12" md="4">
-              <v-select
-                v-model="form.language"
-                :items="LANGUAGE_OPTIONS"
-                :disabled="!editable"
-                :label="t('pages.dashboard.compatibility.language', '日志语言')"
-                variant="outlined"
-                density="comfortable"
-                hide-details
-              />
-            </v-col>
             <v-col cols="12" md="8">
               <v-select
                 v-model="form.scenes"
@@ -266,7 +259,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                 :disabled="!editable"
                 :label="t('pages.dashboard.compatibility.scenes', '生效场景')"
                 variant="outlined"
-                density="comfortable"
+                density="compact"
                 multiple
                 chips
                 hide-details
@@ -324,7 +317,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                   :disabled="!editable"
                   :label="t('pages.dashboard.compatibility.platformName', '备注（可选）')"
                   variant="outlined"
-                  density="comfortable"
+                  density="compact"
                   hide-details
                 />
               </v-col>
@@ -334,7 +327,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                   :disabled="!editable"
                   label="AppID"
                   variant="outlined"
-                  density="comfortable"
+                  density="compact"
                   hide-details
                 />
               </v-col>
@@ -359,7 +352,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                   "
                   persistent-hint
                   variant="outlined"
-                  density="comfortable"
+                  density="compact"
                 />
               </v-col>
               <v-col cols="12" md="2">
@@ -369,13 +362,14 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                   :disabled="!editable"
                   :label="t('pages.dashboard.compatibility.platformType', '平台类型')"
                   variant="outlined"
-                  density="comfortable"
+                  density="compact"
                   hide-details
                 />
               </v-col>
               <v-col cols="12" md="1" class="d-flex align-center justify-end">
                 <v-btn
                   icon
+                  size="small"
                   variant="text"
                   color="error"
                   :disabled="!editable"
@@ -437,7 +431,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                 :counter="limits.name_max"
                 :label="t('pages.dashboard.compatibility.commandName', '指令名')"
                 variant="outlined"
-                density="comfortable"
+                density="compact"
                 hide-details
               />
             </v-col>
@@ -449,13 +443,14 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
                 :counter="limits.desc_max"
                 :label="t('pages.dashboard.compatibility.commandDesc', '指令描述')"
                 variant="outlined"
-                density="comfortable"
+                density="compact"
                 hide-details
               />
             </v-col>
             <v-col cols="12" md="1" class="d-flex align-center justify-end">
               <v-btn
                 icon
+                size="small"
                 variant="text"
                 color="error"
                 :disabled="!editable"
