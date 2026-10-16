@@ -170,9 +170,9 @@ class PanelSyncer:
     ) -> list[dict[str, Any]]:
         """合并新版机器人和兼容配置，返回统一的运行时机器人列表
 
-        新版配置按 appid 优先；未被新版接管的旧机器人继续使用全局
-        ``scenes`` 与 ``selected_commands``。读取新版 JSON 失败会抛出
-        :class:`RobotConfigError`，由调用方决定如何展示错误，不做静默回退。
+        新版按 appid 优先接管，未被接管的旧机器人沿用全局 ``scenes`` 与
+        ``selected_commands``；新版 JSON 读取失败抛 :class:`RobotConfigError`，
+        由调用方决定如何展示错误，不做静默回退。
         """
         source_config = self._config if config is None else config
         v2_config = robot_config
@@ -311,9 +311,8 @@ class PanelSyncer:
     ) -> dict[str, str]:
         """把一个机器人各场景的指令条目写入对应 QQ 面板
 
-        新版调用传 ``{scope: items}``，每个场景使用自己的条目；旧调用仍可传
-        ``scenes`` 列表 + 一份 ``items``，两者等价于每个场景共享同一份条目。
-        只同步 items 非空的场景，未出现的场景会清理该场景下本插件创建的面板。
+        新版调用传 ``{scope: items}``，各场景条目独立；旧调用仍可传 ``scenes`` 列表
+        加一份共享 ``items``。只同步条目非空的场景，未出现的场景则清理本插件在该场景的旧面板。
         返回 {scope: panel_id}。
         """
         if isinstance(scenes, list):
@@ -515,9 +514,8 @@ class PanelSyncer:
     ) -> dict[str, dict[str, str]]:
         """总入口：把每个机器人各场景的指令条目写入对应 QQ 面板
 
-        新版机器人配置优先；未被新版按 appid 接管的兼容机器人继续使用全局
-        ``scenes`` 与 ``selected_commands``。新版配置文件损坏时直接中止，
-        不允许静默回退到兼容配置后再覆盖面板。
+        新版按 appid 优先接管，未被接管的兼容机器人沿用全局 ``scenes`` 与
+        ``selected_commands``；新版配置损坏时直接中止，不允许静默回退覆盖面板。
 
         参数：
             on_progress: 可选进度回调，在每个关键节点触发，回调内异常不影响主流程。
@@ -609,8 +607,7 @@ class PanelSyncer:
             )
             robot_scenes[pf_id] = scenes
 
-        # 通过公开的 build_clients 构造客户端，保持与状态接口同源，
-        # 也便于测试注入替身。
+        # 走公开的 build_clients 构造，保持与状态接口同源并便于测试注入替身。
         expected = self.build_clients(robot_config=robot_config)
 
         if not expected:

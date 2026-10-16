@@ -22,7 +22,6 @@ function stateLabel(state: SceneState): string {
   return t(`pages.dashboard.status.state.${state}`, STATE_META[state].fallback)
 }
 
-// 配置来源标签：新版机器人配置 / 兼容性全局配置
 function sourceLabel(source: PlatformStatus['source']): string {
   return source === 'v2'
     ? t('pages.dashboard.status.source.v2', '新版配置')

@@ -1,17 +1,9 @@
-/**
- * 新版机器人配置接口（GET / POST /robots）的数据契约。
- *
- * 每台机器人独立维护各场景的启用状态与指令条目；secret 只回掩码，
- * 提交时留空表示沿用后端已有值。
- */
+/** 新版机器人配置接口（GET / POST /robots）的数据契约 */
 
 import type { ConfigCommand, ConfigLimits, Scene } from './dashboard'
 
-/** 单个场景下的机器人指令面板配置 */
 export interface RobotSceneConfig {
-  /** 该场景是否启用指令面板 */
   enabled: boolean
-  /** 写入该场景面板的指令条目 */
   items: ConfigCommand[]
 }
 
@@ -27,7 +19,6 @@ export interface RobotConfig {
   scenes: Record<Scene, RobotSceneConfig>
 }
 
-/** GET /robots 的完整响应 */
 export interface RobotConfigResponse {
   version: number
   robots: RobotConfig[]
@@ -35,9 +26,7 @@ export interface RobotConfigResponse {
   limits: ConfigLimits
 }
 
-/** POST /robots 中单台机器人的可编辑载荷 */
 export interface RobotConfigPayload {
-  /** 新机器人为空字符串，已有机器人保留原 id */
   id: string
   name: string
   appid: string

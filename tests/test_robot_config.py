@@ -28,7 +28,6 @@ def make_scenes(
     enabled_scenes: tuple[str, ...] = ("c2c",),
     items: list[dict[str, str]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """构造四个场景的标准测试数据。"""
     panel_items = items if items is not None else [{"name": "help", "desc": "查看帮助"}]
     scenes: dict[str, dict[str, Any]] = {}
     for scene in ("c2c", "group", "channel", "dm"):
@@ -49,7 +48,6 @@ def make_robot(
     robot_id: str = "robot-id-1",
     scenes: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """构造一条新版机器人配置。"""
     return {
         "id": robot_id,
         "name": name,
@@ -67,7 +65,6 @@ def make_legacy_config(
     scenes: list[str] | None = None,
     commands: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """构造旧 schema 配置。"""
     return {
         "scenes": ["c2c", "group"] if scenes is None else scenes,
         "qq_platforms": [
@@ -77,9 +74,7 @@ def make_legacy_config(
     }
 
 
-# ---------------------------------------------------------------------------
 # 加载 / 保存
-# ---------------------------------------------------------------------------
 
 
 def test_empty_robot_config_shape() -> None:
@@ -140,9 +135,7 @@ def test_load_corrupt_json_does_not_silently_fallback(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8") == before
 
 
-# ---------------------------------------------------------------------------
 # 校验
-# ---------------------------------------------------------------------------
 
 
 def test_validate_accepts_valid_payload() -> None:
@@ -304,9 +297,7 @@ def test_validate_does_not_silently_truncate() -> None:
     assert normalized == empty_robot_config()
 
 
-# ---------------------------------------------------------------------------
-# secret
-# ---------------------------------------------------------------------------
+# secret：导出掩码与沿用原值
 
 
 def test_export_masks_secret_and_marks_set() -> None:
@@ -344,9 +335,7 @@ def test_validate_requires_secret_for_new_robot() -> None:
     assert any("secret" in error for error in errors)
 
 
-# ---------------------------------------------------------------------------
 # 新旧合并 / legacy 转换
-# ---------------------------------------------------------------------------
 
 
 def test_build_runtime_v2_wins_on_same_appid() -> None:

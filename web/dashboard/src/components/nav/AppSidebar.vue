@@ -13,7 +13,6 @@ defineProps<{
 
 defineEmits<{ toggle: [] }>()
 
-// 「状态概览」「新版配置」置顶，旧版全局设置作为兼容性入口压在底部
 const mainItems = [
   {
     to: '/status',

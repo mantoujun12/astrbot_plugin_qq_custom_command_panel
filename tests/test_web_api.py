@@ -639,7 +639,6 @@ def make_robot_bundle(
 def scene_config(
     *, enabled: bool = False, items: list[dict[str, str]] | None = None
 ) -> dict[str, Any]:
-    """构造一个完整的新版场景配置。"""
     return {"enabled": enabled, "items": list(items or [])}
 
 
@@ -651,7 +650,6 @@ def robot_payload(
     platform: str = "qq_official",
     scenes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """构造一台新版机器人提交项。"""
     return {
         "id": "",
         "name": name,
@@ -1044,7 +1042,6 @@ def test_register_web_apis_skips_without_host_method() -> None:
 
 @pytest.mark.asyncio
 async def test_build_status_reports_v2_source_and_name() -> None:
-    """存在新版机器人时，状态按运行时机器人返回 name 与 source。"""
     syncer = make_syncer(config={"scenes": [], "qq_platforms": []})
     client = FakeQQClient(existing={})
     syncer.build_clients = lambda config=None, **kwargs: {"robot-1": client}  # type: ignore[method-assign]

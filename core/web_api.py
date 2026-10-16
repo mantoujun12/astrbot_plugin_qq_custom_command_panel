@@ -94,7 +94,6 @@ def _robot_response(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _robot_appid_set(config: dict[str, Any]) -> set[str]:
-    """收集新版配置中已有的 appid，空值直接忽略。"""
     robots = config.get("robots")
     if not isinstance(robots, list):
         return set()
@@ -186,9 +185,7 @@ async def build_status(
     该接口默认查询线上，每个平台按场景各查一次 QQ API，所以视图只在进入页面时取。
     平台凭证只来自插件配置：插件读不到 AstrBot 平台适配器的机器人信息。
 
-    当新版机器人配置为空时，完全沿用旧版全局配置的统计与展示方式；一旦存在
-    新版机器人，则按“机器人 → 场景”的运行时视图统计，被新版接管的老机器人
-    不再重复出现。
+    新版配置为空时沿用旧版全局统计；否则按“机器人 → 场景”统计，被新版接管的老机器人不再重复出现。
     """
     v2_robots = _v2_robots(robot_config)
     if not v2_robots:
@@ -255,7 +252,6 @@ async def build_status(
 
 
 def _v2_robots(robot_config: dict[str, Any] | None) -> list[Any]:
-    """新版配置里的机器人列表，结构异常时视为空。"""
     if not isinstance(robot_config, dict):
         return []
     robots = robot_config.get("robots")
@@ -443,7 +439,6 @@ class WebApiBundle:
         return True
 
     def _safe_robot_config(self) -> dict[str, Any] | None:
-        """读取新版配置供状态接口使用；未注入目录时才返回 None。"""
         if self._robot_config_dir is None:
             return None
         return load_robot_config(self._robot_config_dir)
@@ -511,18 +506,15 @@ class WebApiBundle:
     # ------------------------------------------------------------------
 
     def _robots_unavailable(self) -> Any:
-        """新版配置目录未注入时返回明确错误，不影响兼容配置接口。"""
         web = _web()
         return web.error_response("新版机器人配置尚未启用", status_code=503)
 
     def _load_robots(self) -> dict[str, Any]:
-        """读取新版机器人配置，未注入目录时由调用方提前拦截。"""
         if self._robot_config_dir is None:
             raise RobotConfigError("新版机器人配置尚未启用")
         return load_robot_config(self._robot_config_dir)
 
     def _get_legacy(self) -> dict[str, Any]:
-        """取得兼容配置；未单独注入时复用现有 get_config 获取器。"""
         if self._get_legacy_config is not None:
             return self._get_legacy_config()
         return self._get_config()

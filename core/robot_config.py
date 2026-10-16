@@ -1,21 +1,9 @@
 """机器人 v2 配置的纯数据存储与迁移。
 
-本模块只处理 ``robot_config.json`` 的读写、校验，以及新旧配置的运行时合并，
-不接触 Web API、日志或 AstrBot 运行时对象，方便离线测试。
-
-新版配置按机器人维度组织：
-
-```
-{
-  "version": 1,
-  "robots": [...]
-}
-```
-
-其中每条机器人包含平台凭证与四个场景的面板条目；旧的 schema 配置
-（``qq_platforms`` + 全局 ``scenes`` + ``selected_commands``）继续作为兼容层，
-运行时按 appid 与新配置合并，新版优先。
-
+只处理 ``robot_config.json`` 的读写、校验与新旧配置的运行时合并，不接触 Web API、
+日志或 AstrBot 运行时对象，方便离线测试。结构为 ``{"version": 1, "robots": [...]}``，
+每条机器人包含平台凭证与四个场景的面板条目；旧的 schema 配置（``qq_platforms`` 与
+全局 ``scenes`` + ``selected_commands``）作为兼容层，运行时按 appid 合并，新版优先。
 ``version`` 是配置修订号，成功写入时递增，用于拒绝过期页面覆盖较新的配置。
 """
 
@@ -39,33 +27,28 @@ from .config import (
 )
 
 ROBOT_CONFIG_FILENAME = "robot_config.json"
-"""新版机器人配置的落盘文件名。"""
 
 
 class RobotConfigError(ValueError):
-    """机器人配置读取失败时抛出的异常。"""
+    """读取、校验、保存新版配置失败，或运行时合并出现 id 冲突时抛出。"""
 
 
 def empty_robot_config() -> dict[str, Any]:
-    """返回空的新版机器人配置结构。"""
     return {"version": 1, "robots": []}
 
 
 def _config_path(data_dir: str | Path) -> Path:
-    """把数据目录解析成新版配置文件的 Path。"""
     return Path(data_dir) / ROBOT_CONFIG_FILENAME
 
 
 def _empty_scenes() -> dict[str, dict[str, Any]]:
-    """构造四个场景的默认禁用结构。"""
     return {scene: {"enabled": False, "items": []} for scene in SCENES}
 
 
 def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     """从 ``data_dir`` 读取新版机器人配置。
 
-    - 文件不存在时返回空结构；
-    - 读取或 JSON 解析失败必须抛 :class:`RobotConfigError`，不允许静默回退空配置。
+    文件不存在时返回空结构；读取或解析失败抛 :class:`RobotConfigError`，不静默回退空配置。
     """
     path = _config_path(data_dir)
     if not path.exists():
@@ -93,11 +76,7 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
 
 
 def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
-    """原子写入新版机器人配置，并返回落盘路径。
-
-    JSON 先写入同目录临时文件，再用 ``Path.replace`` 覆盖目标文件，
-    避免进程中断留下半截配置。
-    """
+    """原子写入新版机器人配置并返回落盘路径，避免进程中断留下半截配置。"""
     target = _config_path(data_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
@@ -121,7 +100,6 @@ def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
 
 
 def _existing_robot_secrets(existing: dict[str, Any]) -> dict[str, str]:
-    """按 appid 收集现有机器人 secret，供空 secret 沿用。"""
     secrets: dict[str, str] = {}
     robots = existing.get("robots")
     if not isinstance(robots, list):
@@ -141,7 +119,6 @@ def _validate_scenes(
     *,
     robot_index: int,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    """校验并归一四个场景，返回 (scenes, errors)。"""
     errors: list[str] = []
     normalized = _empty_scenes()
     if not isinstance(scenes, dict):
@@ -224,11 +201,10 @@ def validate_robot_config(
     existing: dict[str, Any],
     payload: dict[str, Any],
 ) -> tuple[dict[str, Any], list[str]]:
-    """校验并归一新版机器人配置提交。
+    """校验并归一新版机器人配置提交，返回 ``(normalized_config, errors)``。
 
-    返回 ``(normalized_config, errors)``；``errors`` 非空时调用方不应落库。
-    appid 在整份配置内唯一；已有机器人的 secret 提交空字符串时沿用 ``existing``
-    中按 appid 匹配的明文，新机器人则必须填写。
+    ``errors`` 非空时调用方不应落库；appid 在整份配置内唯一，已有机器人提交空 secret
+    时沿用以 appid 匹配的 ``existing`` 明文，新机器人必须填写。
     """
     errors: list[str] = []
     if not isinstance(payload, dict):
@@ -344,7 +320,7 @@ def export_robot_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_runtime_robots(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """把单份新版配置转换成运行时机器人列表。"""
+    """只转换新版配置，不做旧 schema 合并；合并规则见 :func:`build_runtime_robots`。"""
     runtime: list[dict[str, Any]] = []
     raw_robots = config.get("robots")
     if not isinstance(raw_robots, list):
@@ -389,7 +365,6 @@ def get_runtime_robots(config: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]]:
-    """把旧 schema 配置转换成运行时机器人列表。"""
     enabled_scenes = get_enabled_scenes(legacy_config)
     selected_commands = get_selected_commands(legacy_config)
     runtime: list[dict[str, Any]] = []
@@ -417,11 +392,8 @@ def build_runtime_robots(
     legacy_config: dict[str, Any],
     robot_config: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """合并新旧配置为统一运行时机器人列表。
-
-    新版按 appid 优先；未命中的旧 schema 机器人继续使用自身的全局场景与
-    ``selected_commands``。
-    """
+    """合并新旧配置为统一运行时机器人列表：新版按 appid 接管，未命中的旧 schema
+    机器人继续使用全局场景与 ``selected_commands``。"""
     v2_robots = get_runtime_robots(robot_config)
     v2_appids = {robot["appid"] for robot in v2_robots}
     legacy_robots = [
@@ -438,10 +410,9 @@ def build_runtime_robots(
 
 
 def legacy_to_robot_drafts(legacy_config: dict[str, Any]) -> list[dict[str, Any]]:
-    """把旧 schema 机器人转换成新版配置草稿。
+    """把旧 schema 机器人转换成新版配置草稿，可直接作为导入时的初始值。
 
-    为每个启用场景准备同样的 ``selected_commands`` 条目，并保留 secret。
-    草稿可直接作为新建机器人时的初始值，未包含稳定 id。
+    为每个启用场景准备同样的 ``selected_commands`` 条目并保留 secret，不含稳定 id。
     """
     enabled_scenes = get_enabled_scenes(legacy_config)
     selected_commands = get_selected_commands(legacy_config)
