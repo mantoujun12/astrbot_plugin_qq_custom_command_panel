@@ -375,7 +375,7 @@ async def test_sync_empty_items_deletes_all_duplicate_owned_panels() -> None:
 
 def stub_clients(syncer: PanelSyncer, clients: dict[str, FakeQQClient]) -> PanelSyncer:
     """把 build_clients 换成固定返回值，避免真实创建 QQClient"""
-    syncer.build_clients = lambda config=None: clients  # type: ignore[method-assign]
+    syncer.build_clients = lambda config=None, **kwargs: clients  # type: ignore[method-assign]
     return syncer
 
 
@@ -494,3 +494,87 @@ async def test_sync_all_clearing_branch_emits_structured_events() -> None:
     assert events[1]["status"] == "ok"
     assert events[2]["reason"] == "clear"
     assert client.deleted == ["p_old"]
+
+
+# ---------------------------------------------------------------------------
+# v2：每个机器人、每个场景使用各自的条目
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sync_for_platform_uses_per_scene_items() -> None:
+    syncer = make_syncer()
+    client = FakeQQClient(existing={})
+
+    saved = await syncer.sync_for_platform(
+        "robot-a",
+        client,
+        {
+            "c2c": [{"name": "help", "desc": "私聊帮助"}],
+            "group": [{"name": "sign", "desc": "群签到"}],
+        },
+    )
+
+    assert set(saved) == {"c2c", "group"}
+    by_scope = {scope: items for scope, items in client.created}
+    assert [item["name"] for item in by_scope["c2c"]] == ["help"]
+    assert [item["name"] for item in by_scope["group"]] == ["sign"]
+
+
+@pytest.mark.asyncio
+async def test_sync_for_platform_clears_disabled_scene_only() -> None:
+    syncer = make_syncer()
+    client = FakeQQClient(
+        existing={
+            "c2c": [owned_panel("c2c", "p_c2c")],
+            "group": [owned_panel("group", "p_group")],
+        }
+    )
+
+    saved = await syncer.sync_for_platform(
+        "robot-a",
+        client,
+        {"group": [{"name": "sign", "desc": "群签到"}]},
+    )
+
+    assert set(saved) == {"group"}
+    assert "p_c2c" in client.deleted
+    assert "p_group" not in client.deleted
+
+
+@pytest.mark.asyncio
+async def test_sync_all_uses_v2_robot_scenes(monkeypatch) -> None:
+    syncer = make_syncer()
+    client_a = FakeQQClient(existing={})
+    client_b = FakeQQClient(existing={})
+    stub_clients(syncer, {"robot-a": client_a, "robot-b": client_b})
+    monkeypatch.setattr(
+        syncer,
+        "build_runtime_robots",
+        lambda *args, **kwargs: [
+            {
+                "id": "robot-a",
+                "appid": "app-a",
+                "secret": "sec-a",
+                "platform": "qq_official",
+                "source": "v2",
+                "scenes": {"c2c": [{"name": "help", "desc": "私聊"}]},
+            },
+            {
+                "id": "robot-b",
+                "appid": "app-b",
+                "secret": "sec-b",
+                "platform": "qq_official",
+                "source": "v2",
+                "scenes": {"group": [{"name": "sign", "desc": "群聊"}]},
+            },
+        ],
+    )
+
+    result = await syncer.sync_all()
+
+    assert set(result) == {"robot-a", "robot-b"}
+    assert [item["name"] for item in client_a.created[0][1]] == ["help"]
+    assert client_a.created[0][0] == "c2c"
+    assert [item["name"] for item in client_b.created[0][1]] == ["sign"]
+    assert client_b.created[0][0] == "group"
