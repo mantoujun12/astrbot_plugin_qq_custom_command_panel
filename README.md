@@ -38,6 +38,14 @@ QQ 官方机器人指令面板内容自定义插件
 - 平台凭证只能填在插件自己的配置中：AstrBot 不向插件暴露平台适配器的机器人信息，插件无法从 AstrBot 平台配置里读取 appid / clientSecret
 - 配置变更后重启 AstrBot 即会自动同步，无需任何指令操作
 
+## 安装
+
+插件面向 QQ 官方机器人（`qq_official` / `qq_official_webhook`），需要自行准备好机器人的 AppID 与 ClientSecret。
+
+1. **插件市场（推荐）**：在 AstrBot WebUI 的插件市场搜索 `astrbot_plugin_qq_custom_command_panel`，或直接打开[插件主页](https://cloud.astrbot.app/plugin/mantoujun12/astrbot_plugin_qq_custom_command_panel)安装。
+2. **手动安装**：从 [Releases](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/releases/latest) 下载 zip，解压到 AstrBot 的 `data/plugins/` 下（解压后应得到一个包含 `main.py` 与 `metadata.yaml` 的插件目录），再重启 AstrBot 或在插件页重载插件；依赖会由插件管理器按 `requirements.txt` 安装。
+3. 安装完成后打开本插件的可视化视图，按下面的「配置说明」维护机器人，或继续使用已有的兼容性配置。
+
 ## 配置说明
 
 插件提供两套配置方式，建议优先使用新版配置。
@@ -50,7 +58,30 @@ QQ 官方机器人指令面板内容自定义插件
 2. **场景**：按 c2c（单聊）、group（群聊）、channel（文字子频道）、dm（频道私信）分别启停
 3. **指令条目**：每个已启用场景单独维护 `{name, desc}` 条目；name 最长 14 字符，desc 最长 30 字符，单场景最多 20 条
 
-新版配置保存在插件数据目录的 `plugin_data/astrbot_plugin_qq_custom_command_panel/robot_config.json`，结构为 `{"version": N, "robots": [...]}`。`version` 是配置修订号：保存和导入都会带上版本做乐观并发检查，版本不一致时后端返回 HTTP 409；`robot_config.json` 损坏、编码非法或结构异常时，插件会报错并中止相关操作，不会静默回退到兼容性配置。
+配置保存在插件数据目录的 `plugin_data/astrbot_plugin_qq_custom_command_panel/robot_config.json`，结构如下（`id` 缺失时保存会自动补一个，`platform` 取值 `qq_official` 或 `qq_official_webhook`）：
+
+```json
+{
+  "version": 1,
+  "robots": [
+    {
+      "id": "8f2c1e6a-…",
+      "name": "主机器人",
+      "appid": "102xxxxxx",
+      "secret": "……",
+      "platform": "qq_official",
+      "scenes": {
+        "c2c": { "enabled": true, "items": [{ "name": "帮助", "desc": "查看使用说明" }] },
+        "group": { "enabled": true, "items": [{ "name": "签到", "desc": "每日签到" }] },
+        "channel": { "enabled": false, "items": [] },
+        "dm": { "enabled": false, "items": [] }
+      }
+    }
+  ]
+}
+```
+
+`version` 是配置修订号：保存和导入都会带上版本做乐观并发检查，页面保存成功后服务端会把版本号加一，提交的版本落后时后端返回 HTTP 409，重新加载页面即可；`robot_config.json` 损坏、编码非法或结构异常时，插件会报错并中止相关操作，不会静默回退到兼容性配置。
 
 已有兼容性配置可以在「机器人」页点「从兼容配置导入」，按 AppID 导入机器人草稿，再检查并保存。导入只复制配置，不会立即改动 QQ 线上面板；需要同步时再点「保存并同步」或在状态页触发同步。
 
@@ -84,29 +115,67 @@ QQ 官方机器人指令面板的 API 限制：
 
 ## 开发与测试
 
-插件通过 AstrBot 加载，功能测试需要在运行的 AstrBot 实例下进行；业务逻辑可以跑离线 pytest 套件，测试会注入 AstrBot stub。
+插件通过 AstrBot 加载，功能测试需要在运行的 AstrBot 实例下进行；业务逻辑可以跑离线 pytest 套件，`tests/conftest.py` 会注入 AstrBot stub，无需安装 AstrBot。
+
+### 后端（Python 3.10+）
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -q
+pytest -q                                                                             # 全部离线测试
+pytest tests/test_robot_config.py -q                                                  # 只跑单个模块
+pytest --cov --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy  # 覆盖率 + 测试报告，与 CI 口径一致
 ruff check . --fix
 ruff format --check .
+pre-commit run --all-files                                                            # 可选，与 CI 同一套 hooks
 ```
 
-插件视图源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`：
+用例都在 `tests/`，与 `core/` 模块一一对应（如 `core/robot_config.py` → `tests/test_robot_config.py`）；异步用例直接写 `async def`（`asyncio_mode = "auto"`）；公共假件在 `tests/fakes.py`。`main.py` 是装配层，离线套件不覆盖它，改动入口需在真实 AstrBot 下验证。
+
+### 插件视图（web/dashboard）
+
+需要 Node `^22.12.0 || >=24` 与 pnpm 9+（CI 使用 Node 24 + pnpm 12，见 [package.json](web/dashboard/package.json) 的 `engines`）。视图源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`：
 
 ```bash
 cd web/dashboard
 pnpm install
-pnpm dev
-pnpm build
-pnpm test
-pnpm test:coverage
-pnpm test:report
-pnpm test:codecov
+pnpm dev            # 本地 dev server，没有 bridge，走 mock 并显式标注
+pnpm build          # vue-tsc 类型检查 + Vite 打包，直接写 pages/dashboard/
+pnpm test           # vitest 单次运行
+pnpm test:coverage  # 覆盖率，阈值见 vitest.config.ts
+pnpm test:report    # 额外产出 test-report.junit.xml
+pnpm test:codecov   # 覆盖率 + JUnit，CI 用的入口
 ```
 
-`pnpm build` 会先执行 `vue-tsc` 类型检查，并直接生成 `pages/dashboard/` 产物；视图本地开发没有 AstrBot bridge 时会显示 mock 数据，保存与同步入口不会伪装成成功。
+`pnpm build` 会先执行 `vue-tsc` 类型检查，并直接生成 `pages/dashboard/` 产物；视图本地开发没有 AstrBot bridge 时会显示 mock 数据，保存与同步入口不会伪装成成功。测试文件与被测代码同目录、命名 `*.test.ts`，挂载用 `src/test/helpers.ts` 的 `mountView`。
+
+### 打包与发布
+
+```bash
+python scripts/bump_version.py minor   # 同步 metadata.yaml / core/paths.py / web/dashboard/package.json 三处版本号
+python scripts/package_plugin.py       # 生成 dist/<插件名>-<版本>.zip
+```
+
+`metadata.yaml` 是唯一版本源，三处版本号必须一致，否则自动发布工作流会拒绝发布。推送到 `master` 且 `metadata.yaml` 有改动时，[release.yml](.github/workflows/release.yml) 会校验版本、用 `scripts/package_plugin.py` 打包、打 tag 并创建 Release；发布是幂等的，失败可在 Actions 里手动重跑。
+
+### 持续集成
+
+- [ci-core](.github/workflows/ci-core.yml)：Python 3.10 / 3.11 / 3.12 上跑 `pytest`
+- [ci-dashboard](.github/workflows/ci-dashboard.yml)：Node 24 + pnpm 12 上跑 `pnpm build`
+- [codecov-core](.github/workflows/codecov-core.yml) / [codecov-dashboard](.github/workflows/codecov-dashboard.yml)：把覆盖率与 JUnit 测试报告上传到 [Codecov](https://codecov.io/gh/mantoujun12/astrbot_plugin_qq_custom_command_panel)，前后端分别使用 flag `unittests` 与 `dashboard`
+
+### 目录结构
+
+```text
+main.py            插件入口（@register / initialize / terminate）
+core/              业务逻辑：config、robot_config、qq_client、panel_syncer、sync_runner、web_api、state、paths、i18n
+_conf_schema.json  WebUI 插件配置 schema（兼容性配置）
+metadata.yaml      插件元数据（版本号唯一来源）
+.astrbot-plugin/   WebUI 侧 i18n（metadata / config / pages）
+web/dashboard/     视图源码（Vue 3 + TypeScript + Vite）
+pages/dashboard/   视图构建产物（提交进仓库的生成文件）
+tests/             离线 pytest 套件
+scripts/           bump_version.py、package_plugin.py
+```
 
 ## 下一步计划
 
