@@ -28,6 +28,18 @@ from .i18n import (
 from .panel_syncer import EventCallback, PanelSyncer, ProgressCallback
 from .paths import PLUGIN_NAME, PLUGIN_VERSION, resolve_plugin_data_dir
 from .qq_client import QQClient
+from .robot_config import (
+    ROBOT_CONFIG_FILENAME,
+    RobotConfigError,
+    build_runtime_robots,
+    empty_robot_config,
+    export_robot_config,
+    get_runtime_robots,
+    legacy_to_robot_drafts,
+    load_robot_config,
+    save_robot_config,
+    validate_robot_config,
+)
 from .state import STATE_FILENAME, PanelStateStore
 from .sync_runner import SyncRunCallable, SyncRunner
 from .web_api import (
@@ -64,12 +76,18 @@ __all__ = [
     "PanelSyncer",
     "ProgressCallback",
     "QQClient",
+    "ROBOT_CONFIG_FILENAME",
+    "RobotConfigError",
     "SyncRunCallable",
     "SyncRunner",
     "Translator",
     "WebApiBundle",
+    "build_runtime_robots",
     "build_status",
+    "empty_robot_config",
     "export_config",
+    "export_robot_config",
+    "get_runtime_robots",
     "get_configured_platforms",
     "get_enabled_scenes",
     "get_instance",
@@ -77,11 +95,15 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "initialize",
+    "legacy_to_robot_drafts",
+    "load_robot_config",
     "mask_appid",
     "mask_secret",
     "normalize_config_payload",
     "panel_items_count",
     "register_web_apis",
     "resolve_plugin_data_dir",
+    "save_robot_config",
     "t",
+    "validate_robot_config",
 ]
