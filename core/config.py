@@ -29,6 +29,12 @@ DEFAULT_SCENES: list[str] = ["c2c", "group"]
 # 支持的 QQ 平台适配器类型
 PLATFORM_TYPES: tuple[str, ...] = ("qq_official", "qq_official_webhook")
 
+# `_conf_schema.json` 里 template_list 的模板 key。
+# AstrBot WebUI 靠条目的 __template_key 匹配模板，缺失或非法会让该条目在插件配置页
+# 报“找不到对应模板，请删除后重新添加。”，所以写回配置时必须带上。
+QQ_PLATFORM_TEMPLATE_KEY = "qq_platform"
+COMMAND_TEMPLATE_KEY = "command"
+
 # QQ 平台类型别名：兼容不同 AstrBot 版本/写法之间的差异
 _PLATFORM_ALIASES: dict[str, str] = {
     "qq_official": "qq_official",
@@ -204,6 +210,18 @@ def _dump_commands(config: dict[str, Any]) -> list[dict[str, str]]:
     return commands
 
 
+def _with_template_key(entry: dict[str, Any], template_key: str) -> dict[str, Any]:
+    """返回带 `__template_key` 的副本，供写回 template_list 字段使用
+
+    本插件每个 template_list 只声明一个模板，这里统一写成固定的模板 key：
+    既补上缺失的情况，也覆盖掉提交项里非法的 key，避免 AstrBot 插件配置页
+    因匹配不到模板而报“找不到对应模板，请删除后重新添加。”。
+    """
+    merged = dict(entry)
+    merged["__template_key"] = template_key
+    return merged
+
+
 def export_config(config: dict[str, Any]) -> dict[str, Any]:
     """把当前配置导出成 dashboard 可渲染的结构
 
@@ -272,7 +290,9 @@ def normalize_config_payload(
 
     raw_platforms = payload.get("qq_platforms")
     if raw_platforms is None:
-        values["qq_platforms"] = _dump_platforms(existing)
+        values["qq_platforms"] = [
+            _with_template_key(item, QQ_PLATFORM_TEMPLATE_KEY) for item in _dump_platforms(existing)
+        ]
     elif not isinstance(raw_platforms, list):
         errors.append(t("config.error.platforms_type"))
     else:
@@ -302,12 +322,19 @@ def normalize_config_payload(
                     continue
             seen_appids.add(appid)
             name = str(item.get("name") or "").strip()
-            platforms.append({"name": name, "appid": appid, "secret": secret, "platform": platform})
+            platforms.append(
+                _with_template_key(
+                    {"name": name, "appid": appid, "secret": secret, "platform": platform},
+                    QQ_PLATFORM_TEMPLATE_KEY,
+                )
+            )
         values["qq_platforms"] = platforms
 
     raw_commands = payload.get("selected_commands")
     if raw_commands is None:
-        values["selected_commands"] = _dump_commands(existing)
+        values["selected_commands"] = [
+            _with_template_key(item, COMMAND_TEMPLATE_KEY) for item in _dump_commands(existing)
+        ]
     elif not isinstance(raw_commands, list):
         errors.append(t("config.error.commands_type"))
     elif len(raw_commands) > PANEL_MAX_ITEMS:
@@ -335,18 +362,20 @@ def normalize_config_payload(
                     t("config.error.command_desc_length", index=index, limit=PANEL_ITEM_DESC_MAX)
                 )
                 continue
-            commands.append({"name": name, "desc": desc})
+            commands.append(_with_template_key({"name": name, "desc": desc}, COMMAND_TEMPLATE_KEY))
         values["selected_commands"] = commands
 
     return values, errors
 
 
 __all__ = [
+    "COMMAND_TEMPLATE_KEY",
     "DEFAULT_SCENES",
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
     "PANEL_MAX_ITEMS",
     "PLATFORM_TYPES",
+    "QQ_PLATFORM_TEMPLATE_KEY",
     "SCENES",
     "export_config",
     "get_configured_platforms",
