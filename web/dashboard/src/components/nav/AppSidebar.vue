@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { mdiCogOutline, mdiViewDashboardOutline } from '@mdi/js'
+import { mdiCogOutline, mdiHistory, mdiRobotOutline, mdiViewDashboardOutline } from '@mdi/js'
 import NavItem from './NavItem.vue'
 
 defineProps<{
@@ -13,13 +13,24 @@ defineProps<{
 
 defineEmits<{ toggle: [] }>()
 
-// 本次只落地这两个入口：「状态概览」置顶，「设置」压到抽屉底部
 const mainItems = [
   {
     to: '/status',
     icon: mdiViewDashboardOutline,
     labelKey: 'pages.dashboard.nav.status',
     fallback: '状态概览',
+  },
+  {
+    to: '/robots',
+    icon: mdiRobotOutline,
+    labelKey: 'pages.dashboard.nav.robots',
+    fallback: '机器人',
+  },
+  {
+    to: '/compatibility',
+    icon: mdiHistory,
+    labelKey: 'pages.dashboard.nav.compatibility',
+    fallback: '兼容性',
   },
 ]
 

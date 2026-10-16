@@ -7,17 +7,25 @@
   "config": {
     "language": {
       "description": "插件日志输出语言",
-      "hint": "zh-CN=简体中文，en-US=English。影响 logger 输出，不影响 selected_commands 用户自定义条目。",
-      "labels": ["简体中文", "English"]
+      "hint": "zh-CN=简体中文，en-US=English。影响 logger 输出，不影响 selected_commands 用户自定义条目。本页属于旧版兼容性配置，新版请到插件视图的「机器人」页维护。",
+      "labels": [
+        "简体中文",
+        "English"
+      ]
     },
     "scenes": {
       "description": "生效场景（选择哪些场景下要显示 QQ 指令面板）",
-      "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。",
-      "labels": ["单聊", "群聊", "文字子频道", "频道私信"]
+      "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。本项属于兼容性配置，仅对未被「机器人」页接管的 AppID 生效。",
+      "labels": [
+        "单聊",
+        "群聊",
+        "文字子频道",
+        "频道私信"
+      ]
     },
     "qq_platforms": {
       "description": "QQ 官方机器人平台凭证",
-      "hint": "插件只能读取这里的凭证：AstrBot 不向插件暴露平台适配器的机器人信息，所以必须手动填写 appid + clientSecret。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
+      "hint": "⚠️ 本页是旧版兼容性配置：新版按机器人独立配置，请优先到插件视图的「机器人」页维护；某个 AppID 一旦出现在「机器人」页，就由新版接管，不再读取本页的生效场景与指令条目。插件只能读取这里的凭证：AstrBot 不向插件暴露平台适配器的机器人信息，所以必须手动填写 appid + clientSecret。多机器人请添加多条。⚠️ secret 在配置页会遮罩显示，但配置文件里仍是明文，请勿分享配置文件。",
       "templates": {
         "qq_platform": {
           "name": "QQ 机器人",
@@ -32,12 +40,15 @@
             },
             "secret": {
               "description": "ClientSecret (AppSecret)",
-              "hint": "⚠️ 会明文保存，请勿截图分享此页面"
+              "hint": "配置页默认以密码框遮罩显示，可点右侧眼睛图标临时查看；但配置文件里仍是明文，请勿分享 data/config/ 下的配置文件"
             },
             "platform": {
               "description": "平台类型",
               "hint": "默认 qq_official 即可",
-              "labels": ["QQ 官方机器人", "QQ 官方机器人 Webhook"]
+              "labels": [
+                "QQ 官方机器人",
+                "QQ 官方机器人 Webhook"
+              ]
             }
           }
         }
@@ -45,7 +56,7 @@
     },
     "selected_commands": {
       "description": "要在 QQ 指令面板展示的自定义指令条目",
-      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。也可以在插件可视化视图的设置页维护这些配置。",
+      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。也可以到插件视图的「兼容性」页维护这些配置。本项属于兼容性配置，仅对未被「机器人」页接管的 AppID 生效。",
       "templates": {
         "command": {
           "name": "指令条目",
@@ -73,7 +84,9 @@
         "collapse": "收起侧边栏",
         "expand": "展开侧边栏",
         "openDrawer": "打开侧边栏",
-        "closeDrawer": "关闭侧边栏"
+        "closeDrawer": "关闭侧边栏",
+        "robots": "机器人",
+        "compatibility": "兼容性"
       },
       "status": {
         "title": "状态概览",
@@ -110,16 +123,26 @@
         "empty": {
           "platforms": {
             "title": "还没有可用的 QQ 平台",
-            "description": "到「设置」页填写 qq_platforms 的 appid / ClientSecret。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。"
+            "description": "到「兼容性」页填写 qq_platforms 的 appid / ClientSecret，或者到「机器人」页创建机器人。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。"
           },
           "commands": {
-            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请到「设置」页添加 selected_commands。"
+            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请到「兼容性」或「机器人」页添加指令。"
           }
+        },
+        "source": {
+          "v2": "机器人配置",
+          "legacy": "兼容性配置"
         }
       },
       "settings": {
         "title": "设置",
-        "subtitle": "在这里维护写入 QQ 指令面板的内容与平台凭证，保存后立即生效。",
+        "subtitle": "插件级通用设置会集中在这里。",
+        "wipTitle": "功能施工中",
+        "wipText": "这个页面还在建设中，后续会提供插件级通用设置。"
+      },
+      "compatibility": {
+        "title": "兼容性",
+        "subtitle": "旧版全局配置仍可在这里维护；已被「机器人」页按 AppID 接管的机器人不会使用这里的场景和指令。",
         "reload": "重新载入",
         "save": "保存",
         "saveAndSync": "保存并同步",
@@ -163,6 +186,75 @@
         "commandDescTooLong": "指令描述超出长度上限。",
         "platformAppidRequired": "平台 appid 不能为空。",
         "platformSecretRequired": "新增平台必须填写 ClientSecret。"
+      },
+      "robots": {
+        "title": "机器人",
+        "subtitle": "按机器人维护不同场景下的指令条目，每台机器人独立生效。",
+        "reload": "重新载入",
+        "importLegacy": "从兼容配置导入",
+        "addRobot": "新增机器人",
+        "save": "保存",
+        "saveAndSync": "保存并同步",
+        "saved": "机器人配置已保存。",
+        "mockHint": "本地开发环境：展示的是 mock 数据，不能保存配置。",
+        "listTitle": "机器人",
+        "listSubtitle": "选择一台机器人编辑它的场景指令。",
+        "emptyRobots": "还没有机器人，先新增一台。",
+        "editorEmpty": "请选择或新增一台机器人。",
+        "robotSummary": "场景 {scenes} 个，指令 {items} 条。",
+        "appidLabel": "AppID：{appid}",
+        "untitledRobot": "未命名机器人",
+        "removedLocal": "已从本地列表移除。保存后才会写入配置。",
+        "basicTitle": "基础信息",
+        "basicSubtitle": "名称、AppID 与平台凭证只用于这台机器人。",
+        "name": "机器人名称",
+        "appid": "AppID",
+        "secret": "ClientSecret",
+        "secretKeep": "留空表示沿用原值",
+        "secretRequired": "新机器人必须填写 ClientSecret。",
+        "secretSaved": "当前：{masked}",
+        "secretSetNoMask": "已保存 ClientSecret，留空表示沿用原值。",
+        "platformType": "平台类型",
+        "platformTypeName": {
+          "qq_official": "QQ 官方机器人",
+          "qq_official_webhook": "QQ 官方机器人 Webhook"
+        },
+        "scenesTitle": "场景指令",
+        "scenesSubtitle": "每个场景独立维护指令条目；启用后至少保留 1 条。",
+        "scene": {
+          "c2c": "单聊",
+          "group": "群聊",
+          "channel": "文字子频道",
+          "dm": "频道私信",
+          "itemsCount": "{count}/{max} 条",
+          "limits": "指令名 ≤ {name} 字，描述 ≤ {desc} 字。",
+          "noItems": "这个场景还没有指令条目。",
+          "commandName": "指令名",
+          "commandDesc": "指令描述",
+          "removeItem": "删除指令",
+          "addItem": "添加指令",
+          "disabledHint": "场景未启用，开启后可管理指令条目。"
+        },
+        "dangerTitle": "删除机器人配置",
+        "dangerText": "删除只移除这里的配置，不会清理 QQ 线上已有的指令面板。",
+        "deleteRobot": "删除机器人配置",
+        "importTitle": "从兼容配置导入",
+        "importSubtitle": "选择或填写要导入的旧版平台 AppID，每个 AppID 单独一行或使用逗号分隔。",
+        "importAppids": "AppID 列表",
+        "importEmpty": "兼容配置里没有可导入的 AppID，请手动填写。",
+        "importNoAppids": "至少填写一个 AppID。",
+        "importConfirm": "导入",
+        "imported": "已从兼容配置导入并保存机器人配置，请检查后再同步。",
+        "cancel": "取消",
+        "notLoaded": "机器人配置尚未载入。",
+        "appidRequired": "AppID 不能为空。",
+        "nameRequired": "机器人名称不能为空。",
+        "nameTooLong": "机器人名称超出长度上限。",
+        "sceneRequiresItem": "启用的场景至少需要 1 条指令。",
+        "sceneItemsTooMany": "单个场景的指令条目超出上限。",
+        "commandNameRequired": "指令名不能为空。",
+        "commandNameTooLong": "指令名超出长度上限。",
+        "commandDescTooLong": "指令描述超出长度上限。"
       }
     }
   }

@@ -7,17 +7,25 @@
   "config": {
     "language": {
       "description": "Language for plugin logs",
-      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated.",
-      "labels": ["简体中文", "English"]
+      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated. This page is the legacy compatibility configuration; use the Robots page in the plugin view instead.",
+      "labels": [
+        "简体中文",
+        "English"
+      ]
     },
     "scenes": {
       "description": "Active scenes (where QQ command panel is visible)",
-      "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration.",
-      "labels": ["Private chat", "Group chat", "Text channel", "Channel DM"]
+      "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration. This item belongs to the compatibility configuration and only applies to AppIDs not taken over on the Robots page.",
+      "labels": [
+        "Private chat",
+        "Group chat",
+        "Text channel",
+        "Channel DM"
+      ]
     },
     "qq_platforms": {
       "description": "QQ Official bot platform credentials",
-      "hint": "The plugin can only read credentials from here: AstrBot does not expose platform adapter bot info to plugins, so appid + clientSecret must be filled in manually. Add multiple entries for multiple bots. ⚠️ secret is saved in plain text, DO NOT screenshot share.",
+      "hint": "⚠️ Legacy compatibility configuration: the new version configures each bot separately, so prefer the Robots page in the plugin view. Once an AppID appears on the Robots page, the new version takes it over and the scenes and command entries on this page are ignored. The plugin can only read credentials from here: AstrBot does not expose platform adapter bot info to plugins, so appid + clientSecret must be filled in manually. Add multiple entries for multiple bots. ⚠️ secret is masked on this page, but still saved in plain text in the config file, so do not share the config file.",
       "templates": {
         "qq_platform": {
           "name": "QQ Bot",
@@ -32,12 +40,15 @@
             },
             "secret": {
               "description": "ClientSecret (AppSecret)",
-              "hint": "⚠️ Saved in plain text, DO NOT screenshot share this page"
+              "hint": "Masked in the config page by default; click the eye icon to reveal it temporarily. The value is still stored in plain text in the config file, so do not share the file under data/config/"
             },
             "platform": {
               "description": "Platform type",
               "hint": "Default qq_official works for most cases",
-              "labels": ["QQ Official Bot", "QQ Official Bot Webhook"]
+              "labels": [
+                "QQ Official Bot",
+                "QQ Official Bot Webhook"
+              ]
             }
           }
         }
@@ -45,7 +56,7 @@
     },
     "selected_commands": {
       "description": "Custom command entries to show in the QQ command panel",
-      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars. You can also maintain them on the Settings page of the plugin view.",
+      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars. You can also maintain them on the Compatibility page of the plugin view. This item belongs to the compatibility configuration and only applies to AppIDs not taken over on the Robots page.",
       "templates": {
         "command": {
           "name": "Command entry",
@@ -73,7 +84,9 @@
         "collapse": "Collapse sidebar",
         "expand": "Expand sidebar",
         "openDrawer": "Open sidebar",
-        "closeDrawer": "Close sidebar"
+        "closeDrawer": "Close sidebar",
+        "robots": "Robots",
+        "compatibility": "Compatibility"
       },
       "status": {
         "title": "Overview",
@@ -110,16 +123,26 @@
         "empty": {
           "platforms": {
             "title": "No QQ platform available yet",
-            "description": "Fill in appid / ClientSecret under qq_platforms on the Settings page. The plugin cannot read bot credentials from AstrBot platform adapters, so this is the only place to configure them."
+            "description": "Fill in appid / ClientSecret under qq_platforms on the Compatibility page, or create robots on the Robots page. The plugin cannot read bot credentials from AstrBot platform adapters, so this is the only place to configure them."
           },
           "commands": {
-            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands on the Settings page."
+            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands on the Compatibility page."
           }
+        },
+        "source": {
+          "v2": "Robot config",
+          "legacy": "Legacy config"
         }
       },
       "settings": {
         "title": "Settings",
-        "subtitle": "Maintain the panel entries and platform credentials here; saving takes effect immediately.",
+        "subtitle": "Plugin-wide general settings will live here.",
+        "wipTitle": "Under construction",
+        "wipText": "This page is still being built; plugin-wide general settings will be provided later."
+      },
+      "compatibility": {
+        "title": "Compatibility",
+        "subtitle": "Legacy global configuration stays available here. Bots taken over by a robot on the Robots page with the same AppID no longer use these global scenes and commands.",
         "reload": "Reload",
         "save": "Save",
         "saveAndSync": "Save and sync",
@@ -163,6 +186,75 @@
         "commandDescTooLong": "Command description is too long.",
         "platformAppidRequired": "Platform appid is required.",
         "platformSecretRequired": "ClientSecret is required for a new platform."
+      },
+      "robots": {
+        "title": "Robots",
+        "subtitle": "Maintain per-robot command entries for each scene; each robot takes effect independently.",
+        "reload": "Reload",
+        "importLegacy": "Import from compatibility",
+        "addRobot": "Add robot",
+        "save": "Save",
+        "saveAndSync": "Save and sync",
+        "saved": "Robot configuration saved.",
+        "mockHint": "Local dev environment: showing mock data, saving is disabled.",
+        "listTitle": "Robots",
+        "listSubtitle": "Select a robot to edit its per-scene commands.",
+        "emptyRobots": "No robot yet. Add one first.",
+        "editorEmpty": "Select or add a robot.",
+        "robotSummary": "{scenes} scene(s), {items} command(s).",
+        "appidLabel": "AppID: {appid}",
+        "untitledRobot": "Untitled robot",
+        "removedLocal": "Removed from the local list. It will be written to config after saving.",
+        "basicTitle": "Basics",
+        "basicSubtitle": "Name, AppID, and platform credentials belong only to this robot.",
+        "name": "Robot name",
+        "appid": "AppID",
+        "secret": "ClientSecret",
+        "secretKeep": "Leave empty to keep the current value",
+        "secretRequired": "ClientSecret is required for a new robot.",
+        "secretSaved": "Current: {masked}",
+        "secretSetNoMask": "ClientSecret is saved. Leave empty to keep the current value.",
+        "platformType": "Platform type",
+        "platformTypeName": {
+          "qq_official": "QQ Official Bot",
+          "qq_official_webhook": "QQ Official Bot Webhook"
+        },
+        "scenesTitle": "Scene commands",
+        "scenesSubtitle": "Each scene keeps its own command entries; an enabled scene needs at least one.",
+        "scene": {
+          "c2c": "Private chat",
+          "group": "Group chat",
+          "channel": "Text channel",
+          "dm": "Channel DM",
+          "itemsCount": "{count}/{max} entries",
+          "limits": "Command name ≤ {name} chars, description ≤ {desc} chars.",
+          "noItems": "This scene has no command entries yet.",
+          "commandName": "Command name",
+          "commandDesc": "Command description",
+          "removeItem": "Remove command",
+          "addItem": "Add command",
+          "disabledHint": "The scene is disabled. Enable it to manage command entries."
+        },
+        "dangerTitle": "Delete robot configuration",
+        "dangerText": "Deleting only removes the configuration here; it does not clean up existing QQ online panels.",
+        "deleteRobot": "Delete robot configuration",
+        "importTitle": "Import from compatibility",
+        "importSubtitle": "Choose or enter legacy platform AppIDs to import, one per line or separated by commas.",
+        "importAppids": "AppID list",
+        "importEmpty": "No importable AppID in the compatibility configuration; enter one manually.",
+        "importNoAppids": "Enter at least one AppID.",
+        "importConfirm": "Import",
+        "imported": "Robots imported and saved from the compatibility configuration. Review them before syncing.",
+        "cancel": "Cancel",
+        "notLoaded": "Robot configuration is not loaded yet.",
+        "appidRequired": "AppID is required.",
+        "nameRequired": "Robot name is required.",
+        "nameTooLong": "Robot name is too long.",
+        "sceneRequiresItem": "An enabled scene needs at least one command.",
+        "sceneItemsTooMany": "Too many command entries in one scene.",
+        "commandNameRequired": "Command name is required.",
+        "commandNameTooLong": "Command name is too long.",
+        "commandDescTooLong": "Command description is too long."
       }
     }
   }

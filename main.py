@@ -55,6 +55,7 @@ class QQCommandPanelPlugin(Star):
             lambda: self._syncer,
             lambda: dict(self.config),
             save_config=self._save_config,
+            robot_config_dir=self.data_dir,
         )
 
     async def _save_config(self, values: dict[str, Any]) -> None:

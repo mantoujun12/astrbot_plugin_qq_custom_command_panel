@@ -1,8 +1,8 @@
 /**
- * 设置页的表单逻辑：接口响应转可编辑表单、以及提交前的本地校验。
+ * 兼容性页的表单逻辑：接口响应转可编辑表单、以及提交前的本地校验。
  *
  * 这些函数只依赖入参与注入的翻译函数，抽出来之后校验分支可以直接单测，
- * 不用绕 DOM 去点表单（见同目录 settingsForm.test.ts）。
+ * 不用绕 DOM 去点表单（见同目录 compatibilityForm.test.ts）。
  * 校验语义与后端 core/config.py 的 normalize_config_payload 对齐。
  */
 
@@ -23,20 +23,20 @@ export type Translate = (key: string, fallback?: string) => string
 
 /** 校验不通过时返回给页面展示的文案；key 与 fallback 成对维护，i18n 对账用例会遍历校验 */
 export const MESSAGES = {
-  notLoaded: ['pages.dashboard.settings.notLoaded', '配置尚未载入。'],
-  commandsTooMany: ['pages.dashboard.settings.commandsTooMany', '指令条目超出上限。'],
-  commandNameRequired: ['pages.dashboard.settings.commandNameRequired', '指令名不能为空。'],
-  commandNameTooLong: ['pages.dashboard.settings.commandNameTooLong', '指令名超出长度上限。'],
+  notLoaded: ['pages.dashboard.compatibility.notLoaded', '配置尚未载入。'],
+  commandsTooMany: ['pages.dashboard.compatibility.commandsTooMany', '指令条目超出上限。'],
+  commandNameRequired: ['pages.dashboard.compatibility.commandNameRequired', '指令名不能为空。'],
+  commandNameTooLong: ['pages.dashboard.compatibility.commandNameTooLong', '指令名超出长度上限。'],
   commandDescTooLong: [
-    'pages.dashboard.settings.commandDescTooLong',
+    'pages.dashboard.compatibility.commandDescTooLong',
     '指令描述超出长度上限。',
   ],
   platformAppidRequired: [
-    'pages.dashboard.settings.platformAppidRequired',
+    'pages.dashboard.compatibility.platformAppidRequired',
     '平台 appid 不能为空。',
   ],
   platformSecretRequired: [
-    'pages.dashboard.settings.platformSecretRequired',
+    'pages.dashboard.compatibility.platformSecretRequired',
     '新增平台必须填写 ClientSecret。',
   ],
 } as const

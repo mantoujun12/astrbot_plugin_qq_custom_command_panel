@@ -7,8 +7,18 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 新增新版机器人配置：按「机器人 → 场景 → 指令条目」组织，每台机器人独立维护 AppID / ClientSecret / platform 与四种场景的指令条目；视图侧边栏新增「新版配置」页，旧的全局设置页改名为「兼容性」并继续可用
+- 新增新版配置 Web API：`GET /<plugin>/robots`、`POST /<plugin>/robots`、`POST /<plugin>/robots/import-legacy`；旧配置可从兼容性配置按 AppID 导入，新版配置持久化到 `plugin_data/astrbot_plugin_qq_custom_command_panel/robot_config.json`
+- 新旧配置运行时按 AppID 逐机器人合并：新版定义某 AppID 时接管该机器人，未接管的兼容机器人继续使用旧全局 `scenes` + `selected_commands`
+- 面板同步改为按机器人、按场景写入；场景未启用时清理该场景下本插件面板，任一场景拉取失败时该机器人整次同步中止
+- 新版配置保存与导入增加 `version` 乐观并发检查，版本不一致返回 HTTP 409；`robot_config.json` 损坏时抛错并中止，不回退旧配置
+
 ### 修复
 
+- 修复新版配置按「机器人 → 场景」写入不同指令后同步失败的问题：写入 QQ 面板的条目重新带上 `type: command`，此前只发 `name` / `desc` 会被 QQ 以 `30015 面板元素类型不合法` 整份拒绝，同步结果因此显示为「没有触发」；同时场景写入失败不再被静默吞掉，平台会带着失败原因和已写入的场景数上报
+- 修复同步结果的平台计数：整轮没有任何条目时（纯清理）不再报成「成功 0 个平台」，处理过的机器人一律计入 `platforms`；场景因面板数达到 QQ 上限而没写入时也按失败上报，不再静默跳过
 - 修复从可视化视图保存配置后，AstrBot 插件配置页的 `qq_platforms` / `selected_commands` 报「找不到对应模板，请删除后重新添加。」的问题：写回 `template_list` 字段时补上 AstrBot 用于匹配模板的 `__template_key`（本插件为 `qq_platform` / `command`），提交项缺失或携带非法 key 时一律纠正为插件声明的模板 key；旧版本写坏的配置在下一次保存时会被补齐 (#47)
 
 ## [v0.5.2] - 2026-10-16

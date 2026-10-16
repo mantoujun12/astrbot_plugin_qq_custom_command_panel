@@ -4,9 +4,11 @@ from .config import (
     DEFAULT_SCENES,
     PANEL_ITEM_DESC_MAX,
     PANEL_ITEM_NAME_MAX,
+    PANEL_ITEM_TYPE,
     PANEL_MAX_ITEMS,
     PLATFORM_TYPES,
     SCENES,
+    build_panel_item,
     export_config,
     get_configured_platforms,
     get_enabled_scenes,
@@ -15,6 +17,7 @@ from .config import (
     get_selected_commands,
     mask_secret,
     normalize_config_payload,
+    normalize_panel_items,
 )
 from .i18n import (
     DEFAULT_LANGUAGE,
@@ -25,9 +28,21 @@ from .i18n import (
     initialize,
     t,
 )
-from .panel_syncer import EventCallback, PanelSyncer, ProgressCallback
+from .panel_syncer import EventCallback, PanelSyncer, PanelSyncError, ProgressCallback
 from .paths import PLUGIN_NAME, PLUGIN_VERSION, resolve_plugin_data_dir
 from .qq_client import QQClient
+from .robot_config import (
+    ROBOT_CONFIG_FILENAME,
+    RobotConfigError,
+    build_runtime_robots,
+    empty_robot_config,
+    export_robot_config,
+    get_runtime_robots,
+    legacy_to_robot_drafts,
+    load_robot_config,
+    save_robot_config,
+    validate_robot_config,
+)
 from .state import STATE_FILENAME, PanelStateStore
 from .sync_runner import SyncRunCallable, SyncRunner
 from .web_api import (
@@ -49,6 +64,7 @@ __all__ = [
     "LOG_TAG",
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
+    "PANEL_ITEM_TYPE",
     "PANEL_MAX_ITEMS",
     "PLATFORM_TYPES",
     "PLUGIN_NAME",
@@ -61,15 +77,23 @@ __all__ = [
     "SYNC_ROUTE_SUFFIX",
     "EventCallback",
     "PanelStateStore",
+    "PanelSyncError",
     "PanelSyncer",
     "ProgressCallback",
     "QQClient",
+    "ROBOT_CONFIG_FILENAME",
+    "RobotConfigError",
     "SyncRunCallable",
     "SyncRunner",
     "Translator",
     "WebApiBundle",
+    "build_panel_item",
+    "build_runtime_robots",
     "build_status",
+    "empty_robot_config",
     "export_config",
+    "export_robot_config",
+    "get_runtime_robots",
     "get_configured_platforms",
     "get_enabled_scenes",
     "get_instance",
@@ -77,11 +101,16 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "initialize",
+    "legacy_to_robot_drafts",
+    "load_robot_config",
     "mask_appid",
     "mask_secret",
     "normalize_config_payload",
+    "normalize_panel_items",
     "panel_items_count",
     "register_web_apis",
     "resolve_plugin_data_dir",
+    "save_robot_config",
     "t",
+    "validate_robot_config",
 ]

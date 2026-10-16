@@ -5,6 +5,9 @@
 - ``GET  /<plugin_name>/status``      状态概览，对应 types/dashboard.ts 的 StatusResponse
 - ``GET  /<plugin_name>/config``      读取插件配置（secret 只回掩码）
 - ``POST /<plugin_name>/config``      校验并写回插件配置，保存后立即生效
+- ``GET  /<plugin_name>/robots``      读取新版机器人配置（secret 只回掩码）
+- ``POST /<plugin_name>/robots``      校验并写回新版机器人配置
+- ``POST /<plugin_name>/robots/import-legacy`` 从兼容配置导入机器人
 - ``POST /<plugin_name>/sync``        触发一次面板同步（后台任务，单飞）
 - ``GET  /<plugin_name>/sync/events`` SSE 推送同步进度（结构化事件 + 本地化文本）
 
@@ -17,13 +20,17 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.star import Context
 
 from .config import (
+    PANEL_ITEM_DESC_MAX,
+    PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
+    SCENES,
     export_config,
     get_configured_platforms,
     get_enabled_scenes,
@@ -33,11 +40,22 @@ from .config import (
 from .i18n import LOG_TAG, t
 from .panel_syncer import PanelSyncer
 from .paths import PLUGIN_NAME, PLUGIN_VERSION
+from .robot_config import (
+    RobotConfigError,
+    build_runtime_robots,
+    export_robot_config,
+    legacy_to_robot_drafts,
+    load_robot_config,
+    save_robot_config,
+    validate_robot_config,
+)
 from .sync_runner import SyncRunner
 
 # 视图接口路由后缀，完整路径为 /<PLUGIN_NAME>/<suffix>
 STATUS_ROUTE_SUFFIX = "status"
 CONFIG_ROUTE_SUFFIX = "config"
+ROBOTS_ROUTE_SUFFIX = "robots"
+ROBOTS_IMPORT_ROUTE_SUFFIX = "robots/import-legacy"
 SYNC_ROUTE_SUFFIX = "sync"
 SYNC_EVENTS_ROUTE_SUFFIX = "sync/events"
 
@@ -61,6 +79,32 @@ def mask_appid(appid: Any) -> str:
     if len(text) <= 6:
         return "*" * len(text)
     return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
+
+
+def _robot_response(config: dict[str, Any]) -> dict[str, Any]:
+    """给新版机器人配置补齐前端契约里的场景与限制元数据。"""
+    payload = export_robot_config(config)
+    payload["available_scenes"] = list(SCENES)
+    payload["limits"] = {
+        "name_max": PANEL_ITEM_NAME_MAX,
+        "desc_max": PANEL_ITEM_DESC_MAX,
+        "items_max": PANEL_MAX_ITEMS,
+    }
+    return payload
+
+
+def _robot_appid_set(config: dict[str, Any]) -> set[str]:
+    robots = config.get("robots")
+    if not isinstance(robots, list):
+        return set()
+    appids: set[str] = set()
+    for robot in robots:
+        if not isinstance(robot, dict):
+            continue
+        appid = str(robot.get("appid") or "").strip()
+        if appid:
+            appids.add(appid)
+    return appids
 
 
 def panel_items_count(panel: dict[str, Any]) -> int:
@@ -134,19 +178,97 @@ async def build_status(
     syncer: PanelSyncer,
     config: dict[str, Any],
     version: str = PLUGIN_VERSION,
+    robot_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """组装状态概览响应体（对应 types/dashboard.ts 的 StatusResponse）
 
     该接口默认查询线上，每个平台按场景各查一次 QQ API，所以视图只在进入页面时取。
     平台凭证只来自插件配置：插件读不到 AstrBot 平台适配器的机器人信息。
+
+    新版配置为空时沿用旧版全局统计；否则按“机器人 → 场景”统计，被新版接管的老机器人不再重复出现。
     """
+    v2_robots = _v2_robots(robot_config)
+    if not v2_robots:
+        return await _build_legacy_status(syncer, config, version)
+
+    runtime = build_runtime_robots(config, robot_config or {})
+    runtime_by_id = {str(robot.get("id") or robot.get("appid") or ""): robot for robot in runtime}
+    # 用同一份新版配置构造客户端，保证平台元信息与运行时机器人同源
+    clients = syncer.build_clients(config, robot_config=robot_config or {})
+
+    async def one(pf_id: str, client: Any) -> tuple[dict[str, Any], int, bool]:
+        robot = runtime_by_id.get(pf_id, {})
+        scenes = [
+            scope
+            for scope in SCENES
+            if isinstance(robot.get("scenes"), dict) and robot["scenes"].get(scope)
+        ]
+        payload, count, complete = await _platform_status(
+            syncer,
+            pf_id,
+            client,
+            {
+                "appid": str(robot.get("appid") or ""),
+                "platform": str(robot.get("platform") or ""),
+            },
+            scenes,
+        )
+        payload["name"] = str(robot.get("name") or "")
+        payload["source"] = str(robot.get("source") or "v2")
+        return payload, count, complete
+
+    results = await asyncio.gather(*(one(pf_id, client) for pf_id, client in clients.items()))
+
+    active_scenes = [
+        scope
+        for scope in SCENES
+        if any(
+            isinstance(robot.get("scenes"), dict) and robot["scenes"].get(scope)
+            for robot in runtime
+        )
+    ]
+    total_items = sum(
+        len(items)
+        for robot in runtime
+        if isinstance(robot.get("scenes"), dict)
+        for items in robot["scenes"].values()
+        if isinstance(items, list)
+    )
+    panels: dict[str, Any] = {
+        "total": sum(count for _, count, _ in results),
+        "partial": any(not complete for _, _, complete in results),
+    }
+    platform_count = len(clients)
+    if platform_count:
+        panels["max"] = PANEL_MAX_ITEMS * platform_count
+
+    return {
+        "plugin": {"name": PLUGIN_NAME, "version": version},
+        "platforms": [payload for payload, _, _ in results],
+        "scenes": active_scenes,
+        "items": {"count": total_items, "max": PANEL_MAX_ITEMS},
+        "panels": panels,
+    }
+
+
+def _v2_robots(robot_config: dict[str, Any] | None) -> list[Any]:
+    if not isinstance(robot_config, dict):
+        return []
+    robots = robot_config.get("robots")
+    return robots if isinstance(robots, list) else []
+
+
+async def _build_legacy_status(
+    syncer: PanelSyncer,
+    config: dict[str, Any],
+    version: str,
+) -> dict[str, Any]:
+    """旧版全局配置的状态统计，保持既有行为不变。"""
     platforms = get_configured_platforms(config)
     scenes = get_enabled_scenes(config)
     items = get_selected_commands(config)
-    # 用当前配置构造客户端，保证和平台元信息同源（不读 syncer 内部配置）
     clients = syncer.build_clients(config)
 
-    # 各平台并发查询，慢查询互不阻塞；单平台失败只影响它自己的 payload
     results = await asyncio.gather(
         *(
             _platform_status(syncer, pf_id, client, platforms.get(pf_id, {}), scenes)
@@ -156,12 +278,10 @@ async def build_status(
 
     panels: dict[str, Any] = {
         "total": sum(count for _, count, _ in results),
-        # 有场景查询失败时 total 只是下限，明确告诉视图不要当精确值展示
         "partial": any(not complete for _, _, complete in results),
     }
     platform_count = len(clients)
     if platform_count:
-        # 综合容量上限= 平台数 × 单平台上限；没有平台时省略 max
         panels["max"] = PANEL_MAX_ITEMS * platform_count
 
     return {
@@ -235,12 +355,16 @@ class WebApiBundle:
         get_config: Callable[[], dict[str, Any]],
         *,
         save_config: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        robot_config_dir: Path | None = None,
+        get_legacy_config: Callable[[], dict[str, Any]] | None = None,
         version: str = PLUGIN_VERSION,
         cache_ttl: float = STATUS_CACHE_TTL,
     ) -> None:
         self._get_syncer = get_syncer
         self._get_config = get_config
         self._save_config = save_config
+        self._robot_config_dir = Path(robot_config_dir) if robot_config_dir is not None else None
+        self._get_legacy_config = get_legacy_config
         self._version = version
         self.cache = StatusCache(cache_ttl)
         self.runner = SyncRunner()
@@ -283,6 +407,24 @@ class WebApiBundle:
             "Plugin dashboard config save",
         )
         context.register_web_api(
+            f"{prefix}/{ROBOTS_ROUTE_SUFFIX}",
+            self.page_robots_get,
+            ["GET"],
+            "Plugin robot config read",
+        )
+        context.register_web_api(
+            f"{prefix}/{ROBOTS_ROUTE_SUFFIX}",
+            self.page_robots_save,
+            ["POST"],
+            "Plugin robot config save",
+        )
+        context.register_web_api(
+            f"{prefix}/{ROBOTS_IMPORT_ROUTE_SUFFIX}",
+            self.page_robots_import_legacy,
+            ["POST"],
+            "Plugin robot config legacy import",
+        )
+        context.register_web_api(
             f"{prefix}/{SYNC_ROUTE_SUFFIX}",
             self.page_sync_start,
             ["POST"],
@@ -296,6 +438,11 @@ class WebApiBundle:
         )
         return True
 
+    def _safe_robot_config(self) -> dict[str, Any] | None:
+        if self._robot_config_dir is None:
+            return None
+        return load_robot_config(self._robot_config_dir)
+
     # ------------------------------------------------------------------
     # 状态概览
     # ------------------------------------------------------------------
@@ -308,10 +455,19 @@ class WebApiBundle:
         # 视图手动刷新传 refresh=1 时绕过缓存
         raw_refresh = web.request.query.get("refresh", "")
         force = str(raw_refresh).strip().lower() in ("1", "true", "yes")
-        payload = await self.cache.get(
-            lambda: build_status(syncer, self._get_config(), self._version),
-            force=force,
-        )
+        try:
+            payload = await self.cache.get(
+                lambda: build_status(
+                    syncer,
+                    self._get_config(),
+                    self._version,
+                    robot_config=self._safe_robot_config(),
+                ),
+                force=force,
+            )
+        except RobotConfigError as exc:
+            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            return web.error_response(str(exc), status_code=500)
         return web.json_response(payload)
 
     # ------------------------------------------------------------------
@@ -344,6 +500,156 @@ class WebApiBundle:
         # 配置变了，状态缓存里的平台/场景信息随即过期
         self.cache.invalidate()
         return web.json_response(export_config(self._get_config()))
+
+    # ------------------------------------------------------------------
+    # 新版机器人配置
+    # ------------------------------------------------------------------
+
+    def _robots_unavailable(self) -> Any:
+        web = _web()
+        return web.error_response("新版机器人配置尚未启用", status_code=503)
+
+    def _load_robots(self) -> dict[str, Any]:
+        if self._robot_config_dir is None:
+            raise RobotConfigError("新版机器人配置尚未启用")
+        return load_robot_config(self._robot_config_dir)
+
+    def _get_legacy(self) -> dict[str, Any]:
+        if self._get_legacy_config is not None:
+            return self._get_legacy_config()
+        return self._get_config()
+
+    async def page_robots_get(self) -> Any:
+        """读取新版机器人配置；文件损坏时返回可读的 500 错误。"""
+        web = _web()
+        if self._robot_config_dir is None:
+            return self._robots_unavailable()
+        try:
+            config = self._load_robots()
+        except RobotConfigError as exc:
+            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            return web.error_response(str(exc), status_code=500)
+        return web.json_response(_robot_response(config))
+
+    async def page_robots_save(self) -> Any:
+        """校验并原子写回新版机器人配置，secret 留空表示沿用旧值。"""
+        web = _web()
+        if self._robot_config_dir is None:
+            return self._robots_unavailable()
+
+        payload = await web.request.json(default={})
+        if not isinstance(payload, dict):
+            return web.error_response(t("web.config_invalid_body"), status_code=400)
+
+        try:
+            existing = self._load_robots()
+        except RobotConfigError as exc:
+            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            return web.error_response(str(exc), status_code=500)
+
+        expected_version = payload.get("version")
+        current_version = existing.get("version", 1)
+        if type(expected_version) is not int or expected_version < 1:
+            return web.error_response("version：必须是正整数", status_code=400)
+        if expected_version != current_version:
+            return web.error_response(t("web.robot_config_conflict"), status_code=409)
+
+        config, errors = validate_robot_config(existing, payload)
+        if errors:
+            return web.error_response("；".join(errors), status_code=400)
+
+        config["version"] = current_version + 1
+        try:
+            save_robot_config(self._robot_config_dir, config)
+        except RobotConfigError as exc:
+            logger.error(f"{LOG_TAG} 保存新版机器人配置失败：{exc}", exc_info=True)
+            return web.error_response(str(exc), status_code=500)
+
+        self.cache.invalidate()
+        return web.json_response(_robot_response(config))
+
+    async def page_robots_import_legacy(self) -> Any:
+        """把兼容配置里的机器人导入新版配置，重复 appid 拒绝导入。"""
+        web = _web()
+        if self._robot_config_dir is None:
+            return self._robots_unavailable()
+
+        payload = await web.request.json(default={})
+        if not isinstance(payload, dict):
+            return web.error_response(t("web.config_invalid_body"), status_code=400)
+
+        raw_appids: Any
+        if "appids" in payload:
+            raw_appids = payload.get("appids")
+        else:
+            raw_appids = [payload.get("appid")]
+        if not isinstance(raw_appids, list) or not raw_appids:
+            return web.error_response("appids：必须是非空列表", status_code=400)
+
+        appids = []
+        for index, raw_appid in enumerate(raw_appids):
+            appid = str(raw_appid or "").strip()
+            if not appid:
+                return web.error_response(f"appids[{index}]：不能为空", status_code=400)
+            appids.append(appid)
+        if len(set(appids)) != len(appids):
+            return web.error_response("appids：包含重复值", status_code=400)
+
+        try:
+            existing = self._load_robots()
+        except RobotConfigError as exc:
+            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            return web.error_response(str(exc), status_code=500)
+
+        expected_version = payload.get("version")
+        current_version = existing.get("version", 1)
+        if type(expected_version) is not int or expected_version < 1:
+            return web.error_response("version：必须是正整数", status_code=400)
+        if expected_version != current_version:
+            return web.error_response(t("web.robot_config_conflict"), status_code=409)
+
+        existing_appids = _robot_appid_set(existing)
+        duplicates = [appid for appid in appids if appid in existing_appids]
+        if duplicates:
+            return web.error_response(
+                f"以下 appid 已存在于新版配置：{'、'.join(duplicates)}",
+                status_code=400,
+            )
+
+        drafts = legacy_to_robot_drafts(self._get_legacy())
+        by_appid = {
+            str(draft.get("appid") or "").strip(): draft
+            for draft in drafts
+            if isinstance(draft, dict) and str(draft.get("appid") or "").strip()
+        }
+        missing = [appid for appid in appids if appid not in by_appid]
+        if missing:
+            return web.error_response(
+                f"兼容配置中找不到以下 appid：{'、'.join(missing)}",
+                status_code=400,
+            )
+
+        robots = existing.get("robots")
+        merged = dict(existing)
+        merged["version"] = 1
+        merged["robots"] = [
+            *(robots if isinstance(robots, list) else []),
+            *(by_appid[appid] for appid in appids),
+        ]
+
+        config, errors = validate_robot_config({}, merged)
+        if errors:
+            return web.error_response("；".join(errors), status_code=400)
+
+        config["version"] = current_version + 1
+        try:
+            save_robot_config(self._robot_config_dir, config)
+        except RobotConfigError as exc:
+            logger.error(f"{LOG_TAG} 导入新版机器人配置失败：{exc}", exc_info=True)
+            return web.error_response(str(exc), status_code=500)
+
+        self.cache.invalidate()
+        return web.json_response(_robot_response(config))
 
     # ------------------------------------------------------------------
     # 同步入口 + 进度流
@@ -402,6 +708,8 @@ def register_web_apis(
     get_config: Callable[[], dict[str, Any]],
     *,
     save_config: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    robot_config_dir: Path | None = None,
+    get_legacy_config: Callable[[], dict[str, Any]] | None = None,
     version: str = PLUGIN_VERSION,
     cache_ttl: float = STATUS_CACHE_TTL,
 ) -> WebApiBundle | None:
@@ -410,6 +718,8 @@ def register_web_apis(
         get_syncer,
         get_config,
         save_config=save_config,
+        robot_config_dir=robot_config_dir,
+        get_legacy_config=get_legacy_config,
         version=version,
         cache_ttl=cache_ttl,
     )
@@ -420,6 +730,8 @@ def register_web_apis(
 
 __all__ = [
     "CONFIG_ROUTE_SUFFIX",
+    "ROBOTS_IMPORT_ROUTE_SUFFIX",
+    "ROBOTS_ROUTE_SUFFIX",
     "STATUS_CACHE_TTL",
     "STATUS_ROUTE_SUFFIX",
     "SYNC_EVENTS_ROUTE_SUFFIX",

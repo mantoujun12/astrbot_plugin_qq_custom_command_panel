@@ -5,22 +5,26 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import aiohttp
 from astrbot.api import logger
 from astrbot.api.star import Context
 
 from .config import (
     PANEL_MAX_ITEMS,
     SCENES,
-    get_configured_platforms,
     get_enabled_scenes,
-    get_selected_commands,
+    normalize_panel_items,
 )
 from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
 from .qq_client import QQClient
+from .robot_config import ROBOT_CONFIG_FILENAME, build_runtime_robots, load_robot_config
 from .state import PanelStateStore
+
+if TYPE_CHECKING:
+    # 仅用于类型注解：aiohttp 由 AstrBot 宿主环境提供，不在 requirements.txt 里声明，
+    # 所以这里不能在运行期导入，否则离线跑测试会直接 ImportError。
+    import aiohttp
 
 # 面板操作的并发上限。QQ 官方 API 有限流 (HTTP 429)，
 # 单个 appid 同时发太多请求会被短暂封禁，这里留一个保守的默认值。
@@ -34,6 +38,18 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 # 结构化事件回调：供 dashboard 渲染进度条 / 平台状态列表
 # 与 ProgressCallback 并行存在：文本进日志，结构化事件进可视化
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+class PanelSyncError(RuntimeError):
+    """某个机器人有场景写入失败
+
+    携带已成功写入的 ``{scope: panel_id}``，调用方据此标记平台失败的同时
+    仍能持久化已完成部分。整轮同步因场景查询失败而中止时抛普通 RuntimeError。
+    """
+
+    def __init__(self, message: str, saved: dict[str, str] | None = None) -> None:
+        super().__init__(message)
+        self.saved: dict[str, str] = dict(saved or {})
 
 
 class PanelSyncer:
@@ -52,6 +68,7 @@ class PanelSyncer:
     ) -> None:
         self.context = context
         self._http = http
+        self._data_dir = Path(data_dir)
         self._state = PanelStateStore(data_dir)
         # 引用一份当前插件配置；plugin 实例可在运行期通过 set_config 刷新
         self._config: dict[str, Any] = config or {}
@@ -162,25 +179,48 @@ class PanelSyncer:
         except Exception as exc:
             logger.warning(f"{LOG_TAG} event callback failed: {exc}")
 
+    def build_runtime_robots(
+        self,
+        config: dict[str, Any] | None = None,
+        *,
+        robot_config: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """合并新版机器人和兼容配置，返回统一的运行时机器人列表
+
+        新版按 appid 优先接管，未被接管的旧机器人沿用全局 ``scenes`` 与
+        ``selected_commands``；新版 JSON 读取失败抛 :class:`RobotConfigError`，
+        由调用方决定如何展示错误，不做静默回退。
+        """
+        source_config = self._config if config is None else config
+        v2_config = robot_config
+        if v2_config is None:
+            v2_config = load_robot_config(self._data_dir)
+        return build_runtime_robots(source_config, v2_config)
+
     def build_clients(
         self,
         config: dict[str, Any] | None = None,
+        *,
+        robot_config: dict[str, Any] | None = None,
     ) -> dict[str, QQClient]:
-        """根据配置（schema 优先，否则 context）构建所有 QQ 客户端
+        """根据新版机器人 + 兼容配置构建所有 QQ 客户端
 
         公开方法，供 sync / clear / purge 流程共用。`config` 用于按调用方提供的
         配置构建，不传时用 syncer 当前持有的配置；视图状态接口会传入当前插件配置，
         保证客户端与响应里的平台元数据同源。
         """
-        source_config = self._config if config is None else config
         clients: dict[str, QQClient] = {}
-        platforms = get_configured_platforms(source_config)
-        for pf_id, info in platforms.items():
+        for robot in self.build_runtime_robots(config, robot_config=robot_config):
+            pf_id = str(robot.get("id") or robot.get("appid") or "")
+            appid = str(robot.get("appid") or "")
+            secret = str(robot.get("secret") or "")
+            if not pf_id or not appid or not secret:
+                continue
             client = QQClient(
-                appid=info["appid"],
-                secret=info["secret"],
+                appid=appid,
+                secret=secret,
                 http=self._http,
-                platform_label=info.get("platform", "qq"),
+                platform_label=str(robot.get("platform") or "qq"),
             )
             clients[pf_id] = client
         return clients
@@ -241,34 +281,33 @@ class PanelSyncer:
         remark: str,
         existing_panel: dict[str, Any] | None,
         total_panels: int,
-    ) -> tuple[str | None, int]:
+    ) -> tuple[str | None, int, str | None]:
         """同步单个 scope 的面板：优先 update 已有，否则 create 新建
 
-        返回 (saved_panel_id_or_None, new_total_panels)。
+        返回 (saved_panel_id_or_None, new_total_panels, error_reason_or_None)。
         - saved_panel_id 为 None 表示该 scope 未写入（上限达到 / 失败）
         - new_total_panels 反映本次新建后的总面板数（用于上限判断）
+        - error_reason 非空时调用方必须把该场景记成失败，不能当成写入成功
         """
         if existing_panel is not None:
             panel_id = existing_panel.get("panel_id")
             if panel_id:
                 await client.update_panel(panel_id, items, remark)
                 logger.info(f"{LOG_TAG} " + t("log.update_panel", scope=scope, panel_id=panel_id))
-                return str(panel_id), total_panels
+                return str(panel_id), total_panels, None
 
         # QQ 限制：一个机器人最多创建 PANEL_MAX_ITEMS 个面板。
         # 达到上限时仍允许更新已有面板，仅阻止新建。
         if total_panels >= PANEL_MAX_ITEMS:
-            logger.error(
-                f"{LOG_TAG} "
-                + t(
-                    "log.panel_limit_reached",
-                    scope=scope,
-                    pf_id=pf_id,
-                    total=total_panels,
-                    limit=PANEL_MAX_ITEMS,
-                )
+            reason = t(
+                "log.panel_limit_reached",
+                scope=scope,
+                pf_id=pf_id,
+                total=total_panels,
+                limit=PANEL_MAX_ITEMS,
             )
-            return None, total_panels
+            logger.error(f"{LOG_TAG} " + reason)
+            return None, total_panels, reason
 
         panel_id = await client.create_panel(
             scope=scope,
@@ -277,22 +316,36 @@ class PanelSyncer:
             remark=remark,
         )
         logger.info(f"{LOG_TAG} " + t("log.create_panel", scope=scope, panel_id=panel_id))
-        return panel_id, total_panels + 1
+        return panel_id, total_panels + 1, None
 
     async def sync_for_platform(
         self,
         pf_id: str,
         client: QQClient,
-        scenes: list[str],
-        items: list[dict[str, str]],
+        scenes: dict[str, list[dict[str, str]]] | list[str],
+        items: list[dict[str, str]] | None = None,
     ) -> dict[str, str]:
-        """把用户在 schema 配置的 items 写入一个平台下所有场景的面板
+        """把一个机器人各场景的指令条目写入对应 QQ 面板
 
-        返回 {scope: panel_id}。items 为空时清理该平台所有本插件面板。
+        新版调用传 ``{scope: items}``，各场景条目独立；旧调用仍可传 ``scenes`` 列表
+        加一份共享 ``items``。只同步条目非空的场景，未出现的场景则清理本插件在该场景的旧面板。
+        条目统一补齐 QQ API 要求的 type 字段后写出。
+        返回 {scope: panel_id}；有场景写入失败时抛 :class:`PanelSyncError`
+        （异常上的 ``saved`` 保留已成功的场景），不再静默当成成功。
         """
+        if isinstance(scenes, list):
+            shared = items or []
+            scenes = {scope: shared for scope in scenes if scope in SCENES}
+        # 配置里只存 name / desc，写出前补齐 type，避免 QQ 返回 30015 面板元素类型不合法
+        scenes = {
+            scope: normalize_panel_items(raw_items)
+            for scope, raw_items in scenes.items()
+            if scope in SCENES
+        }
         platform = getattr(client, "platform_label", "qq")
         remark = f"{self.REMARK_PREFIX} {platform}/{pf_id}"
 
+        active_scenes = [scope for scope in SCENES if scenes.get(scope)]
         all_existing, failed_scopes = await self.list_all_panels(client)
         # 任一场景查询失败时清单不完整，直接中止协调 — 否则缺失场景会被
         # 误判为“无现有面板”而创建重复面板，或跳过旧面板的清理。
@@ -305,84 +358,82 @@ class PanelSyncer:
             )
 
         existing_by_scope = self.owned_panels_by_scope(all_existing)
-
-        # items 为空：清掉本插件在所有场景上的旧面板（含同 scope 的重复面板）
-        if not items:
-            delete_coros: list[Coroutine[Any, Any, bool]] = []
-            for scope, owned in existing_by_scope.items():
-                for old in owned:
-                    old_id = old.get("panel_id")
-                    if not old_id:
-                        continue
-                    delete_coros.append(self._safe_delete_panel(client, old_id, scope))
-            await self._run_concurrent(delete_coros)
-            return {}
-
         total_panels = len(all_existing)
         saved: dict[str, str] = {}
+        failures: dict[str, str] = {}
 
         # ---------- 场景同步：分 update 并发 + create 串行 ----------
         # 已有面板的 scope 走 update 路径：不会修改 total_panels，相互独立可并发
         # 无面板的 scope 走 create 路径：会递增 total_panels，需要串行保证上限判断准确
         update_scopes: list[str] = []
         create_scopes: list[str] = []
-        for scope in scenes:
+        for scope in active_scenes:
             if existing_by_scope.get(scope):
                 update_scopes.append(scope)
             else:
                 create_scopes.append(scope)
 
         # (1) update 路径并发：每个 scope 独立 try/except，失败不影响其他
-        async def _sync_update_scope(scope: str) -> tuple[str, str | None]:
-            """返回 (scope, saved_id_or_None)，异常时 saved_id 为 None 并打 error 日志"""
+        async def _sync_update_scope(scope: str) -> tuple[str, str | None, str | None]:
+            """返回 (scope, saved_id_or_None, error_or_None)，异常时打 error 日志"""
             try:
                 # 同一 scope 有多条 owned 面板时只更新第一条，多余的由视图标记为 duplicate
-                saved_id, _ = await self._sync_scope_panel(
+                saved_id, _, reason = await self._sync_scope_panel(
                     client,
                     pf_id,
                     scope,
-                    items,
+                    scenes[scope],
                     remark,
                     existing_by_scope[scope][0],
                     total_panels,
                 )
-                return scope, saved_id
+                return scope, saved_id, reason
             except Exception as exc:
                 logger.error(
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
                 )
-                return scope, None
+                return scope, None, str(exc)
 
-        update_coros: list[Coroutine[Any, Any, tuple[str, str | None]]] = [
+        update_coros: list[Coroutine[Any, Any, tuple[str, str | None, str | None]]] = [
             _sync_update_scope(s) for s in update_scopes
         ]
-        for scope, saved_id in await self._run_concurrent(update_coros):
-            if isinstance(scope, str) and saved_id is not None:
+        for outcome in await self._run_concurrent(update_coros):
+            # _sync_update_scope 已经吞掉 Exception；这里只可能是取消之类的 BaseException
+            if isinstance(outcome, BaseException):
+                raise outcome
+            scope, saved_id, error = outcome
+            if error is not None:
+                failures[scope] = error
+            elif saved_id is not None:
                 saved[scope] = saved_id
 
         # (2) create 路径串行：严格维护 total_panels，避免超限创建
         for scope in create_scopes:
             try:
-                saved_id, total_panels = await self._sync_scope_panel(
+                saved_id, total_panels, reason = await self._sync_scope_panel(
                     client,
                     pf_id,
                     scope,
-                    items,
+                    scenes[scope],
                     remark,
                     None,
                     total_panels,
                 )
-                if saved_id is not None:
+                if reason is not None:
+                    # 面板数达到 QQ 上限：场景没写入，按失败上报而不是静默跳过
+                    failures[scope] = reason
+                elif saved_id is not None:
                     saved[scope] = saved_id
             except Exception as exc:
                 logger.error(
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
                 )
+                failures[scope] = str(exc)
 
-        # ---------- 清理 disabled scene 的旧面板（并发，含重复面板）----------
+        # ---------- 清理未启用场景的旧面板（并发，含重复面板）----------
         disabled_delete_coros: list[Coroutine[Any, Any, bool]] = []
         for scope, owned in existing_by_scope.items():
-            if scope in scenes:
+            if scope in active_scenes:
                 continue
             for old in owned:
                 old_id = old.get("panel_id")
@@ -397,6 +448,15 @@ class PanelSyncer:
                     )
                 )
         await self._run_concurrent(disabled_delete_coros)
+
+        if failures:
+            raise PanelSyncError(
+                t(
+                    "panel.scope_sync_failed",
+                    detail="；".join(f"{scope}: {message}" for scope, message in failures.items()),
+                ),
+                saved=saved,
+            )
 
         return saved
 
@@ -496,18 +556,22 @@ class PanelSyncer:
         on_progress: ProgressCallback | None = None,
         on_event: EventCallback | None = None,
     ) -> dict[str, dict[str, str]]:
-        """总入口：把用户在 schema 中自定义的指令条目写入所有启用的 QQ 平台
+        """总入口：把每个机器人各场景的指令条目写入对应 QQ 面板
+
+        新版按 appid 优先接管，未被接管的兼容机器人沿用全局 ``scenes`` 与
+        ``selected_commands``；新版配置损坏时直接中止，不允许静默回退覆盖面板。
 
         参数：
-            on_progress: 可选进度回调，在每个关键节点（开始/平台完成/平台失败）触发，
-                         传入格式化好的消息字符串。回调内异常不影响主流程。
+            on_progress: 可选进度回调，在每个关键节点触发，回调内异常不影响主流程。
+            on_event: 可选结构化事件回调，供 dashboard 渲染进度。
 
         返回 {pf_id: {scope: panel_id} | {"error": str}}
-        失败的平台以 {"error": ...} 形式出现在返回值中，与 purge_all 一致，
-        便于调用方区分成功/失败平台做完整摘要。本地 state 只持久化成功平台。
         """
-        scenes = get_enabled_scenes(self._config)
-        if not scenes:
+        # 兼容旧行为：完全没有启用任何场景时直接返回 no_scene，不触碰线上。
+        if (
+            not get_enabled_scenes(self._config)
+            and not Path(self._data_dir / ROBOT_CONFIG_FILENAME).exists()
+        ):
             logger.info(f"{LOG_TAG} {t('log.no_scene_enabled')}")
             await self._emit_progress(on_progress, t("progress.sync_no_scene"))
             await self._emit_event(
@@ -526,11 +590,29 @@ class PanelSyncer:
             )
             return {}
 
-        # 直接读取用户在 schema 中自定义的指令条目，不再扫描 AstrBot 已注册指令
-        items = get_selected_commands(self._config)
+        try:
+            robot_config = load_robot_config(self._data_dir)
+            robots = self.build_runtime_robots(robot_config=robot_config)
+        except Exception as exc:
+            logger.error(f"{LOG_TAG} robot config load failed: {exc}", exc_info=True)
+            await self._emit_event(
+                on_event,
+                {
+                    "type": "finish",
+                    "ok": False,
+                    "reason": "config_error",
+                    "platforms": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "scenes": 0,
+                    "items": 0,
+                    "error": str(exc),
+                    "result": {},
+                },
+            )
+            raise
 
-        clients = self.build_clients()
-        if not clients:
+        if not robots:
             logger.warning(f"{LOG_TAG} {t('log.no_platform_config')}")
             await self._emit_progress(on_progress, t("progress.sync_no_platform"))
             await self._emit_event(
@@ -542,105 +624,66 @@ class PanelSyncer:
                     "platforms": 0,
                     "succeeded": 0,
                     "failed": 0,
-                    "scenes": len(scenes),
-                    "items": len(items),
+                    "scenes": 0,
+                    "items": 0,
                     "result": {},
                 },
             )
             return {}
 
-        if not items:
-            logger.info(f"{LOG_TAG} {t('log.selected_commands_empty')}")
-            total = len(clients)
-            # 结构化 start 先于开场文本：dashboard 收到 start 会清空日志，
-            # 开场文本紧跟其后才不会被丢掉。
-            await self._emit_event(
-                on_event,
-                {
-                    "type": "start",
-                    "mode": "clear",
-                    "platforms": total,
-                    "scenes": len(scenes),
-                    "items": 0,
-                },
+        robot_scenes: dict[str, dict[str, list[dict[str, str]]]] = {}
+        for robot in robots:
+            pf_id = str(robot.get("id") or robot.get("appid") or "")
+            if not pf_id:
+                continue
+            raw_scenes = robot.get("scenes")
+            scenes = (
+                {scope: normalize_panel_items(raw_scenes.get(scope, [])) for scope in SCENES}
+                if isinstance(raw_scenes, dict)
+                else {scope: [] for scope in SCENES}
             )
-            await self._emit_progress(
-                on_progress,
-                t("progress.sync_clearing_start", platforms=total),
-            )
-            cleared = 0
-            clear_failed = 0
-            for idx, (pf_id, client) in enumerate(clients.items(), start=1):
-                try:
-                    await self.clear_for_platform(pf_id, client)
-                    cleared += 1
-                    await self._emit_progress(
-                        on_progress,
-                        t("progress.platform_cleared", pf_id=pf_id),
-                    )
-                    await self._emit_event(
-                        on_event,
-                        {
-                            "type": "platform",
-                            "pf_id": pf_id,
-                            "index": idx,
-                            "total": total,
-                            "status": "ok",
-                            "saved": 0,
-                            "error": None,
-                        },
-                    )
-                except Exception as exc:
-                    clear_failed += 1
-                    logger.error(
-                        f"{LOG_TAG} " + t("log.clear_platform_failed", pf_id=pf_id, exc=exc),
-                        exc_info=True,
-                    )
-                    await self._emit_progress(
-                        on_progress,
-                        t("progress.platform_clear_failed", pf_id=pf_id, exc=exc),
-                    )
-                    await self._emit_event(
-                        on_event,
-                        {
-                            "type": "platform",
-                            "pf_id": pf_id,
-                            "index": idx,
-                            "total": total,
-                            "status": "error",
-                            "saved": 0,
-                            "error": str(exc),
-                        },
-                    )
-            self._state.save({})
+            robot_scenes[pf_id] = scenes
+
+        # 走公开的 build_clients 构造，保持与状态接口同源并便于测试注入替身。
+        expected = self.build_clients(robot_config=robot_config)
+
+        if not expected:
+            logger.warning(f"{LOG_TAG} {t('log.no_platform_config')}")
+            await self._emit_progress(on_progress, t("progress.sync_no_platform"))
             await self._emit_event(
                 on_event,
                 {
                     "type": "finish",
-                    "ok": clear_failed == 0,
-                    "reason": "clear",
-                    "platforms": total,
-                    "succeeded": cleared,
-                    "failed": clear_failed,
-                    "scenes": len(scenes),
+                    "ok": True,
+                    "reason": "no_platform",
+                    "platforms": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "scenes": 0,
                     "items": 0,
                     "result": {},
                 },
             )
             return {}
 
-        logger.info(f"{LOG_TAG} " + t("log.prepare_write_items", count=len(items), scenes=scenes))
-        total = len(clients)
-        # 结构化 start 先于开场文本：dashboard 收到 start 会清空日志，
-        # 开场文本紧跟其后才不会被丢掉。
+        total = len(expected)
+        total_items = sum(
+            len(items) for scenes in robot_scenes.values() for items in scenes.values()
+        )
+        active_scene_count = len(
+            {scope for scenes in robot_scenes.values() for scope, items in scenes.items() if items}
+        )
+
+        # 兼容旧 dashboard：整轮没有任何条目时用 clear 模式表示清理。
+        event_mode = "sync" if total_items else "clear"
         await self._emit_event(
             on_event,
             {
                 "type": "start",
-                "mode": "sync",
+                "mode": event_mode,
                 "platforms": total,
-                "scenes": len(scenes),
-                "items": len(items),
+                "scenes": active_scene_count,
+                "items": total_items,
             },
         )
         await self._emit_progress(
@@ -648,15 +691,21 @@ class PanelSyncer:
             t(
                 "progress.sync_start",
                 platforms=total,
-                scenes=len(scenes),
-                items=len(items),
+                scenes=active_scene_count,
+                items=total_items,
             ),
         )
 
         result: dict[str, dict[str, str]] = {}
-        for idx, (pf_id, client) in enumerate(clients.items(), start=1):
+        # 部分场景失败时同步仍写过的面板，配合 result 的 error 一起记录
+        partial_saved: dict[str, dict[str, str]] = {}
+        for idx, (pf_id, client) in enumerate(expected.items(), start=1):
             try:
-                result[pf_id] = await self.sync_for_platform(pf_id, client, scenes, items)
+                scene_map = robot_scenes.get(pf_id, {scope: [] for scope in SCENES})
+                saved = await self.sync_for_platform(pf_id, client, scene_map)
+                # 无论写入还是只做清理，处理过的机器人一律计入 result，
+                # 否则纯清理的一轮会报成 platforms=0、看着像没跑
+                result.setdefault(pf_id, {}).update(saved)
                 await self._emit_progress(
                     on_progress,
                     t(
@@ -664,7 +713,7 @@ class PanelSyncer:
                         pf_id=pf_id,
                         index=idx,
                         total=total,
-                        saved=len(result[pf_id]),
+                        saved=len(saved),
                     ),
                 )
                 await self._emit_event(
@@ -675,7 +724,7 @@ class PanelSyncer:
                         "index": idx,
                         "total": total,
                         "status": "ok",
-                        "saved": len(result[pf_id]),
+                        "saved": len(saved),
                         "error": None,
                     },
                 )
@@ -684,9 +733,10 @@ class PanelSyncer:
                     f"{LOG_TAG} " + t("log.sync_platform_failed", pf_id=pf_id, exc=exc),
                     exc_info=True,
                 )
-                # 失败平台也进 result（用 error 标记），便于调用方做完整摘要；
-                # 与 purge_all 的部分完成表示方式保持一致 (conceptual integrity)。
                 result[pf_id] = {"error": str(exc)}
+                partial = exc.saved if isinstance(exc, PanelSyncError) else {}
+                if partial:
+                    partial_saved[pf_id] = partial
                 await self._emit_progress(
                     on_progress,
                     t(
@@ -705,27 +755,29 @@ class PanelSyncer:
                         "index": idx,
                         "total": total,
                         "status": "error",
-                        "saved": 0,
+                        "saved": len(partial),
                         "error": str(exc),
                     },
                 )
 
-        # state 只持久化成功的平台映射，避免污染下次 fetch/show
-        self._state.save(
-            {pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes}
-        )
+        # 只持久化真正有 panel_id 的映射：整机器人被清空的场景不必留下空条目
+        state_snapshot = {
+            pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes and scopes
+        }
+        state_snapshot.update(partial_saved)
+        self._state.save(state_snapshot)
         succeeded = sum(1 for scopes in result.values() if "error" not in scopes)
         await self._emit_event(
             on_event,
             {
                 "type": "finish",
                 "ok": succeeded == len(result),
-                "reason": "sync",
+                "reason": event_mode,
                 "platforms": len(result),
                 "succeeded": succeeded,
                 "failed": len(result) - succeeded,
-                "scenes": len(scenes),
-                "items": len(items),
+                "scenes": active_scene_count,
+                "items": total_items,
                 "result": result,
             },
         )
@@ -758,4 +810,4 @@ class PanelSyncer:
         self.translator.set_language(language)
 
 
-__all__ = ["EventCallback", "PanelSyncer", "ProgressCallback"]
+__all__ = ["EventCallback", "PanelSyncError", "PanelSyncer", "ProgressCallback"]

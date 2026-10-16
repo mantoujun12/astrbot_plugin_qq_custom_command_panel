@@ -22,6 +22,12 @@ function stateLabel(state: SceneState): string {
   return t(`pages.dashboard.status.state.${state}`, STATE_META[state].fallback)
 }
 
+function sourceLabel(source: PlatformStatus['source']): string {
+  return source === 'v2'
+    ? t('pages.dashboard.status.source.v2', '机器人配置')
+    : t('pages.dashboard.status.source.legacy', '兼容性配置')
+}
+
 // 面板 ID 后面的条目数，没有面板时返回空串
 function panelDetail(scene: ScenePanelStatus): string {
   if (!scene.panel_id) {
@@ -37,8 +43,19 @@ function panelDetail(scene: ScenePanelStatus): string {
 <template>
   <v-card class="qc-card h-100" variant="outlined">
     <v-card-item class="px-5 pt-5">
-      <v-card-title class="text-body-large">{{ platform.pf_id }}</v-card-title>
-      <v-card-subtitle>{{ platform.platform }}</v-card-subtitle>
+      <v-card-title class="text-body-large">{{ platform.name || platform.pf_id }}</v-card-title>
+      <v-card-subtitle class="d-flex align-center ga-2">
+        <span>{{ platform.platform }}</span>
+        <v-chip
+          v-if="platform.source"
+          data-field="config-source"
+          size="x-small"
+          variant="tonal"
+          :color="platform.source === 'v2' ? 'primary' : undefined"
+        >
+          {{ sourceLabel(platform.source) }}
+        </v-chip>
+      </v-card-subtitle>
     </v-card-item>
 
     <v-card-text class="px-5 pb-4 pt-3">
