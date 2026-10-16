@@ -270,5 +270,3 @@ export async function saveRobots(
   }
   return (await bridge.apiPost(ROBOTS_ENDPOINT, toPlain(payload))) as RobotConfigResponse
 }
-
-

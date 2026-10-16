@@ -55,5 +55,3 @@ export interface RobotConfigSavePayload {
 
 /** 与接口载荷结构一致的表单别名，避免页面层再维护一套重复类型 */
 export type RobotConfigForm = RobotConfigPayload
-
-

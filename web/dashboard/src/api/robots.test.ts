@@ -277,6 +277,3 @@ describe('validateRobotForm', () => {
     })
   })
 })
-
-
-
