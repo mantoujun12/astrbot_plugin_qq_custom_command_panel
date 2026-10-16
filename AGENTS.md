@@ -4,48 +4,109 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中按�
 
 #### 技术栈
 
-- Python 3.10+（代码里有 X | None、from __future__ import annotations）
-- aiohttp(HTTP 客户端，10s 超时)
-- AstrBot Star 插件体系(@register / @filter.command / Context / AstrBotConfig)
-- 插件视图前端：Vue 3 + TypeScript + Vite + Vuetify 4 + vue-router(hash) + Vitest，源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`
+- Python 3.10+（代码里有 `X | None`、`from __future__ import annotations`；CI 矩阵为 3.10 / 3.11 / 3.12）
+- aiohttp（HTTP 客户端，10s 超时）
+- AstrBot Star 插件体系（`@register` / `@filter.command` / `Context` / `AstrBotConfig`）
+- 插件视图前端：Vue 3 + TypeScript + Vite + Vuetify 4 + vue-router（hash）+ Vitest，源码在 `web/dashboard/`，构建产物提交在 `pages/dashboard/`
+- 前端工具链要求 Node `^22.12.0 || >=24`（见 `web/dashboard/package.json` 的 `engines`）与 pnpm 9+（lockfile v9，CI 固定 pnpm 12）
 - 无第三方数据库，本地状态存 AstrBot 的 `data/plugin_data/astrbot_plugin_qq_custom_command_panel/`；新版机器人配置存 `robot_config.json`，兼容性配置仍存 AstrBotConfig
+
+#### 目录结构
+
+```text
+main.py                  插件入口：@register、initialize() 启动时同步一次、terminate() 收尾
+core/                    插件自身的 Python 包，业务逻辑都在这里
+├─ __init__.py           公开 API 汇总（__all__）
+├─ config.py             兼容性配置解析 / 校验 helper
+├─ robot_config.py       新版机器人配置的读写、校验、迁移与合并（robot_config.json）
+├─ qq_client.py          QQ 开放平台 HTTP 客户端（鉴权 + 面板增删改查）
+├─ panel_syncer.py       按机器人、按场景的面板同步
+├─ sync_runner.py        单飞后台同步任务与 SSE 事件缓冲
+├─ web_api.py            视图接口 WebApiBundle
+├─ state.py              面板归属状态持久化
+├─ paths.py              数据目录解析与 PLUGIN_VERSION 常量
+└─ i18n.py + i18n/       后端运行期文案（core/i18n/<locale>.json）
+_conf_schema.json        WebUI 插件配置 schema（兼容性配置）
+metadata.yaml            插件元数据，版本号唯一来源
+.astrbot-plugin/i18n/    WebUI 侧 metadata / config / pages 翻译
+pages/dashboard/         视图构建产物（提交进仓库，视为生成文件，不要手工改）
+web/dashboard/           视图源码（src/api、src/components、src/views、src/test 等）
+tests/                   离线 pytest 套件（conftest.py 注入 astrbot stub）
+scripts/                 bump_version.py、package_plugin.py
+```
 
 #### 开发命令
 
-插件通过 AstrBot 加载，功能性测试仍需要在运行的 AstrBot 实例下进行；
-业务逻辑可跑离线 pytest 套件（无需安装 AstrBot，tests/conftest.py 会注入 astrbot stub）。
+插件通过 AstrBot 加载，功能性测试仍需要在运行的 AstrBot 实例下进行；业务逻辑可跑离线 pytest 套件（无需安装 AstrBot，`tests/conftest.py` 会注入 astrbot stub）。
 
-安装运行 + 开发依赖：
+Python 侧：
 
-`pip install -r requirements.txt -r requirements-dev.txt`
-
-运行离线测试：
-
-`pytest -q`
-
-规范性检查建议使用 Ruff 修复和格式化：
-
-`ruff check . --fix`
-
-`ruff format --check .`
-
-或安装 pre-commit 后跑同一套 hooks(与 pre-commit.ci / CI 一致)：
-
-`pre-commit run --all-files`
+```bash
+pip install -r requirements.txt -r requirements-dev.txt   # 运行 + 开发依赖
+pytest -q                                                 # 全部离线测试
+pytest tests/test_robot_config.py -q                      # 只跑单个模块
+pytest -k panel_syncer -q                                 # 按关键字筛选
+pytest --cov --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy   # 覆盖率 + JUnit，与 codecov-core.yml 一致
+ruff check . --fix                                        # lint（E/W/F/I/UP/B/S），顺带修可自动修的
+ruff format --check .                                     # 格式检查
+pre-commit install                                        # 可选：装 git hook
+pre-commit run --all-files                                # 与 pre-commit.ci / CI 同一套 hooks
+python scripts/bump_version.py                            # 升版本号
+python scripts/package_plugin.py                          # 打发布 zip 到 dist/
+```
 
 升级版本号（metadata.yaml 是唯一版本源，`core/paths.py` 与 `web/dashboard/package.json` 必须同步，否则 release.yml 会拒绝发布）：
 
-`python scripts/bump_version.py`
+`python scripts/bump_version.py` 不带参数是交互式选择 patch / minor / major / 自定义；也可直接 `python scripts/bump_version.py minor` 或 `v0.6.0`，另有 `--dry-run` 预览、`--check` 只校验三处是否一致。
 
-不带参数是交互式选择 patch / minor / major / 自定义；也可直接 `python scripts/bump_version.py minor` 或 `v0.6.0`，另有 `--dry-run` 预览、`--check` 只校验三处是否一致。
+打包发布 zip：
+
+`python scripts/package_plugin.py` 默认输出到 `dist/`，可用 `-o 目录或 *.zip` 指定输出、`-v v0.6.0` 覆盖版本号；只收录 AstrBot 会读取的文件（metadata.yaml / main.py / `_conf_schema.json` / requirements.txt / logo.png / README.md / LICENSE / core / .astrbot-plugin / pages），tests、web、.github 不进包。
 
 插件视图前端（在 `web/dashboard/` 下）：
 
-`pnpm install` / `pnpm dev` / `pnpm build` / `pnpm test` / `pnpm test:coverage` / `pnpm test:report` / `pnpm test:codecov`
+```bash
+pnpm install        # 需要 Node ^22.12.0 || >=24
+pnpm dev            # 本地 dev server（没有 bridge，走 mock）
+pnpm build          # vue-tsc 类型检查 + Vite 打包，产物直接写 pages/dashboard/
+pnpm preview        # 预览构建产物
+pnpm test           # vitest 单次运行
+pnpm test:coverage  # 覆盖率（阈值见 vitest.config.ts）
+pnpm test:report    # 额外产出 test-report.junit.xml
+pnpm test:codecov   # 覆盖率 + JUnit，CI 用的入口
+```
 
 `pnpm build` 会先跑 `vue-tsc` 类型检查，产物直接写入仓库根目录的 `pages/dashboard/`（见 `vite.config.ts` 的 `build.outDir`），不需要手工拷贝，产物需要一起提交。
 
-`pnpm test` 跑 vitest 单元测试（配置见 `vitest.config.ts`，测试文件与被测代码同目录、命名 `*.test.ts`）；`pnpm test:codecov` 是 CI 用的入口，一次产出 `coverage/lcov.info` 与 `test-report.junit.xml`，由 `.github/workflows/codecov-dashboard.yml` 分两次以 flag `dashboard` 上传 Codecov（覆盖率 + Test Analytics）。Python 侧对应 `.github/workflows/codecov-core.yml`，flag 为 `unittests`。
+#### 测试
+
+离线 pytest 套件（`tests/`）：
+
+- 用例与 `core/` 模块一一对应，命名 `test_<模块>.py`（`core/robot_config.py` → `tests/test_robot_config.py`），新增或修改业务逻辑要带上对应用例
+- `tests/conftest.py` 在导入期往 `sys.modules` 注入最小 astrbot stub（logger / Star / register / web helper / AstrBotConfig）；它必须先于所有测试模块执行，因此禁止在 conftest 里 import 插件代码，也不要为了让测试跑通去随意扩大 stub 表面
+- 异步用例靠 `pyproject.toml` 的 `asyncio_mode = "auto"`，直接写 `async def test_...`，不用加 `@pytest.mark.asyncio`
+- 公共假件统一放 `tests/fakes.py`（FakeResponse / FakeSession / FakeQQClient），不要在各自的测试里另起一套
+- `main.py` 是装配层（`from .core import ...` 相对导入，仓库根不是包），离线套件不覆盖它，改动入口只能在真实 AstrBot 下验证
+- 覆盖率只统计生产代码（`[tool.coverage.run]` 已 omit `tests/*`），本地用上面那条 `pytest --cov` 复现 CI 口径
+
+vitest 套件（`web/dashboard/`）：
+
+- 测试文件与被测代码同目录、命名 `*.test.ts`；视图挂载走 `src/test/helpers.ts` 的 `mountView`，断言只看文案 / 自有 class / 属性 / emit，不断言 Vuetify 内部结构
+- `pnpm test:coverage` 不得低于 `vitest.config.ts` 的 `coverage.thresholds`；覆盖率只统计 `src/**`，`*.test.ts`、`src/main.ts`、`src/test/**` 除外
+- bridge、受限 iframe 等宿主相关行为只能靠单测兜住，真机表现仍需在 AstrBot 下验证
+
+#### CI 与发布
+
+| workflow | 触发 | 内容 |
+| --- | --- | --- |
+| `ci-core.yml` | push master / PR | Python 3.10 / 3.11 / 3.12 跑 `pytest` |
+| `ci-dashboard.yml` | push master / PR | Node 24 + pnpm 12 跑 `pnpm install --frozen-lockfile` + `pnpm build`（含 vue-tsc 类型检查） |
+| `codecov-core.yml` | push master / PR | `pytest --cov --cov-branch --cov-report=xml --junitxml=junit.xml`，分两次以 flag `unittests` 上传覆盖率与 Test Analytics |
+| `codecov-dashboard.yml` | push master / PR | `pnpm test:codecov`，以 flag `dashboard` 上传 `coverage/lcov.info` 与 `test-report.junit.xml` |
+| `release.yml` | push master 且改动 `metadata.yaml`，或手动 dispatch | 校验三处版本号一致 → `scripts/package_plugin.py` 打包 → 打 tag → 建 Release |
+| `pullfrog.yml` | 手动 dispatch | 外部 agent 工作流，不参与构建与发布 |
+
+发布是幂等的：tag 与 release 都已存在就跳过，上次中途失败或漏掉 push 事件时可在 Actions 里手动 dispatch 重跑。合并前至少要过 ci-core、ci-dashboard 与 pre-commit。
 
 #### 架构约定
 
@@ -81,11 +142,14 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中按�
 
 要点：类型注解齐全、from __future__ import annotations、Path 而非字符串拼路径、__all__ 导出公开 API。
 
+Ruff 配置在 `pyproject.toml`：line-length 100、target py312、select `E/W/F/I/UP/B/S`；pre-commit 里 `ruff-check --fix` 必须排在 `ruff-format` 之前。
+
 #### 文案与标点
 
 - 中文文案（文档、注释、docstring、`zh-CN` i18n、`_conf_schema.json`）统一使用全角标点：`，。：；？！（）“”`；中文句读处不得用半角逗号 `,` 代替 `，`，也不得用半角冒号 `:` 代替 `：`。
 - 英文文案、代码、`en-US` locale 文件保持半角标点：`, . : ; ( )`。
 - 只调整注释、docstring 与字符串字面量里的标点；代码位置的标点属于语法，不得改动。改动前端 fallback 文案后需重新 `pnpm build` 并提交 `pages/dashboard/` 产物。
+- 文案分三处，改动时要一起过：`core/i18n/<locale>.json`（后端日志与进度）、`.astrbot-plugin/i18n/<locale>.json`（WebUI 元数据 / 配置项 / 视图标题，也是 `bridge.t` 的 key 来源）、`web/dashboard/src` 里 `bridge.t(key, fallback)` 的 fallback 字面量（编译进产物，改了要重新 `pnpm build`）。新增 key 时 `zh-CN` 与 `en-US` 两份都要补。
 
 #### 提交规范
 
@@ -95,3 +159,4 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中按�
 一个 commit/PR 只做一件事
 英文 message
 分支名 feat/xxx / fix/xxx
+文档改动走 `docs:`；改动用户可见行为时同步更新 CHANGELOG.md 的 `[Unreleased]`（分类：新增 / 变更 / 修复 / 文档）
