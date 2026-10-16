@@ -176,7 +176,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
         :description="
           t(
             'pages.dashboard.status.empty.platforms.description',
-            '到「设置」页填写 qq_platforms 的 appid / ClientSecret。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。',
+            '到「兼容性」页填写 qq_platforms 的 appid / ClientSecret，或者到「新版配置」创建机器人。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。',
           )
         "
       />
@@ -192,7 +192,7 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
           {{
             t(
               'pages.dashboard.status.empty.commands.description',
-              '尚未配置指令条目，同步会清空本插件创建的面板。请到「设置」页添加 selected_commands。',
+              '尚未配置指令条目，同步会清空本插件创建的面板。请到「兼容性」或「新版配置」页添加指令。',
             )
           }}
         </v-alert>

@@ -9,6 +9,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SCENES, type SceneState } from '../types/dashboard'
+import { ROBOT_MESSAGES } from '../api/robots'
 import { MESSAGES } from '../views/settingsForm'
 
 type Dict = Record<string, unknown>
@@ -75,6 +76,10 @@ function staticCalls(): { file: string; key: string; fallback: string }[] {
   const settingsForm = join(SRC_DIR, 'views', 'settingsForm.ts')
   for (const [key, fallback] of Object.values(MESSAGES)) {
     calls.push({ file: settingsForm, key, fallback })
+  }
+  const robotsApi = join(SRC_DIR, 'api', 'robots.ts')
+  for (const [key, fallback] of Object.values(ROBOT_MESSAGES)) {
+    calls.push({ file: robotsApi, key, fallback })
   }
   return calls
 }

@@ -1,0 +1,274 @@
+/**
+ * 新版机器人配置的数据访问层与表单纯函数。
+ *
+ * GET /robots 在本地开发时退回 mock；POST 没有 bridge 时直接抛错，避免页面
+ * 把未落库的数据展示成保存成功。页面可通过 isRobotMock 明确标注 mock 状态。
+ */
+
+import { getBridge } from '../bridge'
+import { SCENES, type ConfigCommand, type ConfigLimits, type Scene } from '../types/dashboard'
+import type {
+  RobotConfig,
+  RobotConfigForm,
+  RobotConfigPayload,
+  RobotConfigResponse,
+  RobotConfigSavePayload,
+  RobotSceneConfig,
+} from '../types/robotConfig'
+import { toPlain } from './serialize'
+
+/** 对应后端 register_web_api 的路径 `/<plugin_name>/robots` */
+const ROBOTS_ENDPOINT = 'robots'
+
+/** 与 `bridge.t(key, fallback)` 同形，便于纯函数注入文案 */
+export type Translate = (key: string, fallback?: string) => string
+
+/** 本地开发用的机器人配置，仅导出给页面判断与调试使用 */
+export const MOCK_ROBOTS: RobotConfigResponse = {
+  version: 1,
+  available_scenes: [...SCENES],
+  limits: { name_max: 14, desc_max: 30, items_max: 20 },
+  robots: [
+    {
+      id: 'robot-demo-1',
+      name: '主机器人',
+      appid: '1023456789',
+      platform: 'qq_official',
+      secret_masked: 'abc*****yz',
+      secret_set: true,
+      scenes: {
+        c2c: {
+          enabled: true,
+          items: [
+            { name: 'help', desc: '查看帮助' },
+            { name: 'ping', desc: '连通性测试' },
+          ],
+        },
+        group: {
+          enabled: true,
+          items: [{ name: 'status', desc: '查看运行状态' }],
+        },
+        channel: { enabled: false, items: [] },
+        dm: { enabled: false, items: [] },
+      },
+    },
+    {
+      id: 'robot-demo-2',
+      name: '测试机器人',
+      appid: '1038765432',
+      platform: 'qq_official_webhook',
+      secret_masked: 'def*****wv',
+      secret_set: true,
+      scenes: {
+        c2c: { enabled: false, items: [] },
+        group: {
+          enabled: true,
+          items: [{ name: 'debug', desc: '调试模式' }],
+        },
+        channel: { enabled: false, items: [] },
+        dm: { enabled: false, items: [] },
+      },
+    },
+  ],
+}
+
+/** 校验失败时返回的文案，key 与 fallback 成对维护 */
+export const ROBOT_MESSAGES = {
+  notLoaded: ['pages.dashboard.robots.notLoaded', '机器人配置尚未载入。'],
+  appidRequired: ['pages.dashboard.robots.appidRequired', 'AppID 不能为空。'],
+  nameRequired: ['pages.dashboard.robots.nameRequired', '机器人名称不能为空。'],
+  nameTooLong: ['pages.dashboard.robots.nameTooLong', '机器人名称超出长度上限。'],
+  secretRequired: [
+    'pages.dashboard.robots.secretRequired',
+    '新机器人必须填写 ClientSecret。',
+  ],
+  sceneRequiresItem: [
+    'pages.dashboard.robots.sceneRequiresItem',
+    '启用的场景至少需要 1 条指令。',
+  ],
+  sceneItemsTooMany: [
+    'pages.dashboard.robots.sceneItemsTooMany',
+    '单个场景的指令条目超出上限。',
+  ],
+  commandNameRequired: [
+    'pages.dashboard.robots.commandNameRequired',
+    '指令名不能为空。',
+  ],
+  commandNameTooLong: [
+    'pages.dashboard.robots.commandNameTooLong',
+    '指令名超出长度上限。',
+  ],
+  commandDescTooLong: [
+    'pages.dashboard.robots.commandDescTooLong',
+    '指令描述超出长度上限。',
+  ],
+} as const
+
+function message(t: Translate, key: keyof typeof ROBOT_MESSAGES): string {
+  const [i18nKey, fallback] = ROBOT_MESSAGES[key]
+  return t(i18nKey, fallback)
+}
+
+/** 新增场景配置的初始值 */
+export function emptySceneConfig(): RobotSceneConfig {
+  return { enabled: false, items: [] }
+}
+
+/** 新增机器人表单的初始值：所有场景默认关闭 */
+export function emptyRobotDraft(): RobotConfigForm {
+  const scenes = {} as Record<Scene, RobotSceneConfig>
+  for (const scene of SCENES) {
+    scenes[scene] = emptySceneConfig()
+  }
+  return {
+    id: '',
+    name: '',
+    appid: '',
+    platform: 'qq_official',
+    secret: '',
+    scenes,
+  }
+}
+
+/** 接口响应转可编辑表单：secret 一律留空，留空表示沿用原值 */
+export function toRobotForm(robot: RobotConfig): RobotConfigForm {
+  const scenes = {} as Record<Scene, RobotSceneConfig>
+  for (const scene of SCENES) {
+    const source = robot.scenes[scene]
+    scenes[scene] = source
+      ? { enabled: source.enabled, items: source.items.map((item) => ({ ...item })) }
+      : emptySceneConfig()
+  }
+  return {
+    id: robot.id,
+    name: robot.name,
+    appid: robot.appid,
+    platform: robot.platform,
+    secret: '',
+    scenes,
+  }
+}
+
+/** 已启用场景数量，用于机器人列表摘要 */
+export function robotSceneCount(robot: Pick<RobotConfigForm, 'scenes'>): number {
+  return SCENES.filter((scene) => robot.scenes[scene]?.enabled).length
+}
+
+/** 已启用场景里的指令条目总数，用于机器人列表摘要 */
+export function robotItemCount(robot: Pick<RobotConfigForm, 'scenes'>): number {
+  return SCENES.reduce((total, scene) => {
+    const config = robot.scenes[scene]
+    return total + (config?.enabled ? config.items.length : 0)
+  }, 0)
+}
+
+/** 判断 GET 结果是否来自本地 mock，页面据此展示 mock 提示 */
+export function isRobotMock(response: RobotConfigResponse | null | undefined): boolean {
+  return response === MOCK_ROBOTS
+}
+
+/** 获取机器人配置；本地无 bridge 时退回 mock */
+export async function fetchRobots(): Promise<RobotConfigResponse> {
+  const bridge = getBridge()
+  if (!bridge) {
+    return MOCK_ROBOTS
+  }
+  return (await bridge.apiGet(ROBOTS_ENDPOINT)) as RobotConfigResponse
+}
+
+/** 校验结果：通过时同时给出 trim 后、可用于 POST 的载荷 */
+export type ValidateRobotResult =
+  | { ok: true; payload: RobotConfigPayload }
+  | { ok: false; reason: string }
+
+/**
+ * 提交前的单台机器人本地校验。
+ *
+ * 后端仍会再次校验；这里提前拦截明显错误，并把提交字段规范化。
+ * id 为空视为新机器人，此时 secret 必填；已有机器人留空 secret 表示沿用原值。
+ */
+export function validateRobotForm(
+  robot: RobotConfigForm | null,
+  limits: ConfigLimits,
+  t: Translate,
+): ValidateRobotResult {
+  if (!robot) {
+    return { ok: false, reason: message(t, 'notLoaded') }
+  }
+
+  const appid = robot.appid.trim()
+  if (!appid) {
+    return { ok: false, reason: message(t, 'appidRequired') }
+  }
+
+  const name = robot.name.trim()
+  if (!name) {
+    return { ok: false, reason: message(t, 'nameRequired') }
+  }
+  if (name.length > limits.name_max) {
+    return { ok: false, reason: message(t, 'nameTooLong') }
+  }
+  const id = robot.id.trim()
+  const secret = robot.secret.trim()
+  if (!id && !secret) {
+    return { ok: false, reason: message(t, 'secretRequired') }
+  }
+
+  const scenes = {} as Record<Scene, RobotSceneConfig>
+  for (const scene of SCENES) {
+    const source = robot.scenes[scene] ?? emptySceneConfig()
+    if (source.items.length > limits.items_max) {
+      return { ok: false, reason: message(t, 'sceneItemsTooMany') }
+    }
+    if (source.enabled && source.items.length === 0) {
+      return { ok: false, reason: message(t, 'sceneRequiresItem') }
+    }
+
+    const items: ConfigCommand[] = []
+    for (const item of source.items) {
+      const name = item.name.trim()
+      const desc = item.desc.trim()
+      if (!name) {
+        return { ok: false, reason: message(t, 'commandNameRequired') }
+      }
+      if (name.length > limits.name_max) {
+        return { ok: false, reason: message(t, 'commandNameTooLong') }
+      }
+      if (desc.length > limits.desc_max) {
+        return { ok: false, reason: message(t, 'commandDescTooLong') }
+      }
+      items.push({ name, desc })
+    }
+    scenes[scene] = { enabled: source.enabled, items }
+  }
+
+  return {
+    ok: true,
+    payload: {
+      id,
+      name,
+      appid,
+      platform: robot.platform.trim(),
+      secret,
+      scenes,
+    },
+  }
+}
+
+/**
+ * 保存机器人配置，返回落库后的完整响应。
+ *
+ * 本地无 bridge 时抛错，不允许在没有后端的开发环境里伪造保存成功。
+ * payload 可以是视图里的响应式对象，这里会先快照成纯数据再交给 bridge。
+ */
+export async function saveRobots(
+  payload: RobotConfigSavePayload,
+): Promise<RobotConfigResponse> {
+  const bridge = getBridge()
+  if (!bridge) {
+    throw new Error('no backend: robot config saving is unavailable in local dev')
+  }
+  return (await bridge.apiPost(ROBOTS_ENDPOINT, toPlain(payload))) as RobotConfigResponse
+}
+
+

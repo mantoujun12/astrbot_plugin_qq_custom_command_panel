@@ -148,12 +148,12 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
   <v-container fluid class="qc-page pa-4 pa-md-6">
     <div class="qc-header">
       <div>
-        <h1 class="qc-title">{{ t('pages.dashboard.settings.title', '设置') }}</h1>
+        <h1 class="qc-title">{{ t('pages.dashboard.settings.title', '兼容性') }}</h1>
         <p class="qc-subtitle">
           {{
             t(
               'pages.dashboard.settings.subtitle',
-              '在这里维护写入 QQ 指令面板的内容与平台凭证，保存后立即生效。',
+              '旧版全局配置仍可在这里维护；已被新版配置按 AppID 接管的机器人不会使用这里的场景和指令。',
             )
           }}
         </p>

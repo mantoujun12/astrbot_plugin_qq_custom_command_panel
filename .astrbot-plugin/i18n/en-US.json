@@ -8,12 +8,20 @@
     "language": {
       "description": "Language for plugin logs",
       "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated.",
-      "labels": ["简体中文", "English"]
+      "labels": [
+        "简体中文",
+        "English"
+      ]
     },
     "scenes": {
       "description": "Active scenes (where QQ command panel is visible)",
       "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration.",
-      "labels": ["Private chat", "Group chat", "Text channel", "Channel DM"]
+      "labels": [
+        "Private chat",
+        "Group chat",
+        "Text channel",
+        "Channel DM"
+      ]
     },
     "qq_platforms": {
       "description": "QQ Official bot platform credentials",
@@ -37,7 +45,10 @@
             "platform": {
               "description": "Platform type",
               "hint": "Default qq_official works for most cases",
-              "labels": ["QQ Official Bot", "QQ Official Bot Webhook"]
+              "labels": [
+                "QQ Official Bot",
+                "QQ Official Bot Webhook"
+              ]
             }
           }
         }
@@ -73,7 +84,9 @@
         "collapse": "Collapse sidebar",
         "expand": "Expand sidebar",
         "openDrawer": "Open sidebar",
-        "closeDrawer": "Close sidebar"
+        "closeDrawer": "Close sidebar",
+        "robots": "Robot profiles",
+        "compatibility": "Compatibility"
       },
       "status": {
         "title": "Overview",
@@ -118,8 +131,8 @@
         }
       },
       "settings": {
-        "title": "Settings",
-        "subtitle": "Maintain the panel entries and platform credentials here; saving takes effect immediately.",
+        "title": "Compatibility",
+        "subtitle": "Legacy global configuration stays available here. Bots taken over by a robot profile with the same AppID no longer use these global scenes and commands.",
         "reload": "Reload",
         "save": "Save",
         "saveAndSync": "Save and sync",
@@ -163,6 +176,75 @@
         "commandDescTooLong": "Command description is too long.",
         "platformAppidRequired": "Platform appid is required.",
         "platformSecretRequired": "ClientSecret is required for a new platform."
+      },
+      "robots": {
+        "title": "Robot profiles",
+        "subtitle": "Maintain per-robot command entries for each scene; each robot takes effect independently.",
+        "reload": "Reload",
+        "importLegacy": "Import from compatibility",
+        "addRobot": "Add robot",
+        "save": "Save",
+        "saveAndSync": "Save and sync",
+        "saved": "Robot configuration saved.",
+        "mockHint": "Local dev environment: showing mock data, saving is disabled.",
+        "listTitle": "Robots",
+        "listSubtitle": "Select a robot to edit its per-scene commands.",
+        "emptyRobots": "No robot yet. Add one first.",
+        "editorEmpty": "Select or add a robot.",
+        "robotSummary": "{scenes} scene(s), {items} command(s).",
+        "appidLabel": "AppID: {appid}",
+        "untitledRobot": "Untitled robot",
+        "removedLocal": "Removed from the local list. It will be written to config after saving.",
+        "basicTitle": "Basics",
+        "basicSubtitle": "Name, AppID, and platform credentials belong only to this robot.",
+        "name": "Robot name",
+        "appid": "AppID",
+        "secret": "ClientSecret",
+        "secretKeep": "Leave empty to keep the current value",
+        "secretRequired": "ClientSecret is required for a new robot.",
+        "secretSaved": "Current: {masked}",
+        "secretSetNoMask": "ClientSecret is saved. Leave empty to keep the current value.",
+        "platformType": "Platform type",
+        "platformTypeName": {
+          "qq_official": "QQ Official Bot",
+          "qq_official_webhook": "QQ Official Bot Webhook"
+        },
+        "scenesTitle": "Scene commands",
+        "scenesSubtitle": "Each scene keeps its own command entries; an enabled scene needs at least one.",
+        "scene": {
+          "c2c": "Private chat",
+          "group": "Group chat",
+          "channel": "Text channel",
+          "dm": "Channel DM",
+          "itemsCount": "{count}/{max} entries",
+          "limits": "Command name ≤ {name} chars, description ≤ {desc} chars.",
+          "noItems": "This scene has no command entries yet.",
+          "commandName": "Command name",
+          "commandDesc": "Command description",
+          "removeItem": "Remove command",
+          "addItem": "Add command",
+          "disabledHint": "The scene is disabled. Enable it to manage command entries."
+        },
+        "dangerTitle": "Delete robot configuration",
+        "dangerText": "Deleting only removes the configuration here; it does not clean up existing QQ online panels.",
+        "deleteRobot": "Delete robot configuration",
+        "importTitle": "Import from compatibility",
+        "importSubtitle": "Choose or enter legacy platform AppIDs to import, one per line or separated by commas.",
+        "importAppids": "AppID list",
+        "importEmpty": "No importable AppID in the compatibility configuration; enter one manually.",
+        "importNoAppids": "Enter at least one AppID.",
+        "importConfirm": "Import",
+        "imported": "Robots imported and saved from the compatibility configuration. Review them before syncing.",
+        "cancel": "Cancel",
+        "notLoaded": "Robot configuration is not loaded yet.",
+        "appidRequired": "AppID is required.",
+        "nameRequired": "Robot name is required.",
+        "nameTooLong": "Robot name is too long.",
+        "sceneRequiresItem": "An enabled scene needs at least one command.",
+        "sceneItemsTooMany": "Too many command entries in one scene.",
+        "commandNameRequired": "Command name is required.",
+        "commandNameTooLong": "Command name is too long.",
+        "commandDescTooLong": "Command description is too long."
       }
     }
   }

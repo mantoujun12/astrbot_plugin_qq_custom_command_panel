@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { router } from './index'
 
 describe('router', () => {
-  it('resolves the settings view by path and by name', () => {
+  it('resolves the robot and compatibility views by path and by name', () => {
+    expect(router.resolve('/robots').name).toBe('robots')
+    expect(router.resolve({ name: 'robots' }).path).toBe('/robots')
     expect(router.resolve('/settings').name).toBe('settings')
     expect(router.resolve({ name: 'settings' }).path).toBe('/settings')
   })
