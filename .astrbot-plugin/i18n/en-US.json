@@ -7,7 +7,7 @@
   "config": {
     "language": {
       "description": "Language for plugin logs",
-      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated.",
+      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated. This page is the legacy compatibility configuration; use the Robots page in the plugin view instead.",
       "labels": [
         "简体中文",
         "English"
@@ -15,7 +15,7 @@
     },
     "scenes": {
       "description": "Active scenes (where QQ command panel is visible)",
-      "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration.",
+      "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration. This item belongs to the compatibility configuration and only applies to AppIDs not taken over on the Robots page.",
       "labels": [
         "Private chat",
         "Group chat",
@@ -25,7 +25,7 @@
     },
     "qq_platforms": {
       "description": "QQ Official bot platform credentials",
-      "hint": "The plugin can only read credentials from here: AstrBot does not expose platform adapter bot info to plugins, so appid + clientSecret must be filled in manually. Add multiple entries for multiple bots. ⚠️ secret is saved in plain text, DO NOT screenshot share.",
+      "hint": "⚠️ Legacy compatibility configuration: the new version configures each bot separately, so prefer the Robots page in the plugin view. Once an AppID appears on the Robots page, the new version takes it over and the scenes and command entries on this page are ignored. The plugin can only read credentials from here: AstrBot does not expose platform adapter bot info to plugins, so appid + clientSecret must be filled in manually. Add multiple entries for multiple bots. ⚠️ secret is masked on this page, but still saved in plain text in the config file, so do not share the config file.",
       "templates": {
         "qq_platform": {
           "name": "QQ Bot",
@@ -40,7 +40,7 @@
             },
             "secret": {
               "description": "ClientSecret (AppSecret)",
-              "hint": "⚠️ Saved in plain text, DO NOT screenshot share this page"
+              "hint": "Masked in the config page by default; click the eye icon to reveal it temporarily. The value is still stored in plain text in the config file, so do not share the file under data/config/"
             },
             "platform": {
               "description": "Platform type",
@@ -56,7 +56,7 @@
     },
     "selected_commands": {
       "description": "Custom command entries to show in the QQ command panel",
-      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars. You can also maintain them on the Settings page of the plugin view.",
+      "hint": "Manually add entries to display in the QQ command panel. Each {name, desc} is written verbatim, independent of commands already registered in AstrBot. Max 20 entries; name ≤ 14 chars, desc ≤ 30 chars. You can also maintain them on the Compatibility page of the plugin view. This item belongs to the compatibility configuration and only applies to AppIDs not taken over on the Robots page.",
       "templates": {
         "command": {
           "name": "Command entry",

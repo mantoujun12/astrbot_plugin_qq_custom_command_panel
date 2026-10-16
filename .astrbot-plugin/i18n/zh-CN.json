@@ -7,7 +7,7 @@
   "config": {
     "language": {
       "description": "插件日志输出语言",
-      "hint": "zh-CN=简体中文，en-US=English。影响 logger 输出，不影响 selected_commands 用户自定义条目。",
+      "hint": "zh-CN=简体中文，en-US=English。影响 logger 输出，不影响 selected_commands 用户自定义条目。本页属于旧版兼容性配置，新版请到插件视图的「机器人」页维护。",
       "labels": [
         "简体中文",
         "English"
@@ -15,7 +15,7 @@
     },
     "scenes": {
       "description": "生效场景（选择哪些场景下要显示 QQ 指令面板）",
-      "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。",
+      "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。本项属于兼容性配置，仅对未被「机器人」页接管的 AppID 生效。",
       "labels": [
         "单聊",
         "群聊",
@@ -25,7 +25,7 @@
     },
     "qq_platforms": {
       "description": "QQ 官方机器人平台凭证",
-      "hint": "插件只能读取这里的凭证：AstrBot 不向插件暴露平台适配器的机器人信息，所以必须手动填写 appid + clientSecret。多机器人请添加多条。⚠️ secret 会明文保存，请勿截图分享。",
+      "hint": "⚠️ 本页是旧版兼容性配置：新版按机器人独立配置，请优先到插件视图的「机器人」页维护；某个 AppID 一旦出现在「机器人」页，就由新版接管，不再读取本页的生效场景与指令条目。插件只能读取这里的凭证：AstrBot 不向插件暴露平台适配器的机器人信息，所以必须手动填写 appid + clientSecret。多机器人请添加多条。⚠️ secret 在配置页会遮罩显示，但配置文件里仍是明文，请勿分享配置文件。",
       "templates": {
         "qq_platform": {
           "name": "QQ 机器人",
@@ -40,7 +40,7 @@
             },
             "secret": {
               "description": "ClientSecret (AppSecret)",
-              "hint": "⚠️ 会明文保存，请勿截图分享此页面"
+              "hint": "配置页默认以密码框遮罩显示，可点右侧眼睛图标临时查看；但配置文件里仍是明文，请勿分享 data/config/ 下的配置文件"
             },
             "platform": {
               "description": "平台类型",
@@ -56,7 +56,7 @@
     },
     "selected_commands": {
       "description": "要在 QQ 指令面板展示的自定义指令条目",
-      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。也可以在插件可视化视图的设置页维护这些配置。",
+      "hint": "在这里手动添加要展示在 QQ 指令面板上的条目。每个 name + desc 会原样写入面板，不依赖 AstrBot 已注册的指令。最多 20 条，name 最长 14 字符，desc 最长 30 字符。也可以到插件视图的「兼容性」页维护这些配置。本项属于兼容性配置，仅对未被「机器人」页接管的 AppID 生效。",
       "templates": {
         "command": {
           "name": "指令条目",
