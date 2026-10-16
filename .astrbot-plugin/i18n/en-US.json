@@ -85,7 +85,7 @@
         "expand": "Expand sidebar",
         "openDrawer": "Open sidebar",
         "closeDrawer": "Close sidebar",
-        "robots": "Robot profiles",
+        "robots": "Robots",
         "compatibility": "Compatibility"
       },
       "status": {
@@ -123,20 +123,26 @@
         "empty": {
           "platforms": {
             "title": "No QQ platform available yet",
-            "description": "Fill in appid / ClientSecret under qq_platforms on the Settings page. The plugin cannot read bot credentials from AstrBot platform adapters, so this is the only place to configure them."
+            "description": "Fill in appid / ClientSecret under qq_platforms on the Compatibility page, or create robots on the Robots page. The plugin cannot read bot credentials from AstrBot platform adapters, so this is the only place to configure them."
           },
           "commands": {
-            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands on the Settings page."
+            "description": "No command entries configured; syncing would delete the panels created by this plugin. Add entries under selected_commands on the Compatibility page."
           }
         },
         "source": {
-          "v2": "Robot profile",
+          "v2": "Robot config",
           "legacy": "Legacy config"
         }
       },
       "settings": {
+        "title": "Settings",
+        "subtitle": "Plugin-wide general settings will live here.",
+        "wipTitle": "Under construction",
+        "wipText": "This page is still being built; plugin-wide general settings will be provided later."
+      },
+      "compatibility": {
         "title": "Compatibility",
-        "subtitle": "Legacy global configuration stays available here. Bots taken over by a robot profile with the same AppID no longer use these global scenes and commands.",
+        "subtitle": "Legacy global configuration stays available here. Bots taken over by a robot on the Robots page with the same AppID no longer use these global scenes and commands.",
         "reload": "Reload",
         "save": "Save",
         "saveAndSync": "Save and sync",
@@ -182,7 +188,7 @@
         "platformSecretRequired": "ClientSecret is required for a new platform."
       },
       "robots": {
-        "title": "Robot profiles",
+        "title": "Robots",
         "subtitle": "Maintain per-robot command entries for each scene; each robot takes effect independently.",
         "reload": "Reload",
         "importLegacy": "Import from compatibility",

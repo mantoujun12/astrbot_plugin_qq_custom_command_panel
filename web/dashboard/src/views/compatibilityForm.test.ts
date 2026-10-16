@@ -6,7 +6,7 @@ import {
   newPlatform,
   toForm,
   validateForm,
-} from './settingsForm'
+} from './compatibilityForm'
 import type {
   ConfigLimits,
   ConfigPlatform,

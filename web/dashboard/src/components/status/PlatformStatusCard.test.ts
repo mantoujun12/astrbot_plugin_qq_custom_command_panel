@@ -60,7 +60,7 @@ describe('PlatformStatusCard', () => {
 
     expect(wrapper.text()).toContain('主机器人')
     const chip = wrapper.get('[data-field="config-source"]')
-    expect(chip.text()).toContain('新版配置')
+    expect(chip.text()).toContain('机器人配置')
   })
 
   it('labels the legacy config source', () => {

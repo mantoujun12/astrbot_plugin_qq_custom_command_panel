@@ -24,7 +24,7 @@ function stateLabel(state: SceneState): string {
 
 function sourceLabel(source: PlatformStatus['source']): string {
   return source === 'v2'
-    ? t('pages.dashboard.status.source.v2', '新版配置')
+    ? t('pages.dashboard.status.source.v2', '机器人配置')
     : t('pages.dashboard.status.source.legacy', '兼容性配置')
 }
 

@@ -404,7 +404,7 @@ async function importLegacy(): Promise<void> {
   <v-container fluid class="qc-page pa-4 pa-md-6">
     <div class="qc-header">
       <div>
-        <h1 class="qc-title">{{ t('pages.dashboard.robots.title', '新版配置') }}</h1>
+        <h1 class="qc-title">{{ t('pages.dashboard.robots.title', '机器人') }}</h1>
         <p class="qc-subtitle">
           {{
             t(

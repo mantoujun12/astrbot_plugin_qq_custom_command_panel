@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SCENES, type SceneState } from '../types/dashboard'
 import { ROBOT_MESSAGES } from '../api/robots'
-import { MESSAGES } from '../views/settingsForm'
+import { MESSAGES } from '../views/compatibilityForm'
 
 type Dict = Record<string, unknown>
 
@@ -23,7 +23,7 @@ const SRC_DIR = join(DASHBOARD_DIR, 'src')
 
 /** 场景状态枚举，与 PlatformStatusCard 的 STATE_META 对齐 */
 const SCENE_STATES: SceneState[] = ['synced', 'duplicate', 'missing', 'failed']
-/** 平台类型枚举，与 SettingsView 的 PLATFORM_TYPES 对齐 */
+/** 平台类型枚举，与 CompatibilityView 的 PLATFORM_TYPES 对齐 */
 const PLATFORM_TYPES = ['qq_official', 'qq_official_webhook']
 
 /** 匹配 `t('some.key', 'fallback')`，允许 key/fallback 跨行 */
@@ -71,11 +71,11 @@ function staticCalls(): { file: string; key: string; fallback: string }[] {
       calls.push({ file, key: match[1], fallback: match[2] })
     }
   }
-  // settingsForm.ts 把文案存成 ['key', 'fallback'] 元组后经变量传给 t，
+  // compatibilityForm.ts 把文案存成 ['key', 'fallback'] 元组后经变量传给 t，
   // 匹配不到字面量调用；这里显式补上，让它们和静态调用受同等校验
-  const settingsForm = join(SRC_DIR, 'views', 'settingsForm.ts')
+  const compatibilityForm = join(SRC_DIR, 'views', 'compatibilityForm.ts')
   for (const [key, fallback] of Object.values(MESSAGES)) {
-    calls.push({ file: settingsForm, key, fallback })
+    calls.push({ file: compatibilityForm, key, fallback })
   }
   const robotsApi = join(SRC_DIR, 'api', 'robots.ts')
   for (const [key, fallback] of Object.values(ROBOT_MESSAGES)) {
@@ -129,10 +129,10 @@ describe('t() calls in the view source', () => {
 
   it('has a locale entry for every key built from an enum', () => {
     const keys = [
-      ...SCENES.map((scene) => `pages.dashboard.settings.scene.${scene}`),
+      ...SCENES.map((scene) => `pages.dashboard.compatibility.scene.${scene}`),
       ...SCENE_STATES.map((state) => `pages.dashboard.status.state.${state}`),
       ...PLATFORM_TYPES.map(
-        (type) => `pages.dashboard.settings.platformTypeName.${type}`,
+        (type) => `pages.dashboard.compatibility.platformTypeName.${type}`,
       ),
     ]
 

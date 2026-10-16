@@ -75,7 +75,7 @@ QQ 官方机器人指令面板内容自定义插件。在 AstrBot WebUI 中按�
 10. 兼容性配置写回走 `POST config` → `AstrBotConfig.update()` + `save_config_async()`；新版机器人配置读取 / 保存走 `GET / POST robots`，保存由 `core/robot_config.py` 校验并原子写入 `robot_config.json`（临时文件 + `Path.replace`）。`GET config` / `GET robots` 都只回 secret 掩码，明文 secret 不允许出现在响应、日志或前端里，前端提交时留空表示沿用原值。
 11. 同步进度用 SSE：后端从 `SyncRunner.stream(since)` 产事件（`data: {...}\n\n`），前端用 `bridge.subscribeSSE` 订阅、收到 `finish` 后自行退订；宿主不会通知流被关闭。
 12. 视图代码改动要带同目录同名 `*.test.ts`：挂载走 `src/test/helpers.ts` 的 `mountView`，断言只看文案/自有 class/属性/emit，不要断言 Vuetify 内部结构；`pnpm test:coverage` 不得低于 `vitest.config.ts` 的 `coverage.thresholds`。
-13. 视图侧边栏固定为「状态概览」「新版配置」置顶、「兼容性」置底；新版配置页负责机器人 → 场景 → 指令条目的编辑与导入，文案 key 前缀是 `pages.dashboard.robots.*`，兼容页使用 `pages.dashboard.settings.*`。
+13. 视图侧边栏顶部固定为「状态概览」「机器人」「兼容性」，底部是「设置」（当前为占位页）；机器人页负责 机器人 → 场景 → 指令条目的编辑与导入，文案 key 前缀是 `pages.dashboard.robots.*`，兼容页使用 `pages.dashboard.compatibility.*`，设置页使用 `pages.dashboard.settings.*`。
 
 #### 代码风格
 

@@ -143,7 +143,7 @@ describe('RobotsView', () => {
     const wrapper = await mount()
 
     expect(api.fetchRobots).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('新版配置')
+    expect(wrapper.text()).toContain('机器人')
     expect(wrapper.text()).toContain('主机器人')
     expect(wrapper.text()).toContain('测试机器人')
     expect(wrapper.text()).toContain('场景 2 个，指令 2 条。')

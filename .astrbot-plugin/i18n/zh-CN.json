@@ -85,7 +85,7 @@
         "expand": "展开侧边栏",
         "openDrawer": "打开侧边栏",
         "closeDrawer": "关闭侧边栏",
-        "robots": "新版配置",
+        "robots": "机器人",
         "compatibility": "兼容性"
       },
       "status": {
@@ -123,20 +123,26 @@
         "empty": {
           "platforms": {
             "title": "还没有可用的 QQ 平台",
-            "description": "到「兼容性」页填写 qq_platforms 的 appid / ClientSecret，或者到「新版配置」创建机器人。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。"
+            "description": "到「兼容性」页填写 qq_platforms 的 appid / ClientSecret，或者到「机器人」页创建机器人。插件读不到 AstrBot 平台适配器里的机器人信息，凭证只能在这里配置。"
           },
           "commands": {
-            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请到「兼容性」或「新版配置」页添加指令。"
+            "description": "尚未配置指令条目，同步会清空本插件创建的面板。请到「兼容性」或「机器人」页添加指令。"
           }
         },
         "source": {
-          "v2": "新版配置",
+          "v2": "机器人配置",
           "legacy": "兼容性配置"
         }
       },
       "settings": {
+        "title": "设置",
+        "subtitle": "插件级通用设置会集中在这里。",
+        "wipTitle": "功能施工中",
+        "wipText": "这个页面还在建设中，后续会提供插件级通用设置。"
+      },
+      "compatibility": {
         "title": "兼容性",
-        "subtitle": "旧版全局配置仍可在这里维护；已被新版配置按 AppID 接管的机器人不会使用这里的场景和指令。",
+        "subtitle": "旧版全局配置仍可在这里维护；已被「机器人」页按 AppID 接管的机器人不会使用这里的场景和指令。",
         "reload": "重新载入",
         "save": "保存",
         "saveAndSync": "保存并同步",
@@ -182,7 +188,7 @@
         "platformSecretRequired": "新增平台必须填写 ClientSecret。"
       },
       "robots": {
-        "title": "新版配置",
+        "title": "机器人",
         "subtitle": "按机器人维护不同场景下的指令条目，每台机器人独立生效。",
         "reload": "重新载入",
         "importLegacy": "从兼容配置导入",

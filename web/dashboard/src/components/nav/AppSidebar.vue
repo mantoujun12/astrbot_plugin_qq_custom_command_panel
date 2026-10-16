@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { mdiHistory, mdiRobotOutline, mdiViewDashboardOutline } from '@mdi/js'
+import { mdiCogOutline, mdiHistory, mdiRobotOutline, mdiViewDashboardOutline } from '@mdi/js'
 import NavItem from './NavItem.vue'
 
 defineProps<{
@@ -24,16 +24,22 @@ const mainItems = [
     to: '/robots',
     icon: mdiRobotOutline,
     labelKey: 'pages.dashboard.nav.robots',
-    fallback: '新版配置',
+    fallback: '机器人',
+  },
+  {
+    to: '/compatibility',
+    icon: mdiHistory,
+    labelKey: 'pages.dashboard.nav.compatibility',
+    fallback: '兼容性',
   },
 ]
 
 const bottomItems = [
   {
     to: '/settings',
-    icon: mdiHistory,
-    labelKey: 'pages.dashboard.nav.compatibility',
-    fallback: '兼容性',
+    icon: mdiCogOutline,
+    labelKey: 'pages.dashboard.nav.settings',
+    fallback: '设置',
   },
 ]
 </script>

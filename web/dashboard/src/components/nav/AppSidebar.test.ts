@@ -16,16 +16,18 @@ async function mountSidebar(options: { rail?: boolean } = {}) {
 }
 
 describe('AppSidebar', () => {
-  it('shows the title and both navigation entries', async () => {
+  it('shows the title and every navigation entry in order', async () => {
     const wrapper = await mountSidebar()
 
     expect(wrapper.get('.qc-sidebar-brand-title').text()).toBe('指令面板')
     expect(wrapper.text()).toContain('状态概览')
-    expect(wrapper.text()).toContain('新版配置')
+    expect(wrapper.text()).toContain('机器人')
     expect(wrapper.text()).toContain('兼容性')
+    expect(wrapper.text()).toContain('设置')
     expect(wrapper.findAll('a').map((link) => link.attributes('href'))).toEqual([
       expect.stringContaining('/status'),
       expect.stringContaining('/robots'),
+      expect.stringContaining('/compatibility'),
       expect.stringContaining('/settings'),
     ])
   })
