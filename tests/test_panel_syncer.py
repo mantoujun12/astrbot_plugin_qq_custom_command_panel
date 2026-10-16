@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from core.panel_syncer import PanelSyncer
+from core.panel_syncer import PanelSyncer, PanelSyncError
 from tests.fakes import FakeQQClient
 
 REMARK_PREFIX = PanelSyncer.REMARK_PREFIX
@@ -206,8 +206,8 @@ async def test_sync_cleans_disabled_scene_panels() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_create_failure_does_not_break_other_scopes() -> None:
-    """某场景 create 失败仅记录 error，不影响其他场景"""
+async def test_sync_create_failure_keeps_other_scopes_but_reports_error() -> None:
+    """某场景 create 失败：其他场景照常写入，但整次同步要报错而不是当成成功"""
     syncer = make_syncer()
 
     class PartialClient(FakeQQClient):
@@ -217,10 +217,13 @@ async def test_sync_create_failure_does_not_break_other_scopes() -> None:
             return await super().create_panel(scope, items, **kwargs)
 
     client = PartialClient(existing={})
-    saved = await syncer.sync_for_platform("pf1", client, ["c2c", "group"], [{"name": "a"}])
+    with pytest.raises(PanelSyncError) as excinfo:
+        await syncer.sync_for_platform("pf1", client, ["c2c", "group"], [{"name": "a"}])
 
-    assert saved == {"group": saved["group"]}
-    assert "c2c" not in saved
+    assert "c2c" in str(excinfo.value)
+    saved = excinfo.value.saved
+    assert set(saved) == {"group"}
+    assert len(client.created) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +445,8 @@ async def test_sync_all_emits_start_platform_and_finish() -> None:
     assert finish["succeeded"] == 1
     assert finish["failed"] == 0
     assert result == {"pf1": {"c2c": "panel_new_1001"}}
+    # 兼容配置里只存 name/desc，写面板时同样要补上 type
+    assert client.created[0][1] == [{"name": "help", "type": "command", "desc": "帮助"}]
 
 
 @pytest.mark.asyncio
@@ -522,6 +527,23 @@ async def test_sync_for_platform_uses_per_scene_items() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sync_for_platform_fills_item_type() -> None:
+    """配置里只存 name/desc，写进面板时必须补齐 QQ 要求的 type（缺失会 30015）"""
+    syncer = make_syncer()
+    client = FakeQQClient(existing={})
+
+    await syncer.sync_for_platform(
+        "robot-a",
+        client,
+        {"c2c": [{"name": "help", "desc": "私聊帮助"}]},
+    )
+
+    scope, items = client.created[0]
+    assert scope == "c2c"
+    assert items == [{"name": "help", "type": "command", "desc": "私聊帮助"}]
+
+
+@pytest.mark.asyncio
 async def test_sync_for_platform_clears_disabled_scene_only() -> None:
     syncer = make_syncer()
     client = FakeQQClient(
@@ -574,7 +596,52 @@ async def test_sync_all_uses_v2_robot_scenes(monkeypatch) -> None:
     result = await syncer.sync_all()
 
     assert set(result) == {"robot-a", "robot-b"}
-    assert [item["name"] for item in client_a.created[0][1]] == ["help"]
+    assert client_a.created[0][1] == [{"name": "help", "type": "command", "desc": "私聊"}]
     assert client_a.created[0][0] == "c2c"
-    assert [item["name"] for item in client_b.created[0][1]] == ["sign"]
+    assert client_b.created[0][1] == [{"name": "sign", "type": "command", "desc": "群聊"}]
     assert client_b.created[0][0] == "group"
+
+
+@pytest.mark.asyncio
+async def test_sync_all_reports_platform_failure_when_a_scene_write_fails(monkeypatch) -> None:
+    """场景写入被 QQ 拒绝时，整轮同步必须报失败，不能静默显示 0 个平台"""
+    syncer = make_syncer()
+
+    class FailingGroupClient(FakeQQClient):
+        async def create_panel(self, scope, items, **kwargs):  # type: ignore[override]
+            if scope == "group":
+                raise RuntimeError("QQ API POST /v2/panels 失败 [400]：面板元素类型不合法")
+            return await super().create_panel(scope, items, **kwargs)
+
+    client = FailingGroupClient(existing={})
+    stub_clients(syncer, {"robot-a": client})
+    monkeypatch.setattr(
+        syncer,
+        "build_runtime_robots",
+        lambda *args, **kwargs: [
+            {
+                "id": "robot-a",
+                "appid": "app-a",
+                "secret": "sec-a",
+                "platform": "qq_official",
+                "source": "v2",
+                "scenes": {
+                    "c2c": [{"name": "help", "desc": "私聊"}],
+                    "group": [{"name": "sign", "desc": "群聊"}],
+                },
+            }
+        ],
+    )
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    assert [event["type"] for event in events] == ["start", "platform", "finish"]
+    platform_event = events[1]
+    assert platform_event["status"] == "error"
+    assert platform_event["saved"] == 1  # c2c 已写入
+    assert "group" in platform_event["error"]
+    finish = events[2]
+    assert finish["ok"] is False
+    assert finish["failed"] == 1
+    assert "error" in result["robot-a"]

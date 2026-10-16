@@ -41,6 +41,7 @@
 
   "panel.incomplete_list_retry": "查询面板列表不完整，失败场景：{scopes}；已中止本次同步以避免重复创建，请稍后重试",
   "panel.incomplete_list_purged_partial": "查询面板列表不完整，失败场景：{scopes}；已删除已列出的面板，请稍后重试",
+  "panel.scope_sync_failed": "以下场景未能写入面板：{detail}",
 
   "web.not_ready": "插件尚未初始化完成，请稍后重试",
   "web.config_unavailable": "当前 AstrBot 版本没有提供配置持久化接口，无法保存配置",

@@ -41,6 +41,7 @@
 
   "panel.incomplete_list_retry": "panel list is incomplete, failed scopes: {scopes}; sync aborted to avoid duplicate creation, please retry later",
   "panel.incomplete_list_purged_partial": "panel list is incomplete, failed scopes: {scopes}; listed panels have been deleted, retry later",
+  "panel.scope_sync_failed": "scenes failed to be written: {detail}",
 
   "web.not_ready": "plugin is not initialized yet, please retry later",
   "web.config_unavailable": "this AstrBot version does not expose a config persistence API, cannot save config",

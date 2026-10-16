@@ -22,6 +22,7 @@ from core.config import (
     get_selected_commands,
     mask_secret,
     normalize_config_payload,
+    normalize_panel_items,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -92,6 +93,44 @@ def test_get_selected_commands_caps_at_max_items() -> None:
 def test_get_selected_commands_non_list_returns_empty() -> None:
     assert get_selected_commands({"selected_commands": "oops"}) == []
     assert get_selected_commands({}) == []
+
+
+# ---------------------------------------------------------------------------
+# normalize_panel_items: 写面板前补齐 QQ 要求的 type
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_panel_items_fills_type_and_truncates() -> None:
+    items = normalize_panel_items(
+        [
+            {"name": "help", "desc": "帮助"},
+            {"name": "n" * 30, "desc": "d" * 50},
+        ]
+    )
+    assert items == [
+        {"name": "help", "type": "command", "desc": "帮助"},
+        {
+            "name": "n" * PANEL_ITEM_NAME_MAX,
+            "type": "command",
+            "desc": "d" * PANEL_ITEM_DESC_MAX,
+        },
+    ]
+
+
+def test_normalize_panel_items_skips_invalid_entries() -> None:
+    assert normalize_panel_items(
+        [
+            "junk",
+            {"desc": "no name"},
+            {"name": "  "},
+            {"name": "ok", "desc": 42},
+        ]
+    ) == [{"name": "ok", "type": "command", "desc": ""}]
+
+
+def test_normalize_panel_items_non_list_returns_empty() -> None:
+    assert normalize_panel_items(None) == []
+    assert normalize_panel_items({"name": "help"}) == []
 
 
 # ---------------------------------------------------------------------------

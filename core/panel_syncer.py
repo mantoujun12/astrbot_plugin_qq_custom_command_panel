@@ -15,6 +15,7 @@ from .config import (
     PANEL_MAX_ITEMS,
     SCENES,
     get_enabled_scenes,
+    normalize_panel_items,
 )
 from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
 from .qq_client import QQClient
@@ -33,6 +34,18 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 # 结构化事件回调：供 dashboard 渲染进度条 / 平台状态列表
 # 与 ProgressCallback 并行存在：文本进日志，结构化事件进可视化
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+class PanelSyncError(RuntimeError):
+    """某个机器人有场景写入失败
+
+    携带已成功写入的 ``{scope: panel_id}``，调用方据此标记平台失败的同时
+    仍能持久化已完成部分。整轮同步因场景查询失败而中止时抛普通 RuntimeError。
+    """
+
+    def __init__(self, message: str, saved: dict[str, str] | None = None) -> None:
+        super().__init__(message)
+        self.saved: dict[str, str] = dict(saved or {})
 
 
 class PanelSyncer:
@@ -313,11 +326,19 @@ class PanelSyncer:
 
         新版调用传 ``{scope: items}``，各场景条目独立；旧调用仍可传 ``scenes`` 列表
         加一份共享 ``items``。只同步条目非空的场景，未出现的场景则清理本插件在该场景的旧面板。
-        返回 {scope: panel_id}。
+        条目统一补齐 QQ API 要求的 type 字段后写出。
+        返回 {scope: panel_id}；有场景写入失败时抛 :class:`PanelSyncError`
+        （异常上的 ``saved`` 保留已成功的场景），不再静默当成成功。
         """
         if isinstance(scenes, list):
             shared = items or []
             scenes = {scope: shared for scope in scenes if scope in SCENES}
+        # 配置里只存 name / desc，写出前补齐 type，避免 QQ 返回 30015 面板元素类型不合法
+        scenes = {
+            scope: normalize_panel_items(raw_items)
+            for scope, raw_items in scenes.items()
+            if scope in SCENES
+        }
         platform = getattr(client, "platform_label", "qq")
         remark = f"{self.REMARK_PREFIX} {platform}/{pf_id}"
 
@@ -336,6 +357,7 @@ class PanelSyncer:
         existing_by_scope = self.owned_panels_by_scope(all_existing)
         total_panels = len(all_existing)
         saved: dict[str, str] = {}
+        failures: dict[str, str] = {}
 
         # ---------- 场景同步：分 update 并发 + create 串行 ----------
         # 已有面板的 scope 走 update 路径：不会修改 total_panels，相互独立可并发
@@ -349,8 +371,8 @@ class PanelSyncer:
                 create_scopes.append(scope)
 
         # (1) update 路径并发：每个 scope 独立 try/except，失败不影响其他
-        async def _sync_update_scope(scope: str) -> tuple[str, str | None]:
-            """返回 (scope, saved_id_or_None)，异常时 saved_id 为 None 并打 error 日志"""
+        async def _sync_update_scope(scope: str) -> tuple[str, str | None, str | None]:
+            """返回 (scope, saved_id_or_None, error_or_None)，异常时打 error 日志"""
             try:
                 # 同一 scope 有多条 owned 面板时只更新第一条，多余的由视图标记为 duplicate
                 saved_id, _ = await self._sync_scope_panel(
@@ -362,18 +384,24 @@ class PanelSyncer:
                     existing_by_scope[scope][0],
                     total_panels,
                 )
-                return scope, saved_id
+                return scope, saved_id, None
             except Exception as exc:
                 logger.error(
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
                 )
-                return scope, None
+                return scope, None, str(exc)
 
-        update_coros: list[Coroutine[Any, Any, tuple[str, str | None]]] = [
+        update_coros: list[Coroutine[Any, Any, tuple[str, str | None, str | None]]] = [
             _sync_update_scope(s) for s in update_scopes
         ]
-        for scope, saved_id in await self._run_concurrent(update_coros):
-            if isinstance(scope, str) and saved_id is not None:
+        for outcome in await self._run_concurrent(update_coros):
+            # _sync_update_scope 已经吞掉 Exception；这里只可能是取消之类的 BaseException
+            if isinstance(outcome, BaseException):
+                raise outcome
+            scope, saved_id, error = outcome
+            if error is not None:
+                failures[scope] = error
+            elif saved_id is not None:
                 saved[scope] = saved_id
 
         # (2) create 路径串行：严格维护 total_panels，避免超限创建
@@ -394,6 +422,7 @@ class PanelSyncer:
                 logger.error(
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
                 )
+                failures[scope] = str(exc)
 
         # ---------- 清理未启用场景的旧面板（并发，含重复面板）----------
         disabled_delete_coros: list[Coroutine[Any, Any, bool]] = []
@@ -413,6 +442,15 @@ class PanelSyncer:
                     )
                 )
         await self._run_concurrent(disabled_delete_coros)
+
+        if failures:
+            raise PanelSyncError(
+                t(
+                    "panel.scope_sync_failed",
+                    detail="；".join(f"{scope}: {message}" for scope, message in failures.items()),
+                ),
+                saved=saved,
+            )
 
         return saved
 
@@ -594,14 +632,7 @@ class PanelSyncer:
                 continue
             raw_scenes = robot.get("scenes")
             scenes = (
-                {
-                    scope: [
-                        {"name": str(item.get("name") or ""), "desc": str(item.get("desc") or "")}
-                        for item in raw_scenes.get(scope, [])
-                        if isinstance(item, dict) and str(item.get("name") or "").strip()
-                    ]
-                    for scope in SCENES
-                }
+                {scope: normalize_panel_items(raw_scenes.get(scope, [])) for scope in SCENES}
                 if isinstance(raw_scenes, dict)
                 else {scope: [] for scope in SCENES}
             )
@@ -660,6 +691,8 @@ class PanelSyncer:
         )
 
         result: dict[str, dict[str, str]] = {}
+        # 部分场景失败时同步仍写过的面板，配合 result 的 error 一起记录
+        partial_saved: dict[str, dict[str, str]] = {}
         for idx, (pf_id, client) in enumerate(expected.items(), start=1):
             try:
                 scene_map = robot_scenes.get(pf_id, {scope: [] for scope in SCENES})
@@ -694,6 +727,9 @@ class PanelSyncer:
                     exc_info=True,
                 )
                 result[pf_id] = {"error": str(exc)}
+                partial = exc.saved if isinstance(exc, PanelSyncError) else {}
+                if partial:
+                    partial_saved[pf_id] = partial
                 await self._emit_progress(
                     on_progress,
                     t(
@@ -712,14 +748,16 @@ class PanelSyncer:
                         "index": idx,
                         "total": total,
                         "status": "error",
-                        "saved": 0,
+                        "saved": len(partial),
                         "error": str(exc),
                     },
                 )
 
-        self._state.save(
-            {pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes}
-        )
+        state_snapshot = {
+            pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes
+        }
+        state_snapshot.update(partial_saved)
+        self._state.save(state_snapshot)
         succeeded = sum(1 for scopes in result.values() if "error" not in scopes)
         await self._emit_event(
             on_event,
@@ -764,4 +802,4 @@ class PanelSyncer:
         self.translator.set_language(language)
 
 
-__all__ = ["EventCallback", "PanelSyncer", "ProgressCallback"]
+__all__ = ["EventCallback", "PanelSyncError", "PanelSyncer", "ProgressCallback"]

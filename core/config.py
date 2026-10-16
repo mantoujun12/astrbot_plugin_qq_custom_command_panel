@@ -20,6 +20,10 @@ PANEL_ITEM_NAME_MAX = 14
 PANEL_ITEM_DESC_MAX = 30
 PANEL_MAX_ITEMS = 20
 
+# QQ 面板单个条目的类型。POST/PUT /v2/panels 的 panel.items 每项都必须带 type，
+# 缺失时 QQ 会整份拒绝并返回 30015「面板元素类型不合法」。
+PANEL_ITEM_TYPE = "command"
+
 # 支持的指令面板场景
 SCENES: tuple[str, ...] = ("c2c", "group", "channel", "dm")
 
@@ -56,6 +60,39 @@ def get_enabled_scenes(config: dict[str, Any]) -> list[str]:
     return [s for s in scenes if isinstance(s, str) and s in SCENES]
 
 
+def build_panel_item(name: str, desc: str = "") -> dict[str, str]:
+    """构造一条可直接提交给 QQ 面板 API 的条目
+
+    name / desc 超长时截断，避免 QQ 以 30015 拒绝整份面板。
+    """
+    return {
+        "name": name[:PANEL_ITEM_NAME_MAX],
+        "type": PANEL_ITEM_TYPE,
+        "desc": desc[:PANEL_ITEM_DESC_MAX],
+    }
+
+
+def normalize_panel_items(items: Any) -> list[dict[str, str]]:
+    """把配置里的条目整理成 QQ API 需要的结构
+
+    插件内部（schema 与 ``robot_config.json``）只存 name / desc，写入面板前统一
+    经这里补齐 type；跳过非字典条目与空 name。
+    """
+    if not isinstance(items, list):
+        return []
+
+    normalized: list[dict[str, str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        desc = item.get("desc")
+        normalized.append(build_panel_item(name, desc if isinstance(desc, str) else ""))
+    return normalized
+
+
 def get_selected_commands(config: dict[str, Any]) -> list[dict[str, str]]:
     """获取用户在 schema 里手动配置的指令面板条目
 
@@ -81,13 +118,7 @@ def get_selected_commands(config: dict[str, Any]) -> list[dict[str, str]]:
         desc = c.get("desc") or ""
         if not isinstance(desc, str):
             desc = ""
-        cleaned.append(
-            {
-                "name": name[:PANEL_ITEM_NAME_MAX],
-                "type": "command",
-                "desc": desc[:PANEL_ITEM_DESC_MAX],
-            }
-        )
+        cleaned.append(build_panel_item(name, desc))
         if len(cleaned) >= PANEL_MAX_ITEMS:
             break
     return cleaned
@@ -373,10 +404,12 @@ __all__ = [
     "DEFAULT_SCENES",
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
+    "PANEL_ITEM_TYPE",
     "PANEL_MAX_ITEMS",
     "PLATFORM_TYPES",
     "QQ_PLATFORM_TEMPLATE_KEY",
     "SCENES",
+    "build_panel_item",
     "export_config",
     "get_configured_platforms",
     "get_enabled_scenes",
@@ -385,4 +418,5 @@ __all__ = [
     "get_selected_commands",
     "mask_secret",
     "normalize_config_payload",
+    "normalize_panel_items",
 ]
