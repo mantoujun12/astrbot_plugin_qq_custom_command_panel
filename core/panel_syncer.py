@@ -281,34 +281,33 @@ class PanelSyncer:
         remark: str,
         existing_panel: dict[str, Any] | None,
         total_panels: int,
-    ) -> tuple[str | None, int]:
+    ) -> tuple[str | None, int, str | None]:
         """同步单个 scope 的面板：优先 update 已有，否则 create 新建
 
-        返回 (saved_panel_id_or_None, new_total_panels)。
+        返回 (saved_panel_id_or_None, new_total_panels, error_reason_or_None)。
         - saved_panel_id 为 None 表示该 scope 未写入（上限达到 / 失败）
         - new_total_panels 反映本次新建后的总面板数（用于上限判断）
+        - error_reason 非空时调用方必须把该场景记成失败，不能当成写入成功
         """
         if existing_panel is not None:
             panel_id = existing_panel.get("panel_id")
             if panel_id:
                 await client.update_panel(panel_id, items, remark)
                 logger.info(f"{LOG_TAG} " + t("log.update_panel", scope=scope, panel_id=panel_id))
-                return str(panel_id), total_panels
+                return str(panel_id), total_panels, None
 
         # QQ 限制：一个机器人最多创建 PANEL_MAX_ITEMS 个面板。
         # 达到上限时仍允许更新已有面板，仅阻止新建。
         if total_panels >= PANEL_MAX_ITEMS:
-            logger.error(
-                f"{LOG_TAG} "
-                + t(
-                    "log.panel_limit_reached",
-                    scope=scope,
-                    pf_id=pf_id,
-                    total=total_panels,
-                    limit=PANEL_MAX_ITEMS,
-                )
+            reason = t(
+                "log.panel_limit_reached",
+                scope=scope,
+                pf_id=pf_id,
+                total=total_panels,
+                limit=PANEL_MAX_ITEMS,
             )
-            return None, total_panels
+            logger.error(f"{LOG_TAG} " + reason)
+            return None, total_panels, reason
 
         panel_id = await client.create_panel(
             scope=scope,
@@ -317,7 +316,7 @@ class PanelSyncer:
             remark=remark,
         )
         logger.info(f"{LOG_TAG} " + t("log.create_panel", scope=scope, panel_id=panel_id))
-        return panel_id, total_panels + 1
+        return panel_id, total_panels + 1, None
 
     async def sync_for_platform(
         self,
@@ -379,7 +378,7 @@ class PanelSyncer:
             """返回 (scope, saved_id_or_None, error_or_None)，异常时打 error 日志"""
             try:
                 # 同一 scope 有多条 owned 面板时只更新第一条，多余的由视图标记为 duplicate
-                saved_id, _ = await self._sync_scope_panel(
+                saved_id, _, reason = await self._sync_scope_panel(
                     client,
                     pf_id,
                     scope,
@@ -388,7 +387,7 @@ class PanelSyncer:
                     existing_by_scope[scope][0],
                     total_panels,
                 )
-                return scope, saved_id, None
+                return scope, saved_id, reason
             except Exception as exc:
                 logger.error(
                     f"{LOG_TAG} " + t("log.sync_scope_failed", scope=scope, pf_id=pf_id, exc=exc)
@@ -411,7 +410,7 @@ class PanelSyncer:
         # (2) create 路径串行：严格维护 total_panels，避免超限创建
         for scope in create_scopes:
             try:
-                saved_id, total_panels = await self._sync_scope_panel(
+                saved_id, total_panels, reason = await self._sync_scope_panel(
                     client,
                     pf_id,
                     scope,
@@ -420,7 +419,10 @@ class PanelSyncer:
                     None,
                     total_panels,
                 )
-                if saved_id is not None:
+                if reason is not None:
+                    # 面板数达到 QQ 上限：场景没写入，按失败上报而不是静默跳过
+                    failures[scope] = reason
+                elif saved_id is not None:
                     saved[scope] = saved_id
             except Exception as exc:
                 logger.error(
@@ -701,8 +703,9 @@ class PanelSyncer:
             try:
                 scene_map = robot_scenes.get(pf_id, {scope: [] for scope in SCENES})
                 saved = await self.sync_for_platform(pf_id, client, scene_map)
-                if saved:
-                    result[pf_id] = saved
+                # 无论写入还是只做清理，处理过的机器人一律计入 result，
+                # 否则纯清理的一轮会报成 platforms=0、看着像没跑
+                result.setdefault(pf_id, {}).update(saved)
                 await self._emit_progress(
                     on_progress,
                     t(
@@ -757,8 +760,9 @@ class PanelSyncer:
                     },
                 )
 
+        # 只持久化真正有 panel_id 的映射：整机器人被清空的场景不必留下空条目
         state_snapshot = {
-            pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes
+            pf_id: scopes for pf_id, scopes in result.items() if "error" not in scopes and scopes
         }
         state_snapshot.update(partial_saved)
         self._state.save(state_snapshot)

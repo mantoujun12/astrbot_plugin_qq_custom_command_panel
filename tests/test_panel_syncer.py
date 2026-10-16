@@ -159,15 +159,17 @@ async def test_sync_aborts_when_any_scope_list_fails() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_skips_foreign_panels_on_limit() -> None:
-    """他方面板计入 total_panels: 剩余额度不足时不再新建"""
+    """他方面板计入 total_panels: 剩余额度不足时不新建，并作为失败上报"""
     syncer = make_syncer()
     # 20 个他方面板 → total 达上限
     existing = {s: [foreign_panel(s, f"f_{s}_{i}") for i in range(20)] for s in ("c2c",)}
     client = FakeQQClient(existing=existing)
 
-    saved = await syncer.sync_for_platform("pf1", client, ["group"], [{"name": "a"}])
+    with pytest.raises(PanelSyncError) as excinfo:
+        await syncer.sync_for_platform("pf1", client, ["group"], [{"name": "a"}])
 
-    assert saved == {}
+    assert excinfo.value.saved == {}
+    assert "group" in str(excinfo.value)
     assert client.created == []
 
 
@@ -478,7 +480,7 @@ async def test_sync_all_reports_failed_platform_in_events() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_all_clearing_branch_emits_structured_events() -> None:
-    """selected_commands 为空时走清理分支，同样要有 start/platform/finish"""
+    """selected_commands 为空时走清理分支，同样要有 start/platform/finish 且计入平台数"""
     syncer = make_syncer(
         config={
             "scenes": ["c2c"],
@@ -492,12 +494,17 @@ async def test_sync_all_clearing_branch_emits_structured_events() -> None:
 
     result = await syncer.sync_all(on_event=on_event)
 
-    assert result == {}
+    # 纯清理的一轮也要记录处理过的机器人，否则 finish 会报成 platforms=0
+    assert result == {"pf1": {}}
     assert [event["type"] for event in events] == ["start", "platform", "finish"]
     assert events[0]["mode"] == "clear"
     assert events[0]["items"] == 0
     assert events[1]["status"] == "ok"
     assert events[2]["reason"] == "clear"
+    assert events[2]["ok"] is True
+    assert events[2]["platforms"] == 1
+    assert events[2]["succeeded"] == 1
+    assert events[2]["failed"] == 0
     assert client.deleted == ["p_old"]
 
 
@@ -645,3 +652,41 @@ async def test_sync_all_reports_platform_failure_when_a_scene_write_fails(monkey
     assert finish["ok"] is False
     assert finish["failed"] == 1
     assert "error" in result["robot-a"]
+
+
+@pytest.mark.asyncio
+async def test_sync_all_reports_platform_failure_when_panel_limit_reached(monkeypatch) -> None:
+    """面板数达 QQ 上限导致场景没写入时，平台要报失败而不是静默跳过"""
+    syncer = make_syncer()
+    # 20 个他方面板 → 该机器人已达上限，新建场景拿不到额度
+    client = FakeQQClient(existing={"c2c": [foreign_panel("c2c", f"f_{i}") for i in range(20)]})
+    stub_clients(syncer, {"robot-a": client})
+    monkeypatch.setattr(
+        syncer,
+        "build_runtime_robots",
+        lambda *args, **kwargs: [
+            {
+                "id": "robot-a",
+                "appid": "app-a",
+                "secret": "sec-a",
+                "platform": "qq_official",
+                "source": "v2",
+                "scenes": {"group": [{"name": "sign", "desc": "群聊"}]},
+            }
+        ],
+    )
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    platform_event = next(event for event in events if event["type"] == "platform")
+    assert platform_event["status"] == "error"
+    assert platform_event["saved"] == 0
+    assert "上限" in platform_event["error"]
+    finish = events[-1]
+    assert finish["ok"] is False
+    assert finish["platforms"] == 1
+    assert finish["succeeded"] == 0
+    assert finish["failed"] == 1
+    assert "error" in result["robot-a"]
+    assert client.created == []
