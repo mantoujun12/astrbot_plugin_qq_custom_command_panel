@@ -239,10 +239,15 @@ function removeSelectedRobot(): void {
   }
   const next = drafts.value[index] ?? drafts.value[index - 1] ?? null
   selectedKey.value = next?.key ?? ''
-  notice.value = t(
-    'pages.dashboard.robots.removedLocal',
-    '已从本地列表移除。保存后才会写入配置。',
-  )
+  notice.value = mockMode.value
+    ? t(
+        'pages.dashboard.robots.removedMock',
+        '已从本地列表移除（预览），不会写入配置。',
+      )
+    : t(
+        'pages.dashboard.robots.removedLocal',
+        '已从本地列表移除。保存后才会写入配置。',
+      )
 }
 
 function confirmDelete(): void {

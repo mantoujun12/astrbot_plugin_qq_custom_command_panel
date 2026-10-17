@@ -230,6 +230,7 @@
         "appidLabel": "AppID：{appid}",
         "untitledRobot": "未命名机器人",
         "removedLocal": "已从本地列表移除。保存后才会写入配置。",
+        "removedMock": "已从本地列表移除（预览），不会写入配置。",
         "basicTitle": "基础信息",
         "basicSubtitle": "名称、AppID 与平台凭证只用于这台机器人。",
         "name": "机器人名称",

@@ -463,6 +463,16 @@ describe('RobotsView', () => {
     await flush()
     expect(dialogModel(wrapper, DELETE_DIALOG)).toBe(false)
 
+    // 确认删除只改本地预览，提示语不能承诺一次在 mock 下不可能发生的保存
+    await button(wrapper, '删除机器人配置').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
+    clickInDialogPanel('.qc-robot-delete', '确认删除')
+    await flush()
+    expect(dialogModel(wrapper, DELETE_DIALOG)).toBe(false)
+    expect(wrapper.findAll('.qc-robot-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('已从本地列表移除（预览），不会写入配置。')
+    expect(wrapper.text()).not.toContain('保存后才会写入配置。')
+
     await button(wrapper, '从兼容配置导入').trigger('click')
     await waitUntil(() => dialogEl('.qc-import-panel') !== null)
     // 导入本身要写后端，mock 下仍然禁用

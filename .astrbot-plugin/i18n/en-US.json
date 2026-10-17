@@ -230,6 +230,7 @@
         "appidLabel": "AppID: {appid}",
         "untitledRobot": "Untitled robot",
         "removedLocal": "Removed from the local list. It will be written to config after saving.",
+        "removedMock": "Removed from the local list (preview only); nothing will be written to config.",
         "basicTitle": "Basics",
         "basicSubtitle": "Name, AppID, and platform credentials belong only to this robot.",
         "name": "Robot name",
