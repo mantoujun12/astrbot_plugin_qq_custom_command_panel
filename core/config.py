@@ -337,13 +337,17 @@ def normalize_config_payload(
         ("primary_color", DEFAULT_PRIMARY_COLOR),
         ("secondary_color", DEFAULT_SECONDARY_COLOR),
     ):
-        raw_color = payload.get(field, existing.get(field))
+        submitted = field in payload
+        raw_color = payload[field] if submitted else existing.get(field)
         if raw_color is None:
             raw_color = default
         if isinstance(raw_color, str):
             raw_color = raw_color.strip()
         if not isinstance(raw_color, str) or not _HEX_COLOR_RE.fullmatch(raw_color):
-            errors.append(t("config.error.theme_color", field=field, value=raw_color))
+            if submitted:
+                errors.append(t("config.error.theme_color", field=field, value=raw_color))
+            else:
+                values[field] = default
         else:
             values[field] = raw_color.lower()
 

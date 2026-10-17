@@ -526,6 +526,17 @@ def test_normalize_config_payload_rejects_invalid_theme_colors() -> None:
     assert "#RRGGBB" in joined
 
 
+def test_normalize_config_payload_resets_invalid_stored_theme_colors() -> None:
+    existing = {**make_existing(), "primary_color": "red", "secondary_color": "#12345"}
+
+    values, errors = normalize_config_payload(existing, {"scenes": ["c2c"]})
+
+    # 非法旧值不阻塞别的页面保存，未提交时回退默认配色
+    assert errors == []
+    assert values["primary_color"] == DEFAULT_PRIMARY_COLOR
+    assert values["secondary_color"] == DEFAULT_SECONDARY_COLOR
+
+
 def test_normalize_config_payload_rejects_bad_platform_entries() -> None:
     _values, errors = normalize_config_payload(
         make_existing(),
