@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from core.config import PANEL_MAX_ITEMS, SCENES
+from core.i18n import Translator
 from core.panel_syncer import PanelSyncer
 from core.paths import PLUGIN_NAME, PLUGIN_VERSION
 from core.robot_config import RobotConfigError, load_robot_config
@@ -1081,3 +1082,22 @@ async def test_build_status_reports_v2_source_and_name() -> None:
     assert platform["source"] == "v2"
     assert payload["scenes"] == ["c2c"]
     assert payload["items"]["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_page_robots_errors_follow_selected_language(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    import core.i18n as i18n_module
+
+    monkeypatch.setattr(i18n_module, "_instance", Translator(Path("core/i18n"), "ja-JP"))
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 0, "robots": []}
+
+    response = await bundle.page_robots_save()
+
+    assert response["status_code"] == 400
+    assert response["message"] == "version：正の整数である必要があります"

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -26,7 +27,7 @@ from .core import (
     register_web_apis,
     resolve_plugin_data_dir,
 )
-from .core.i18n import LOG_TAG, t
+from .core.i18n import DEFAULT_LANGUAGE, LOG_TAG, initialize, t
 
 
 @register(
@@ -42,6 +43,11 @@ class QQCommandPanelPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+        # 尽早按配置初始化翻译器，让数据目录解析等启动日志也使用目标语言。
+        initialize(
+            Path(__file__).resolve().parent / "core" / "i18n",
+            self.config.get("language", DEFAULT_LANGUAGE),
+        )
         # 持久化目录：AstrBot 的 data/plugin_data/<plugin_name>/，
         # 由 core.paths.resolve_plugin_data_dir 兼容不同 AstrBot 版本的获取方式
         self.data_dir = resolve_plugin_data_dir(context, PLUGIN_NAME)

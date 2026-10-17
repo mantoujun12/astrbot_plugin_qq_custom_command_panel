@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from core.config import PANEL_ITEM_DESC_MAX, PANEL_ITEM_NAME_MAX, PANEL_MAX_ITEMS
+from core.i18n import Translator
 from core.robot_config import (
     ROBOT_CONFIG_FILENAME,
     RobotConfigError,
@@ -454,3 +455,18 @@ def test_export_does_not_leak_plaintext_secret() -> None:
     exported = export_robot_config({"version": 1, "robots": [make_robot()]})
 
     assert "plain-secret-value" not in json.dumps(exported, ensure_ascii=False)
+
+
+def test_validation_errors_follow_selected_language(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.i18n as i18n_module
+
+    monkeypatch.setattr(i18n_module, "_instance", Translator(Path("core/i18n"), "ru-RU"))
+
+    _normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(appid="")]},
+    )
+
+    assert errors == ["robots[0].appid: значение не может быть пустым"]
