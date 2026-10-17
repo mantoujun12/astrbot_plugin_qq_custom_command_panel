@@ -38,6 +38,8 @@ export const MOCK_STATUS: StatusResponse = {
 
 export const MOCK_CONFIG: PluginConfigResponse = {
   language: 'zh-CN',
+  primary_color: '#3c96ca',
+  secondary_color: '#2f86bd',
   scenes: ['c2c', 'group'],
   available_scenes: ['c2c', 'group', 'channel', 'dm'],
   qq_platforms: [

@@ -13,6 +13,14 @@
         "English"
       ]
     },
+    "primary_color": {
+      "description": "插件视图主色",
+      "hint": "插件视图的主强调色，使用 #RRGGBB 格式。也可以到插件视图的「设置」页调整。"
+    },
+    "secondary_color": {
+      "description": "插件视图辅助色",
+      "hint": "插件视图的辅助强调色，使用 #RRGGBB 格式。也可以到插件视图的「设置」页调整。"
+    },
     "scenes": {
       "description": "生效场景（选择哪些场景下要显示 QQ 指令面板）",
       "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。本项属于兼容性配置，仅对未被「机器人」页接管的 AppID 生效。",
@@ -140,10 +148,16 @@
         "reload": "重新载入",
         "save": "保存",
         "saved": "设置已保存并生效。",
-        "mockHint": "本地开发环境：展示的是 mock 数据，不能保存配置。",
+        "mockHint": "本地开发环境：可编辑预览，但不能保存配置。",
         "basicTitle": "基础配置",
         "basicSubtitle": "日志语言只影响插件日志。",
-        "language": "日志语言"
+        "language": "日志语言",
+        "themeTitle": "主题配色",
+        "themeSubtitle": "调整插件视图的主色和辅助色，保存后立即应用到浅色与深色主题。",
+        "primaryColor": "主色",
+        "secondaryColor": "辅助色",
+        "colorHint": "使用 #RRGGBB 格式。",
+        "colorInvalid": "请输入 #RRGGBB 格式的颜色。"
       },
       "compatibility": {
         "title": "兼容性",

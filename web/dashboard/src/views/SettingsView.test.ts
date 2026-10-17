@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 import { VSelect } from 'vuetify/components'
 import type { PluginConfigResponse } from '../types/dashboard'
 import { flush, installBridge, mountView, waitUntil } from '../test/helpers'
+import { vuetify } from '../plugins/vuetify'
+import {
+  DEFAULT_THEME_COLORS,
+  THEME_LIGHT,
+  applyThemeColors,
+} from '../theme'
 
 vi.mock('../api/dashboard', () => ({
   fetchStatus: vi.fn(),
@@ -13,6 +19,8 @@ vi.mock('../api/dashboard', () => ({
 function configFixture(overrides: Partial<PluginConfigResponse> = {}): PluginConfigResponse {
   return {
     language: 'zh-CN',
+    primary_color: '#3c96ca',
+    secondary_color: '#2f86bd',
     scenes: ['c2c', 'group'],
     available_scenes: ['c2c', 'group', 'channel', 'dm'],
     qq_platforms: [],
@@ -55,6 +63,10 @@ async function loadSettingsView(options: { withBackend?: boolean } = {}) {
   }
 }
 
+afterEach(() => {
+  applyThemeColors(vuetify.theme, DEFAULT_THEME_COLORS)
+})
+
 describe('SettingsView', () => {
   it('loads the basic configuration into the form', async () => {
     const { api, mount } = await loadSettingsView()
@@ -66,32 +78,67 @@ describe('SettingsView', () => {
     expect(wrapper.get('.qc-title').text()).toBe('设置')
     expect(wrapper.text()).toContain('基础配置')
     expect(wrapper.text()).toContain('日志语言')
+    expect(wrapper.text()).toContain('主题配色')
+    expect(wrapper.text()).toContain('主色')
+    expect(wrapper.text()).toContain('辅助色')
     // 生效场景已挪回「兼容性」页，这里只剩日志语言
     expect(wrapper.text()).not.toContain('生效场景')
 
     const selects = wrapper.findAllComponents(VSelect)
     expect(selects).toHaveLength(1)
     expect(selects[0]?.props('modelValue')).toBe('zh-CN')
+    expect(wrapper.findAll('.qc-color-trigger')).toHaveLength(2)
   })
 
   it('submits only the fields this page owns', async () => {
     const { api, mount } = await loadSettingsView()
     vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
     vi.mocked(api.saveConfig).mockResolvedValue(
-      configFixture({ language: 'en-US', scenes: ['c2c'] }),
+      configFixture({
+        language: 'en-US',
+        primary_color: '#112233',
+        secondary_color: '#445566',
+        scenes: ['c2c'],
+      }),
     )
 
     const wrapper = await mount()
     // v-select 的下拉挂在 body 上，直接驱动 model 比点浮层稳
     wrapper.findAllComponents(VSelect)[0]?.vm.$emit('update:modelValue', 'en-US')
+    const colorFields = wrapper.findAllComponents({ name: 'ThemeColorField' })
+    colorFields[0]?.vm.$emit('update:modelValue', '#112233')
+    colorFields[1]?.vm.$emit('update:modelValue', '#445566')
 
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
     await flush()
 
     // 生效场景、平台凭证与指令条目都归「兼容性」页，这里不能带上，否则会覆盖那边的改动
-    expect(api.saveConfig).toHaveBeenCalledWith({ language: 'en-US' })
+    expect(api.saveConfig).toHaveBeenCalledWith({
+      language: 'en-US',
+      primary_color: '#112233',
+      secondary_color: '#445566',
+    })
     expect(wrapper.text()).toContain('设置已保存并生效。')
+    expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.primary).toBe('#112233')
+    expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.secondary).toBe('#445566')
+  })
+
+  it('keeps the form editable but disables save for an invalid color', async () => {
+    const { api, mount } = await loadSettingsView()
+    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+
+    const wrapper = await mount()
+    wrapper
+      .findAllComponents({ name: 'ThemeColorField' })[0]
+      ?.vm.$emit('update:modelValue', 'not-a-color')
+    await flush()
+
+    expect(wrapper.text()).toContain('请输入 #RRGGBB 格式的颜色。')
+    expect(button(wrapper, '保存').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAllComponents({ name: 'ThemeColorField' })[0]?.props('disabled')).toBe(
+      false,
+    )
   })
 
   it('reports a failed load and keeps saving disabled', async () => {
@@ -111,8 +158,19 @@ describe('SettingsView', () => {
 
     const wrapper = await mount()
 
-    expect(wrapper.text()).toContain('本地开发环境：展示的是 mock 数据，不能保存配置。')
+    expect(wrapper.text()).toContain('本地开发环境：可编辑预览，但不能保存配置。')
     expect(button(wrapper, '保存').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('.qc-color-trigger')[0]?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAllComponents({ name: 'ThemeColorField' })[0]?.props('disabled')).toBe(
+      false,
+    )
+
+    wrapper
+      .findAllComponents({ name: 'ThemeColorField' })[0]
+      ?.vm.$emit('update:modelValue', '#112233')
+    await flush()
+
+    expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.primary).toBe('#112233')
 
     await button(wrapper, '保存').trigger('click')
     await flush()

@@ -73,6 +73,10 @@ export interface ConfigLimits {
 
 export interface PluginConfigResponse {
   language: string
+  /** 插件视图主色，旧版后端可能省略 */
+  primary_color?: string
+  /** 插件视图辅助色，旧版后端可能省略 */
+  secondary_color?: string
   scenes: Scene[]
   available_scenes: Scene[]
   qq_platforms: ConfigPlatform[]
@@ -90,6 +94,8 @@ export interface ConfigPlatformPayload {
 
 export interface PluginConfigPayload {
   language: string
+  primary_color?: string
+  secondary_color?: string
   scenes: Scene[]
   qq_platforms: ConfigPlatformPayload[]
   selected_commands: ConfigCommand[]

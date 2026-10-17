@@ -13,6 +13,14 @@
         "English"
       ]
     },
+    "primary_color": {
+      "description": "Plugin view primary color",
+      "hint": "Primary accent color for the plugin view in #RRGGBB format. You can also adjust it on the Settings page of the plugin view."
+    },
+    "secondary_color": {
+      "description": "Plugin view secondary color",
+      "hint": "Secondary accent color for the plugin view in #RRGGBB format. You can also adjust it on the Settings page of the plugin view."
+    },
     "scenes": {
       "description": "Active scenes (where QQ command panel is visible)",
       "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration. This item belongs to the compatibility configuration and only applies to AppIDs not taken over on the Robots page.",
@@ -140,10 +148,16 @@
         "reload": "Reload",
         "save": "Save",
         "saved": "Settings saved and applied.",
-        "mockHint": "Local dev environment: showing mock data, saving is disabled.",
+        "mockHint": "Local dev environment: editable preview, saving is disabled.",
         "basicTitle": "Basics",
         "basicSubtitle": "The log language only affects plugin logs.",
-        "language": "Log language"
+        "language": "Log language",
+        "themeTitle": "Theme colors",
+        "themeSubtitle": "Adjust the plugin view primary and secondary colors. Saved colors apply to both light and dark themes immediately.",
+        "primaryColor": "Primary color",
+        "secondaryColor": "Secondary color",
+        "colorHint": "Use the #RRGGBB format.",
+        "colorInvalid": "Enter a color in #RRGGBB format."
       },
       "compatibility": {
         "title": "Compatibility",

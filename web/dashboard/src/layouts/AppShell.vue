@@ -1,8 +1,17 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { mdiMenu } from '@mdi/js'
+import { useTheme } from 'vuetify'
+import { fetchConfig } from '../api/dashboard'
 import AppSidebar from '../components/nav/AppSidebar.vue'
+import { useBridge } from '../composables/useBridge'
 import { useAppShell } from './useAppShell'
-import { THEME_DARK, THEME_LIGHT } from '../theme'
+import {
+  THEME_DARK,
+  THEME_LIGHT,
+  applyThemeColors,
+  resolveThemeColors,
+} from '../theme'
 
 const {
   mobile,
@@ -16,6 +25,22 @@ const {
   toggleLabel,
   title,
 } = useAppShell()
+
+const { ready, hasBackend } = useBridge()
+const theme = useTheme()
+
+watch(
+  [ready, hasBackend],
+  async ([isReady, backendReady]) => {
+    if (!isReady || !backendReady) return
+    try {
+      applyThemeColors(theme, resolveThemeColors(await fetchConfig()))
+    } catch (err) {
+      console.warn('[qq-command-panel] failed to load theme colors', err)
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
