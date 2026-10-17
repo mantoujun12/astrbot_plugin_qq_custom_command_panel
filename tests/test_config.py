@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from core.config import (
     COMMAND_TEMPLATE_KEY,
     DEFAULT_PRIMARY_COLOR,
@@ -27,6 +29,7 @@ from core.config import (
     normalize_config_payload,
     normalize_panel_items,
 )
+from core.i18n import SUPPORTED_LANGUAGES
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -359,6 +362,19 @@ def test_normalize_config_payload_accepts_full_payload() -> None:
     ]
 
 
+@pytest.mark.parametrize("language", ["ru-RU", "ja-JP"])
+def test_normalize_config_payload_accepts_new_languages(language: str) -> None:
+    values, errors = normalize_config_payload(make_existing(), {"language": language})
+
+    assert errors == []
+    assert values["language"] == language
+
+
+@pytest.mark.parametrize("language", ["ru-RU", "ja-JP"])
+def test_export_config_preserves_new_languages(language: str) -> None:
+    assert export_config({"language": language})["language"] == language
+
+
 def test_normalize_config_payload_keeps_existing_secret_when_blank() -> None:
     """页面只回掩码，secret 留空表示沿用原配置"""
     values, errors = normalize_config_payload(
@@ -609,3 +625,40 @@ def test_template_keys_match_conf_schema() -> None:
     schema = json.loads((REPO_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
     assert QQ_PLATFORM_TEMPLATE_KEY in schema["qq_platforms"]["templates"]
     assert COMMAND_TEMPLATE_KEY in schema["selected_commands"]["templates"]
+
+
+def test_language_schema_matches_supported_languages() -> None:
+    schema = json.loads((REPO_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+    assert tuple(schema["language"]["options"]) == SUPPORTED_LANGUAGES
+
+
+def test_non_list_schema_sections_are_ignored() -> None:
+    assert get_platform_entries({"qq_platforms": "bad"}) == []
+    exported = export_config({"qq_platforms": "bad", "selected_commands": "bad"})
+    assert exported["selected_commands"] == []
+
+
+def test_normalize_config_payload_handles_non_list_sections() -> None:
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "scenes": None,
+            "qq_platforms": "bad",
+            "selected_commands": "bad",
+        },
+    )
+
+    assert values["scenes"] == DEFAULT_SCENES
+    assert any("qq_platforms" in error for error in errors)
+    assert any("selected_commands" in error for error in errors)
+
+
+def test_normalize_config_payload_handles_non_list_existing_sections() -> None:
+    values, errors = normalize_config_payload(
+        {"qq_platforms": "bad", "selected_commands": "bad"},
+        {"scenes": "bad"},
+    )
+
+    assert values["qq_platforms"] == []
+    assert values["selected_commands"] == []
+    assert any("scenes" in error for error in errors)

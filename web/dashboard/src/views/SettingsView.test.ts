@@ -99,6 +99,12 @@ describe('SettingsView', () => {
     const selects = wrapper.findAllComponents(VSelect)
     expect(selects).toHaveLength(1)
     expect(selects[0]?.props('modelValue')).toBe('zh-CN')
+    expect(selects[0]?.props('items')).toEqual([
+      { title: '简体中文', value: 'zh-CN' },
+      { title: 'English', value: 'en-US' },
+      { title: 'Русский', value: 'ru-RU' },
+      { title: '日本語', value: 'ja-JP' },
+    ])
     expect(wrapper.findAll('.qc-color-trigger')).toHaveLength(2)
   })
 

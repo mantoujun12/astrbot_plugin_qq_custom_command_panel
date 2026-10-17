@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from core.state import STATE_FILENAME, PanelStateStore
@@ -89,3 +91,40 @@ def test_save_empty_state_roundtrip(tmp_path: pytest.Path) -> None:
     store = PanelStateStore(tmp_path)
     store.save({})
     assert store.load() == {}
+
+
+def test_load_skips_non_dict_entries(tmp_path: pytest.Path) -> None:
+    state_file = tmp_path / STATE_FILENAME
+    state_file.write_text(
+        "bad:\n  - nope\nok:\n  c2c: p1\n",
+        encoding="utf-8",
+    )
+
+    assert PanelStateStore(tmp_path).load() == {"ok": {"c2c": "p1"}}
+
+
+def test_save_failure_logs_and_cleans_temp_file(
+    tmp_path: pytest.Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    (tmp_path / STATE_FILENAME).mkdir()
+    store = PanelStateStore(tmp_path)
+
+    with caplog.at_level(logging.ERROR):
+        store.save({"pf": {"c2c": "p1"}})
+
+    assert "保存面板状态失败" in caplog.text
+    assert not store.state_file.with_suffix(".yaml.tmp").exists()
+
+
+def test_clear_failure_is_logged(
+    tmp_path: pytest.Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    (tmp_path / STATE_FILENAME).mkdir()
+    store = PanelStateStore(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        store.clear()
+
+    assert "清理面板状态失败" in caplog.text

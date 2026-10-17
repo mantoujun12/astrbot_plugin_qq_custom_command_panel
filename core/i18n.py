@@ -18,7 +18,7 @@ from typing import Any
 
 from astrbot.api import logger
 
-SUPPORTED_LANGUAGES: tuple[str, ...] = ("zh-CN", "en-US")
+SUPPORTED_LANGUAGES: tuple[str, ...] = ("zh-CN", "en-US", "ru-RU", "ja-JP")
 DEFAULT_LANGUAGE: str = "zh-CN"
 LOG_TAG: str = "[qq-command-panel]"
 
@@ -62,7 +62,13 @@ class Translator:
         target = (language or DEFAULT_LANGUAGE).strip()
         if target not in SUPPORTED_LANGUAGES:
             logger.warning(
-                f"{LOG_TAG} unsupported language={target!r}, fallback to {DEFAULT_LANGUAGE}"
+                f"{LOG_TAG} "
+                + self._diagnostic(
+                    "log.unsupported_language",
+                    f"unsupported language={target!r}, fallback to {DEFAULT_LANGUAGE}",
+                    language=target,
+                    fallback=DEFAULT_LANGUAGE,
+                )
             )
             target = DEFAULT_LANGUAGE
         if target == self._fallback_lang:
@@ -71,7 +77,13 @@ class Translator:
             loaded = self._load_dict(target)
             if not loaded:
                 logger.warning(
-                    f"{LOG_TAG} no translations loaded for {target}, fallback to {DEFAULT_LANGUAGE}"
+                    f"{LOG_TAG} "
+                    + self._diagnostic(
+                        "log.locale_not_loaded",
+                        f"no translations loaded for {target}, fallback to {DEFAULT_LANGUAGE}",
+                        language=target,
+                        fallback=DEFAULT_LANGUAGE,
+                    )
                 )
                 self._active = self._fallback
                 target = DEFAULT_LANGUAGE
@@ -91,27 +103,66 @@ class Translator:
         try:
             return template.format(**kwargs)
         except Exception as exc:
-            logger.debug(f"{LOG_TAG} i18n format failed key={key} kwargs={kwargs}: {exc}")
+            logger.debug(
+                f"{LOG_TAG} "
+                + self._diagnostic(
+                    "log.i18n_format_failed",
+                    f"i18n format failed key={key} kwargs={kwargs}: {exc}",
+                    key=key,
+                    kwargs=kwargs,
+                    exc=exc,
+                )
+            )
             return template
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _diagnostic(self, message_key: str, default: str, /, **kwargs: Any) -> str:
+        """翻译 i18n 自身诊断；兜底词典未加载时使用英文 fallback。"""
+        template = self._active.get(message_key) or self._fallback.get(message_key) or default
+        try:
+            return template.format(**kwargs)
+        except Exception:
+            return default
+
     def _load_dict(self, language: str) -> dict[str, str]:
         """加载一个语言的 JSON 文件，任何失败都返回 {} 并记录 warning"""
         path = self.locales_dir / f"{language}.json"
         if not path.exists():
-            logger.warning(f"{LOG_TAG} locale file not found: {path}")
+            logger.warning(
+                f"{LOG_TAG} "
+                + self._diagnostic(
+                    "log.locale_file_missing",
+                    f"locale file not found: {path}",
+                    path=path,
+                )
+            )
             return {}
         try:
             with path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as exc:
-            logger.warning(f"{LOG_TAG} load locale {path} failed: {exc}")
+            logger.warning(
+                f"{LOG_TAG} "
+                + self._diagnostic(
+                    "log.locale_load_failed",
+                    f"load locale {path} failed: {exc}",
+                    path=path,
+                    exc=exc,
+                )
+            )
             return {}
         if not isinstance(data, dict):
-            logger.warning(f"{LOG_TAG} locale {path} is not a JSON object, ignored")
+            logger.warning(
+                f"{LOG_TAG} "
+                + self._diagnostic(
+                    "log.locale_not_object",
+                    f"locale {path} is not a JSON object, ignored",
+                    path=path,
+                )
+            )
             return {}
         cleaned: dict[str, str] = {}
         for k, v in data.items():

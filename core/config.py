@@ -328,7 +328,11 @@ def normalize_config_payload(
         language = DEFAULT_LANGUAGE
     if language not in SUPPORTED_LANGUAGES:
         errors.append(
-            t("config.error.language", value=language, supported=", ".join(SUPPORTED_LANGUAGES))
+            t(
+                "config.error.language",
+                value=language,
+                supported=t("common.list_separator").join(SUPPORTED_LANGUAGES),
+            )
         )
     else:
         values["language"] = language

@@ -49,6 +49,10 @@ def test_build_package_only_includes_astrbot_files(tmp_path: Path) -> None:
     assert f"{prefix}requirements.txt" in names
     assert f"{prefix}core/web_api.py" in names
     assert f"{prefix}.astrbot-plugin/i18n/zh-CN.json" in names
+    assert f"{prefix}.astrbot-plugin/i18n/ru-RU.json" in names
+    assert f"{prefix}.astrbot-plugin/i18n/ja-JP.json" in names
+    assert f"{prefix}core/i18n/ru-RU.json" in names
+    assert f"{prefix}core/i18n/ja-JP.json" in names
     assert f"{prefix}pages/dashboard/index.html" in names
     # 分发源码必须随附 AGPL-3.0 文本
     assert f"{prefix}LICENSE" in names

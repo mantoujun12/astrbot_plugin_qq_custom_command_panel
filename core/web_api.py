@@ -466,7 +466,10 @@ class WebApiBundle:
                 force=force,
             )
         except RobotConfigError as exc:
-            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                exc_info=True,
+            )
             return web.error_response(str(exc), status_code=500)
         return web.json_response(payload)
 
@@ -507,11 +510,11 @@ class WebApiBundle:
 
     def _robots_unavailable(self) -> Any:
         web = _web()
-        return web.error_response("新版机器人配置尚未启用", status_code=503)
+        return web.error_response(t("web.robots_unavailable"), status_code=503)
 
     def _load_robots(self) -> dict[str, Any]:
         if self._robot_config_dir is None:
-            raise RobotConfigError("新版机器人配置尚未启用")
+            raise RobotConfigError(t("web.robots_unavailable"))
         return load_robot_config(self._robot_config_dir)
 
     def _get_legacy(self) -> dict[str, Any]:
@@ -527,7 +530,10 @@ class WebApiBundle:
         try:
             config = self._load_robots()
         except RobotConfigError as exc:
-            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                exc_info=True,
+            )
             return web.error_response(str(exc), status_code=500)
         return web.json_response(_robot_response(config))
 
@@ -544,25 +550,31 @@ class WebApiBundle:
         try:
             existing = self._load_robots()
         except RobotConfigError as exc:
-            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                exc_info=True,
+            )
             return web.error_response(str(exc), status_code=500)
 
         expected_version = payload.get("version")
         current_version = existing.get("version", 1)
         if type(expected_version) is not int or expected_version < 1:
-            return web.error_response("version：必须是正整数", status_code=400)
+            return web.error_response(t("web.robot_version_invalid"), status_code=400)
         if expected_version != current_version:
             return web.error_response(t("web.robot_config_conflict"), status_code=409)
 
         config, errors = validate_robot_config(existing, payload)
         if errors:
-            return web.error_response("；".join(errors), status_code=400)
+            return web.error_response(t("common.error_separator").join(errors), status_code=400)
 
         config["version"] = current_version + 1
         try:
             save_robot_config(self._robot_config_dir, config)
         except RobotConfigError as exc:
-            logger.error(f"{LOG_TAG} 保存新版机器人配置失败：{exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_save_failed", exc=exc),
+                exc_info=True,
+            )
             return web.error_response(str(exc), status_code=500)
 
         self.cache.invalidate()
@@ -584,27 +596,33 @@ class WebApiBundle:
         else:
             raw_appids = [payload.get("appid")]
         if not isinstance(raw_appids, list) or not raw_appids:
-            return web.error_response("appids：必须是非空列表", status_code=400)
+            return web.error_response(t("web.robot_appids_invalid"), status_code=400)
 
         appids = []
         for index, raw_appid in enumerate(raw_appids):
             appid = str(raw_appid or "").strip()
             if not appid:
-                return web.error_response(f"appids[{index}]：不能为空", status_code=400)
+                return web.error_response(
+                    t("web.robot_appid_empty", index=index),
+                    status_code=400,
+                )
             appids.append(appid)
         if len(set(appids)) != len(appids):
-            return web.error_response("appids：包含重复值", status_code=400)
+            return web.error_response(t("web.robot_appids_duplicate"), status_code=400)
 
         try:
             existing = self._load_robots()
         except RobotConfigError as exc:
-            logger.error(f"{LOG_TAG} 读取新版机器人配置失败：{exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                exc_info=True,
+            )
             return web.error_response(str(exc), status_code=500)
 
         expected_version = payload.get("version")
         current_version = existing.get("version", 1)
         if type(expected_version) is not int or expected_version < 1:
-            return web.error_response("version：必须是正整数", status_code=400)
+            return web.error_response(t("web.robot_version_invalid"), status_code=400)
         if expected_version != current_version:
             return web.error_response(t("web.robot_config_conflict"), status_code=409)
 
@@ -612,7 +630,10 @@ class WebApiBundle:
         duplicates = [appid for appid in appids if appid in existing_appids]
         if duplicates:
             return web.error_response(
-                f"以下 appid 已存在于新版配置：{'、'.join(duplicates)}",
+                t(
+                    "web.robot_appids_existing",
+                    appids=t("common.list_separator").join(duplicates),
+                ),
                 status_code=400,
             )
 
@@ -625,7 +646,10 @@ class WebApiBundle:
         missing = [appid for appid in appids if appid not in by_appid]
         if missing:
             return web.error_response(
-                f"兼容配置中找不到以下 appid：{'、'.join(missing)}",
+                t(
+                    "web.robot_appids_missing",
+                    appids=t("common.list_separator").join(missing),
+                ),
                 status_code=400,
             )
 
@@ -639,13 +663,16 @@ class WebApiBundle:
 
         config, errors = validate_robot_config({}, merged)
         if errors:
-            return web.error_response("；".join(errors), status_code=400)
+            return web.error_response(t("common.error_separator").join(errors), status_code=400)
 
         config["version"] = current_version + 1
         try:
             save_robot_config(self._robot_config_dir, config)
         except RobotConfigError as exc:
-            logger.error(f"{LOG_TAG} 导入新版机器人配置失败：{exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_import_failed", exc=exc),
+                exc_info=True,
+            )
             return web.error_response(str(exc), status_code=500)
 
         self.cache.invalidate()

@@ -25,6 +25,7 @@ from .config import (
     get_selected_commands,
     mask_secret,
 )
+from .i18n import t
 
 ROBOT_CONFIG_FILENAME = "robot_config.json"
 
@@ -57,20 +58,20 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
-        raise RobotConfigError(f"无法读取机器人配置文件 {path}：{exc}") from exc
+        raise RobotConfigError(t("robot.error.read_failed", path=path, exc=exc)) from exc
 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RobotConfigError(f"机器人配置文件不是有效的 JSON：{exc}") from exc
+        raise RobotConfigError(t("robot.error.invalid_json", exc=exc)) from exc
 
     if not isinstance(payload, dict):
-        raise RobotConfigError("机器人配置文件顶层必须是对象")
+        raise RobotConfigError(t("robot.error.top_level_object"))
     version = payload.get("version", 1)
     if type(version) is not int or version < 1:
-        raise RobotConfigError("机器人配置文件 version 必须是正整数")
+        raise RobotConfigError(t("robot.error.version_invalid"))
     if not isinstance(payload.get("robots", []), list):
-        raise RobotConfigError("机器人配置文件 robots 必须是列表")
+        raise RobotConfigError(t("robot.error.robots_type"))
 
     return payload
 
@@ -88,7 +89,7 @@ def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
         )
         temp.replace(target)
     except OSError as exc:
-        raise RobotConfigError(f"无法保存机器人配置 {target}：{exc}") from exc
+        raise RobotConfigError(t("robot.error.save_failed", path=target, exc=exc)) from exc
     finally:
         if temp.exists():
             try:
@@ -122,52 +123,60 @@ def _validate_scenes(
     errors: list[str] = []
     normalized = _empty_scenes()
     if not isinstance(scenes, dict):
-        return normalized, [f"robots[{robot_index}].scenes：必须是对象"]
+        path = f"robots[{robot_index}].scenes"
+        return normalized, [t("robot.error.scenes_type", path=path)]
 
     for scene in SCENES:
+        scene_path = f"robots[{robot_index}].scenes.{scene}"
         raw_scene = scenes.get(scene)
         if raw_scene is None:
-            errors.append(f"robots[{robot_index}].scenes.{scene}：缺少场景配置")
+            errors.append(t("robot.error.scene_missing", path=scene_path))
             continue
         if not isinstance(raw_scene, dict):
-            errors.append(f"robots[{robot_index}].scenes.{scene}：必须是对象")
+            errors.append(t("robot.error.scene_type", path=scene_path))
             continue
 
         enabled = raw_scene.get("enabled", False)
         if not isinstance(enabled, bool):
-            errors.append(f"robots[{robot_index}].scenes.{scene}.enabled：必须是布尔值")
+            errors.append(t("robot.error.scene_enabled_type", path=f"{scene_path}.enabled"))
             continue
 
         raw_items = raw_scene.get("items", [])
         if not isinstance(raw_items, list):
-            errors.append(f"robots[{robot_index}].scenes.{scene}.items：必须是列表")
+            errors.append(t("robot.error.scene_items_type", path=f"{scene_path}.items"))
             continue
         if len(raw_items) > PANEL_MAX_ITEMS:
-            errors.append(f"robots[{robot_index}].scenes.{scene}.items：最多 {PANEL_MAX_ITEMS} 条")
+            errors.append(
+                t(
+                    "robot.error.scene_items_limit",
+                    path=f"{scene_path}.items",
+                    limit=PANEL_MAX_ITEMS,
+                )
+            )
             continue
         if enabled and not raw_items:
-            errors.append(f"robots[{robot_index}].scenes.{scene}.items：启用时至少需要 1 条")
+            errors.append(t("robot.error.scene_items_empty", path=f"{scene_path}.items"))
             continue
 
         items: list[dict[str, str]] = []
         item_errors: list[str] = []
         for item_index, raw_item in enumerate(raw_items):
+            item_path = f"{scene_path}.items[{item_index}]"
             if not isinstance(raw_item, dict):
-                item_errors.append(
-                    f"robots[{robot_index}].scenes.{scene}.items[{item_index}]：必须是对象"
-                )
+                item_errors.append(t("robot.error.item_type", path=item_path))
                 continue
             raw_name = raw_item.get("name")
             name = raw_name.strip() if isinstance(raw_name, str) else ""
             if not name:
-                item_errors.append(
-                    f"robots[{robot_index}].scenes.{scene}.items[{item_index}].name：不能为空"
-                )
+                item_errors.append(t("robot.error.item_name_required", path=f"{item_path}.name"))
                 continue
             if len(name) > PANEL_ITEM_NAME_MAX:
                 item_errors.append(
-                    f"robots[{robot_index}].scenes.{scene}.items[{item_index}].name："
-                    f"最多 {PANEL_ITEM_NAME_MAX} 个字符"
+                    t(
+                        "robot.error.item_name_too_long",
+                        path=f"{item_path}.name",
+                        limit=PANEL_ITEM_NAME_MAX,
+                    )
                 )
                 continue
             raw_desc = raw_item.get("desc", "")
@@ -176,14 +185,15 @@ def _validate_scenes(
             elif isinstance(raw_desc, str):
                 desc = raw_desc.strip()
             else:
-                item_errors.append(
-                    f"robots[{robot_index}].scenes.{scene}.items[{item_index}].desc：必须是字符串"
-                )
+                item_errors.append(t("robot.error.item_desc_type", path=f"{item_path}.desc"))
                 continue
             if len(desc) > PANEL_ITEM_DESC_MAX:
                 item_errors.append(
-                    f"robots[{robot_index}].scenes.{scene}.items[{item_index}].desc："
-                    f"最多 {PANEL_ITEM_DESC_MAX} 个字符"
+                    t(
+                        "robot.error.item_desc_too_long",
+                        path=f"{item_path}.desc",
+                        limit=PANEL_ITEM_DESC_MAX,
+                    )
                 )
                 continue
             items.append({"name": name, "desc": desc})
@@ -208,11 +218,11 @@ def validate_robot_config(
     """
     errors: list[str] = []
     if not isinstance(payload, dict):
-        return empty_robot_config(), ["payload：必须是对象"]
+        return empty_robot_config(), [t("robot.error.payload_type")]
 
     raw_robots = payload.get("robots", [])
     if not isinstance(raw_robots, list):
-        return empty_robot_config(), ["robots：必须是列表"]
+        return empty_robot_config(), [t("robot.error.robots_list")]
 
     secret_by_appid = _existing_robot_secrets(existing)
     robots: list[dict[str, Any]] = []
@@ -220,38 +230,57 @@ def validate_robot_config(
     seen_ids: set[str] = set()
 
     for index, raw_robot in enumerate(raw_robots):
+        robot_path = f"robots[{index}]"
         if not isinstance(raw_robot, dict):
-            errors.append(f"robots[{index}]：必须是对象")
+            errors.append(t("robot.error.robot_entry_type", path=robot_path))
             continue
 
         appid = str(raw_robot.get("appid") or "").strip()
         if not appid:
-            errors.append(f"robots[{index}].appid：不能为空")
+            errors.append(t("robot.error.appid_required", path=f"{robot_path}.appid"))
             continue
         if appid in seen_appids:
-            errors.append(f"robots[{index}].appid：{appid} 重复")
+            errors.append(
+                t(
+                    "robot.error.appid_duplicate",
+                    path=f"{robot_path}.appid",
+                    appid=appid,
+                )
+            )
             continue
         seen_appids.add(appid)
 
         raw_name = raw_robot.get("name")
         name = raw_name.strip() if isinstance(raw_name, str) else ""
         if not name:
-            errors.append(f"robots[{index}].name：不能为空")
+            errors.append(t("robot.error.name_required", path=f"{robot_path}.name"))
             continue
         if len(name) > PANEL_ITEM_NAME_MAX:
-            errors.append(f"robots[{index}].name：最多 {PANEL_ITEM_NAME_MAX} 个字符")
+            errors.append(
+                t(
+                    "robot.error.name_too_long",
+                    path=f"{robot_path}.name",
+                    limit=PANEL_ITEM_NAME_MAX,
+                )
+            )
             continue
 
         platform = str(raw_robot.get("platform") or "").strip()
         if platform not in PLATFORM_TYPES:
-            errors.append(f"robots[{index}].platform：不支持的类型 {platform}")
+            errors.append(
+                t(
+                    "robot.error.platform_unsupported",
+                    path=f"{robot_path}.platform",
+                    platform=platform,
+                )
+            )
             continue
 
         secret = str(raw_robot.get("secret") or "").strip()
         if not secret:
             secret = secret_by_appid.get(appid, "")
         if not secret:
-            errors.append(f"robots[{index}].secret：新机器人必须填写 secret")
+            errors.append(t("robot.error.secret_required", path=f"{robot_path}.secret"))
             continue
 
         scenes, scene_errors = _validate_scenes(raw_robot.get("scenes"), robot_index=index)
@@ -265,7 +294,13 @@ def validate_robot_config(
         else:
             normalized_id = str(uuid.uuid4())
         if normalized_id in seen_ids:
-            errors.append(f"robots[{index}].id：{normalized_id} 重复")
+            errors.append(
+                t(
+                    "robot.error.id_duplicate",
+                    path=f"{robot_path}.id",
+                    id=normalized_id,
+                )
+            )
             continue
         seen_ids.add(normalized_id)
 
@@ -404,7 +439,7 @@ def build_runtime_robots(
     for robot in runtime:
         robot_id = str(robot.get("id") or robot.get("appid") or "")
         if robot_id in seen_ids:
-            raise RobotConfigError(f"运行时机器人 id 重复：{robot_id}")
+            raise RobotConfigError(t("robot.error.runtime_id_duplicate", robot_id=robot_id))
         seen_ids.add(robot_id)
     return runtime
 

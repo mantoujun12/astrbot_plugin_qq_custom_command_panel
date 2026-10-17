@@ -690,3 +690,196 @@ async def test_sync_all_reports_platform_failure_when_panel_limit_reached(monkey
     assert finish["failed"] == 1
     assert "error" in result["robot-a"]
     assert client.created == []
+
+
+@pytest.mark.asyncio
+async def test_purge_all_without_platforms_is_noop() -> None:
+    syncer = make_syncer()
+    progress: list[str] = []
+
+    async def on_progress(message: str) -> None:
+        progress.append(message)
+
+    result = await syncer.purge_all(on_progress=on_progress)
+
+    assert result == {}
+    assert any("无需清理" in message for message in progress)
+
+
+@pytest.mark.asyncio
+async def test_purge_all_deletes_every_panel_and_reports_remaining() -> None:
+    syncer = make_syncer()
+    client = FakeQQClient(
+        existing={
+            "c2c": [owned_panel("c2c", "p1"), foreign_panel("c2c", "p2")],
+            "group": [owned_panel("group", "p3")],
+        }
+    )
+    stub_clients(syncer, {"pf1": client})
+    progress: list[str] = []
+
+    async def on_progress(message: str) -> None:
+        progress.append(message)
+
+    result = await syncer.purge_all(on_progress=on_progress)
+
+    assert set(client.deleted) == {"p1", "p2", "p3"}
+    assert result == {"pf1": {"deleted": "3", "remaining": "0"}}
+    assert any("删除 3 个" in message for message in progress)
+
+
+@pytest.mark.asyncio
+async def test_purge_all_reports_partial_when_scope_listing_fails() -> None:
+    syncer = make_syncer()
+    client = FakeQQClient(
+        existing={"c2c": [owned_panel("c2c", "p1")]},
+        failing_scopes={"channel"},
+    )
+    stub_clients(syncer, {"pf1": client})
+
+    result = await syncer.purge_all()
+
+    assert client.deleted == ["p1"]
+    assert "不完整" in result["pf1"]["error"]
+
+
+@pytest.mark.asyncio
+async def test_callback_failures_do_not_abort_sync_helpers() -> None:
+    syncer = make_syncer()
+
+    async def boom(_payload: Any) -> None:
+        raise RuntimeError("callback failed")
+
+    await syncer._emit_progress(boom, "message")
+    await syncer._emit_event(boom, {"type": "start"})
+
+
+@pytest.mark.asyncio
+async def test_sync_all_reports_robot_config_load_failure(monkeypatch) -> None:
+    syncer = make_syncer(
+        config={
+            "scenes": ["c2c"],
+            "selected_commands": [{"name": "help", "desc": "说明"}],
+        }
+    )
+
+    def fail(_data_dir: Path) -> dict[str, Any]:
+        raise RuntimeError("broken robot config")
+
+    monkeypatch.setattr("core.panel_syncer.load_robot_config", fail)
+    events, on_event = await collect_events()
+
+    with pytest.raises(RuntimeError, match="broken robot config"):
+        await syncer.sync_all(on_event=on_event)
+
+    assert events[-1]["type"] == "finish"
+    assert events[-1]["reason"] == "config_error"
+
+
+def test_build_clients_skips_incomplete_runtime_robot() -> None:
+    syncer = make_syncer()
+    syncer.build_runtime_robots = lambda *args, **kwargs: [  # type: ignore[method-assign]
+        {"id": "missing-secret", "appid": "app"},
+        {"id": "complete", "appid": "app", "secret": "sec"},
+    ]
+
+    clients = syncer.build_clients()
+
+    assert set(clients) == {"complete"}
+
+
+@pytest.mark.asyncio
+async def test_safe_delete_panel_returns_false_on_failure() -> None:
+    class FailingDelete(FakeQQClient):
+        async def delete_panel(self, panel_id: str) -> None:
+            raise RuntimeError(f"cannot delete {panel_id}")
+
+    syncer = make_syncer()
+    client = FailingDelete(existing={})
+
+    assert await syncer._safe_delete_panel(client, "p1", "c2c") is False
+
+
+@pytest.mark.asyncio
+async def test_sync_creates_when_existing_panel_has_no_id() -> None:
+    syncer = make_syncer()
+    client = FakeQQClient(
+        existing={
+            "c2c": [
+                {
+                    "panel_id": None,
+                    "scope": "c2c",
+                    "panel": {"items": [], "remark": f"{REMARK_PREFIX} qq_official/pf1"},
+                }
+            ]
+        }
+    )
+
+    saved = await syncer.sync_for_platform(
+        "pf1",
+        client,
+        {"c2c": [{"name": "help", "desc": "说明"}]},
+    )
+
+    assert "c2c" in saved
+    assert client.created
+
+
+@pytest.mark.asyncio
+async def test_sync_reports_update_failure() -> None:
+    class FailingUpdate(FakeQQClient):
+        async def update_panel(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("update failed")
+
+    syncer = make_syncer()
+    client = FailingUpdate(existing={"c2c": [owned_panel("c2c", "p1")]})
+
+    with pytest.raises(PanelSyncError, match="update failed"):
+        await syncer.sync_for_platform(
+            "pf1",
+            client,
+            {"c2c": [{"name": "help", "desc": "说明"}]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_purge_and_clear_skip_panels_without_ids() -> None:
+    syncer = make_syncer()
+    client = FakeQQClient(
+        existing={
+            "c2c": [
+                {
+                    "panel_id": None,
+                    "scope": "c2c",
+                    "panel": {"items": [], "remark": f"{REMARK_PREFIX} qq_official/pf1"},
+                }
+            ]
+        }
+    )
+    stub_clients(syncer, {"pf1": client})
+
+    await syncer.clear_for_platform("pf1", client)
+    result = await syncer.purge_all()
+
+    assert client.deleted == []
+    assert result["pf1"]["deleted"] == "0"
+
+
+@pytest.mark.asyncio
+async def test_sync_all_skips_robot_without_id_and_handles_empty_clients(monkeypatch) -> None:
+    syncer = make_syncer(config={"scenes": ["c2c"]})
+    monkeypatch.setattr(
+        syncer,
+        "build_runtime_robots",
+        lambda *args, **kwargs: [
+            {"id": "", "appid": "", "scenes": {}},
+            {"id": "robot-a", "appid": "app-a", "secret": "sec-a", "scenes": {}},
+        ],
+    )
+    monkeypatch.setattr(syncer, "build_clients", lambda *args, **kwargs: {})
+    events, on_event = await collect_events()
+
+    result = await syncer.sync_all(on_event=on_event)
+
+    assert result == {}
+    assert events[-1]["reason"] == "no_platform"

@@ -164,7 +164,7 @@ class PanelSyncer:
         try:
             await on_progress(message)
         except Exception as exc:
-            logger.warning(f"{LOG_TAG} progress callback failed: {exc}")
+            logger.warning(f"{LOG_TAG} " + t("log.progress_callback_failed", exc=exc))
 
     @staticmethod
     async def _emit_event(
@@ -177,7 +177,7 @@ class PanelSyncer:
         try:
             await on_event(event)
         except Exception as exc:
-            logger.warning(f"{LOG_TAG} event callback failed: {exc}")
+            logger.warning(f"{LOG_TAG} " + t("log.event_callback_failed", exc=exc))
 
     def build_runtime_robots(
         self,
@@ -453,7 +453,10 @@ class PanelSyncer:
             raise PanelSyncError(
                 t(
                     "panel.scope_sync_failed",
-                    detail="；".join(f"{scope}: {message}" for scope, message in failures.items()),
+                    detail=t("common.error_separator").join(
+                        t("common.scope_error", scope=scope, message=message)
+                        for scope, message in failures.items()
+                    ),
                 ),
                 saved=saved,
             )
@@ -594,7 +597,10 @@ class PanelSyncer:
             robot_config = load_robot_config(self._data_dir)
             robots = self.build_runtime_robots(robot_config=robot_config)
         except Exception as exc:
-            logger.error(f"{LOG_TAG} robot config load failed: {exc}", exc_info=True)
+            logger.error(
+                f"{LOG_TAG} " + t("log.robot_config_load_failed", exc=exc),
+                exc_info=True,
+            )
             await self._emit_event(
                 on_event,
                 {

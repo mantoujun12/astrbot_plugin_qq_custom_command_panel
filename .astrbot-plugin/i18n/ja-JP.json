@@ -1,0 +1,298 @@
+{
+  "metadata": {
+    "display_name": "QQ カスタムコマンドパネル",
+    "short_desc": "AstrBot WebUI で QQ 公式ボットのコマンドパネルをカスタマイズ",
+    "desc": "AstrBot WebUI で設定したコマンド項目を QQ 公式ボットのコマンドパネルに表示します。ユーザーが追加した項目はそのまま書き込まれます。個人チャット、グループチャット、テキストサブチャンネル、チャンネル DM の 4 つのシーンに対応しています。"
+  },
+  "config": {
+    "language": {
+      "description": "プラグインのログ言語",
+      "hint": "zh-CN=中国語、en-US=英語、ru-RU=ロシア語、ja-JP=日本語。ログ出力にのみ影響し、selected_commands のユーザー作成項目は翻訳されません。このページは旧互換設定です。新しい形式はプラグインビューの「ロボット」ページで管理してください。",
+      "labels": [
+        "简体中文",
+        "English",
+        "Русский",
+        "日本語"
+      ]
+    },
+    "primary_color": {
+      "description": "プラグインビューのメインカラー",
+      "hint": "プラグインビューのメインアクセント色を #RRGGBB 形式で指定します。プラグインビューの「設定」ページからも変更できます。"
+    },
+    "secondary_color": {
+      "description": "プラグインビューのサブカラー",
+      "hint": "プラグインビューのサブアクセント色を #RRGGBB 形式で指定します。プラグインビューの「設定」ページからも変更できます。"
+    },
+    "scenes": {
+      "description": "有効なシーン（QQ コマンドパネルを表示する場所）",
+      "hint": "c2c=個人チャット、group=グループチャット、channel=テキストサブチャンネル、dm=チャンネル DM。channel/dm はグローバル設定でのみ使用できます。この項目は互換設定であり、「ロボット」ページで引き継いだ AppID には適用されません。",
+      "labels": [
+        "個人チャット",
+        "グループチャット",
+        "テキストサブチャンネル",
+        "チャンネル DM"
+      ]
+    },
+    "qq_platforms": {
+      "description": "QQ 公式ボットのプラットフォーム認証情報",
+      "hint": "⚠️ これは旧互換設定です。新しい形式ではロボットごとに個別設定するため、プラグインビューの「ロボット」ページを使用してください。「ロボット」ページに同じ AppID がある場合、新しい形式が引き継ぎ、このページのシーンとコマンドは無視されます。プラグインが読み取れる認証情報はここだけです。AstrBot はプラットフォームアダプターのロボット情報をプラグインに公開しないため、appid と clientSecret を手動で入力する必要があります。複数のロボットには複数の項目を追加してください。⚠️ secret は設定ページではマスクされますが、設定ファイルには平文で保存されます。設定ファイルを共有しないでください。",
+      "templates": {
+        "qq_platform": {
+          "name": "QQ ボット",
+          "items": {
+            "name": {
+              "description": "ラベル（任意）",
+              "hint": "パネル内で項目を区別するためだけに使用します。空欄でも構いません"
+            },
+            "appid": {
+              "description": "AppID",
+              "hint": "QQ ボット管理画面 -> 開発設定 -> ボット基本情報 の AppID"
+            },
+            "secret": {
+              "description": "ClientSecret (AppSecret)",
+              "hint": "設定ページでは既定でマスク表示されます。目のアイコンで一時的に表示できますが、設定ファイルには平文で保存されるため、data/config/ 配下の設定ファイルを共有しないでください"
+            },
+            "platform": {
+              "description": "プラットフォーム種別",
+              "hint": "通常は既定の qq_official で問題ありません",
+              "labels": [
+                "QQ 公式ボット",
+                "QQ 公式ボット Webhook"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "selected_commands": {
+      "description": "QQ コマンドパネルに表示するカスタムコマンド",
+      "hint": "QQ コマンドパネルに表示する項目を手動で追加します。各 name + desc はそのまま書き込まれ、AstrBot に登録済みのコマンドには依存しません。最大 20 件、name は最大 14 文字、desc は最大 30 文字です。プラグインビューの「互換性」ページからも管理できます。この項目は互換設定であり、「ロボット」ページで引き継いだ AppID には適用されません。",
+      "templates": {
+        "command": {
+          "name": "コマンド項目",
+          "items": {
+            "name": {
+              "description": "コマンド名",
+              "hint": "QQ パネルに表示される名前（例：/foo）。先頭の / は省略できます"
+            },
+            "desc": {
+              "description": "コマンドの説明",
+              "hint": "最大 30 文字。QQ パネルに表示されます"
+            }
+          }
+        }
+      }
+    }
+  },
+  "pages": {
+    "dashboard": {
+      "title": "コマンドパネル",
+      "description": "QQ 公式ボットのコマンドパネルに書き込む項目を設定し、同期の進行状況を確認します。",
+      "nav": {
+        "status": "概要",
+        "settings": "設定",
+        "collapse": "サイドバーを折りたたむ",
+        "expand": "サイドバーを展開",
+        "openDrawer": "サイドバーを開く",
+        "closeDrawer": "サイドバーを閉じる",
+        "robots": "ロボット",
+        "compatibility": "互換性"
+      },
+      "status": {
+        "title": "概要",
+        "subtitle": "各 QQ プラットフォームとオンラインコマンドパネルの状態を確認します。",
+        "refresh": "更新",
+        "loadFailed": "状態の取得に失敗しました",
+        "mockHint": "ローカル開発環境です。AstrBot バックエンドには接続せず、モックデータを表示しています。",
+        "itemsUnit": "件",
+        "cards": {
+          "platforms": "QQ プラットフォーム",
+          "scenes": "有効なシーン",
+          "commands": "コマンド項目",
+          "panels": "オンラインパネル"
+        },
+        "state": {
+          "synced": "同期済み",
+          "duplicate": "重複パネル",
+          "missing": "オンラインに存在しません",
+          "failed": "取得失敗"
+        },
+        "sync": {
+          "title": "パネルを同期",
+          "subtitle": "現在の設定を QQ パネルに書き込み、進行状況をリアルタイムで表示します。",
+          "action": "パネルを同期",
+          "running": "同期中…",
+          "progress": "進行状況 {completed}/{total}",
+          "done": "同期完了：成功 {succeeded}、失敗 {failed}",
+          "retry": "再試行",
+          "empty": "同期履歴はまだありません。",
+          "disabledMock": "ローカル開発環境には AstrBot バックエンドがないため、同期は利用できません。"
+        },
+        "empty": {
+          "platforms": {
+            "title": "利用可能な QQ プラットフォームがありません",
+            "description": "「互換性」ページで qq_platforms の appid / ClientSecret を入力するか、「ロボット」ページでロボットを作成してください。プラグインは AstrBot のプラットフォームアダプターからロボット情報を読み取れないため、認証情報はここで設定する必要があります。"
+          },
+          "commands": {
+            "description": "コマンド項目が未設定です。同期するとこのプラグインが作成したパネルが削除されます。「互換性」または「ロボット」ページでコマンドを追加してください。"
+          }
+        },
+        "source": {
+          "v2": "ロボット設定",
+          "legacy": "互換設定"
+        }
+      },
+      "settings": {
+        "title": "設定",
+        "subtitle": "プラグイン全体の共通設定をまとめています。",
+        "reload": "再読み込み",
+        "save": "保存",
+        "saved": "設定を保存して反映しました。",
+        "mockHint": "ローカル開発環境です。編集はできますが、保存はできません。",
+        "basicTitle": "基本設定",
+        "basicSubtitle": "ログ言語はプラグインのログにのみ影響します。",
+        "language": "ログ言語",
+        "languageName": {
+          "zh-CN": "简体中文",
+          "en-US": "English",
+          "ru-RU": "Русский",
+          "ja-JP": "日本語"
+        },
+        "themeTitle": "テーマカラー",
+        "themeSubtitle": "プラグインビューのメインカラーとサブカラーを調整します。保存後、ライトテーマとダークテーマの両方にすぐ反映されます。",
+        "primaryColor": "メインカラー",
+        "secondaryColor": "サブカラー",
+        "colorHint": "#RRGGBB 形式で指定してください。",
+        "colorInvalid": "#RRGGBB 形式の色を入力してください。",
+        "aboutTitle": "プラグインについて",
+        "aboutSubtitle": "プラグインの概要と機能です。",
+        "aboutName": "QQ カスタムコマンドパネル",
+        "aboutDescription": "ロボットとシーンごとにコマンド項目を管理し、QQ 公式ボットのコマンドパネルに同期します。",
+        "githubTitle": "GitHub リポジトリ",
+        "githubDescription": "ソースコード、変更履歴、問題報告を確認できます。",
+        "githubAction": "GitHub を開く"
+      },
+      "compatibility": {
+        "title": "互換性",
+        "subtitle": "旧グローバル設定のシーン、プラットフォーム認証情報、コマンド項目をここで管理できます。「ロボット」ページで同じ AppID を引き継いだロボットには適用されません。",
+        "reload": "再読み込み",
+        "save": "保存",
+        "saveAndSync": "保存して同期",
+        "saved": "設定を保存して反映しました。",
+        "mockHint": "ローカル開発環境です。モックデータを表示しており、保存はできません。",
+        "basicTitle": "基本設定",
+        "basicSubtitle": "シーンはコマンドパネルを表示する場所を決めます。「ロボット」ページで同じ AppID を引き継いだロボットには適用されません。",
+        "scenes": "有効なシーン",
+        "scene": {
+          "c2c": "個人チャット",
+          "group": "グループチャット",
+          "channel": "テキストサブチャンネル",
+          "dm": "チャンネル DM"
+        },
+        "platformsTitle": "QQ プラットフォーム認証情報",
+        "platformsSubtitle": "プラグインが読み取れる認証情報はここだけです。AstrBot のプラットフォームアダプターに設定されたロボット情報は同期されません。ClientSecret を空欄にすると現在の値を維持します。",
+        "addPlatform": "プラットフォームを追加",
+        "platformName": "ラベル（任意）",
+        "platformSecret": "ClientSecret",
+        "platformType": "プラットフォーム種別",
+        "platformTypeName": {
+          "qq_official": "QQ 公式ボット",
+          "qq_official_webhook": "QQ 公式ボット Webhook"
+        },
+        "secretKeep": "空欄の場合は現在の値を維持します",
+        "secretRequired": "新しいプラットフォームでは必須です",
+        "secretSaved": "現在：{masked}",
+        "noPlatforms": "プラットフォームがありません。appid + ClientSecret を追加してください。",
+        "remove": "削除",
+        "commandsTitle": "コマンド項目",
+        "commandsSubtitle": "最大 {items} 件、コマンド名は {name} 文字以内、説明は {desc} 文字以内です。",
+        "addCommand": "コマンドを追加",
+        "commandName": "コマンド名",
+        "commandDesc": "コマンドの説明",
+        "noCommands": "コマンド項目がない場合、同期するとこのプラグインが作成したパネルが削除されます。",
+        "notLoaded": "設定がまだ読み込まれていません。",
+        "commandsTooMany": "コマンド項目が上限を超えています。",
+        "commandNameRequired": "コマンド名は必須です。",
+        "commandNameTooLong": "コマンド名が長すぎます。",
+        "commandDescTooLong": "コマンドの説明が長すぎます。",
+        "platformAppidRequired": "プラットフォームの appid は必須です。",
+        "platformSecretRequired": "新しいプラットフォームには ClientSecret が必要です。"
+      },
+      "robots": {
+        "title": "ロボット",
+        "subtitle": "ロボットごとに各シーンのコマンド項目を管理します。各ロボットは独立して反映されます。",
+        "reload": "再読み込み",
+        "importLegacy": "互換設定からインポート",
+        "addRobot": "ロボットを追加",
+        "createSubtitle": "先に名前とプラットフォーム認証情報を入力し、作成後に各シーンのコマンドを設定してください。",
+        "createConfirm": "作成",
+        "save": "保存",
+        "saveAndSync": "保存して同期",
+        "saved": "ロボット設定を保存しました。",
+        "mockHint": "ローカル開発環境です。モックデータを表示しており、保存はできません。",
+        "listTitle": "ロボット",
+        "listSubtitle": "ロボットを選択してシーンごとのコマンドを編集します。",
+        "emptyRobots": "ロボットがありません。まず 1 台追加してください。",
+        "editorEmpty": "ロボットを選択するか追加してください。",
+        "robotSummary": "シーン {scenes} 件、コマンド {items} 件。",
+        "appidLabel": "AppID：{appid}",
+        "untitledRobot": "名前なしロボット",
+        "removedLocal": "ローカル一覧から削除しました。保存後に設定へ書き込まれます。",
+        "removedMock": "ローカル一覧から削除しました（プレビューのみ）。設定には書き込まれません。",
+        "basicTitle": "基本情報",
+        "basicSubtitle": "名前、AppID、プラットフォーム認証情報はこのロボット専用です。",
+        "name": "ロボット名",
+        "appid": "AppID",
+        "secret": "ClientSecret",
+        "secretKeep": "空欄の場合は現在の値を維持します",
+        "secretRequired": "新しいロボットには ClientSecret が必要です。",
+        "secretSaved": "現在：{masked}",
+        "secretSetNoMask": "ClientSecret は保存済みです。空欄の場合は現在の値を維持します。",
+        "platformType": "プラットフォーム種別",
+        "platformTypeName": {
+          "qq_official": "QQ 公式ボット",
+          "qq_official_webhook": "QQ 公式ボット Webhook"
+        },
+        "scenesTitle": "シーン別コマンド",
+        "scenesSubtitle": "シーンごとにコマンドを管理します。有効なシーンには 1 件以上必要です。",
+        "scene": {
+          "c2c": "個人チャット",
+          "group": "グループチャット",
+          "channel": "テキストサブチャンネル",
+          "dm": "チャンネル DM",
+          "itemsCount": "{count}/{max} 件",
+          "limits": "コマンド名は {name} 文字以内、説明は {desc} 文字以内です。",
+          "noItems": "このシーンにはまだコマンドがありません。",
+          "commandName": "コマンド名",
+          "commandDesc": "コマンドの説明",
+          "removeItem": "コマンドを削除",
+          "addItem": "コマンドを追加",
+          "disabledHint": "シーンが無効です。有効にするとコマンドを管理できます。"
+        },
+        "dangerTitle": "ロボット設定を削除",
+        "dangerText": "削除してもここでの設定が消えるだけで、QQ 上の既存パネルは削除されません。",
+        "deleteRobot": "ロボット設定を削除",
+        "deleteConfirmTitle": "ロボット設定を削除しますか？",
+        "deleteConfirmText": "保存後に設定へ書き込まれます。QQ 上の既存パネルは削除されません。",
+        "deleteConfirm": "削除",
+        "importTitle": "互換設定からインポート",
+        "importSubtitle": "インポートする旧プラットフォームの AppID を選択または入力します。1 行に 1 つ、またはカンマ区切りで指定してください。",
+        "importAppids": "AppID 一覧",
+        "importEmpty": "互換設定にインポート可能な AppID がありません。手動で入力してください。",
+        "importNoAppids": "AppID を 1 つ以上入力してください。",
+        "importConfirm": "インポート",
+        "imported": "互換設定からロボットをインポートして保存しました。同期前に内容を確認してください。",
+        "cancel": "キャンセル",
+        "notLoaded": "ロボット設定がまだ読み込まれていません。",
+        "appidRequired": "AppID は必須です。",
+        "nameRequired": "ロボット名は必須です。",
+        "nameTooLong": "ロボット名が長すぎます。",
+        "sceneRequiresItem": "有効なシーンには 1 件以上のコマンドが必要です。",
+        "sceneItemsTooMany": "1 つのシーンのコマンド項目が上限を超えています。",
+        "commandNameRequired": "コマンド名は必須です。",
+        "commandNameTooLong": "コマンド名が長すぎます。",
+        "commandDescTooLong": "コマンドの説明が長すぎます。"
+      }
+    }
+  }
+}
