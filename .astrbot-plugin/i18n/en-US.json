@@ -7,10 +7,12 @@
   "config": {
     "language": {
       "description": "Language for plugin logs",
-      "hint": "zh-CN=Simplified Chinese, en-US=English. Affects logger output; user-authored selected_commands entries are NOT translated. This page is the legacy compatibility configuration; use the Robots page in the plugin view instead.",
+      "hint": "zh-CN=Simplified Chinese, en-US=English, ru-RU=Russian, ja-JP=Japanese. Affects logger output; user-authored selected_commands entries are NOT translated. This page is the legacy compatibility configuration; use the Robots page in the plugin view instead.",
       "labels": [
         "简体中文",
-        "English"
+        "English",
+        "Русский",
+        "日本語"
       ]
     },
     "primary_color": {
@@ -150,6 +152,12 @@
         "basicTitle": "Basics",
         "basicSubtitle": "The log language only affects plugin logs.",
         "language": "Log language",
+        "languageName": {
+          "zh-CN": "简体中文",
+          "en-US": "English",
+          "ru-RU": "Русский",
+          "ja-JP": "日本語"
+        },
         "themeTitle": "Theme colors",
         "themeSubtitle": "Adjust the plugin view primary and secondary colors. Saved colors apply to both light and dark themes immediately.",
         "primaryColor": "Primary color",

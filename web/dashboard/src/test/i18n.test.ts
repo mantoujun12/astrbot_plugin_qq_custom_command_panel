@@ -25,6 +25,7 @@ const SRC_DIR = join(DASHBOARD_DIR, 'src')
 const SCENE_STATES: SceneState[] = ['synced', 'duplicate', 'missing', 'failed']
 /** 平台类型枚举，与 CompatibilityView 的 PLATFORM_TYPES 对齐 */
 const PLATFORM_TYPES = ['qq_official', 'qq_official_webhook']
+const LANGUAGES = ['zh-CN', 'en-US', 'ru-RU', 'ja-JP']
 
 /** 匹配 `t('some.key', 'fallback')`，允许 key/fallback 跨行 */
 const STATIC_CALL = /\bt\(\s*'([^']+)'\s*,\s*'([^']*)'/g
@@ -84,19 +85,31 @@ function staticCalls(): { file: string; key: string; fallback: string }[] {
   return calls
 }
 
-const zhCN = readLocale('zh-CN')
-const enUS = readLocale('en-US')
+const LOCALES = readdirSync(I18N_DIR)
+  .filter((name) => name.endsWith('.json'))
+  .map((name) => name.slice(0, -'.json'.length))
+  .sort()
+const LOCALE_DICTS = Object.fromEntries(
+  LOCALES.map((locale) => [locale, readLocale(locale)]),
+) as Record<string, Dict>
+const zhCN = LOCALE_DICTS['zh-CN']
 const calls = staticCalls()
 
 describe('locale files', () => {
   it('is reading the real locale files', () => {
     expect(existsSync(join(I18N_DIR, 'zh-CN.json'))).toBe(true)
     expect(existsSync(join(I18N_DIR, 'en-US.json'))).toBe(true)
+    expect(existsSync(join(I18N_DIR, 'ru-RU.json'))).toBe(true)
+    expect(existsSync(join(I18N_DIR, 'ja-JP.json'))).toBe(true)
     expect(existsSync(join(SRC_DIR, 'App.vue'))).toBe(true)
+    expect(LOCALES).toEqual([...LANGUAGES].sort())
   })
 
   it('keeps the same key set in every locale', () => {
-    expect(leafKeys(enUS).sort()).toEqual(leafKeys(zhCN).sort())
+    const expected = leafKeys(zhCN).sort()
+    for (const locale of LOCALES) {
+      expect(leafKeys(LOCALE_DICTS[locale]).sort(), locale).toEqual(expected)
+    }
   })
 })
 
@@ -107,14 +120,11 @@ describe('t() calls in the view source', () => {
   })
 
   it('has a locale entry for every statically referenced key', () => {
-    const missing = calls
-      .filter((call) => typeof lookup(zhCN, call.key) !== 'string')
-      .map((call) => `${call.file}: ${call.key}`)
-      .concat(
-        calls
-          .filter((call) => typeof lookup(enUS, call.key) !== 'string')
-          .map((call) => `en-US ${call.file}: ${call.key}`),
-      )
+    const missing = LOCALES.flatMap((locale) =>
+      calls
+        .filter((call) => typeof lookup(LOCALE_DICTS[locale], call.key) !== 'string')
+        .map((call) => `${locale} ${call.file}: ${call.key}`),
+    )
 
     expect(missing).toEqual([])
   })
@@ -134,12 +144,13 @@ describe('t() calls in the view source', () => {
       ...PLATFORM_TYPES.map(
         (type) => `pages.dashboard.compatibility.platformTypeName.${type}`,
       ),
+      ...LANGUAGES.map((language) => `pages.dashboard.settings.languageName.${language}`),
     ]
 
-    const missing = keys.filter(
-      (key) =>
-        typeof lookup(zhCN, key) !== 'string' ||
-        typeof lookup(enUS, key) !== 'string',
+    const missing = LOCALES.flatMap((locale) =>
+      keys
+        .filter((key) => typeof lookup(LOCALE_DICTS[locale], key) !== 'string')
+        .map((key) => `${locale}: ${key}`),
     )
 
     expect(missing).toEqual([])
