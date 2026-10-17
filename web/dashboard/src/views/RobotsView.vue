@@ -665,20 +665,15 @@ async function importLegacy(): Promise<void> {
             <span v-if="selectedForm.appid">（{{ selectedForm.appid }}）</span>
           </v-card-subtitle>
         </v-card-item>
-        <v-card-text class="px-5 pt-2">
-          <v-alert
-            type="warning"
-            variant="tonal"
-            density="compact"
-            :icon="mdiAlertCircleOutline"
-          >
+        <v-card-text>
+          <div>
             {{
               t(
                 'pages.dashboard.robots.deleteConfirmText',
                 '删除后需要保存才会写入配置，QQ 线上已有的指令面板不会被清理。',
               )
             }}
-          </v-alert>
+          </div>
         </v-card-text>
         <v-card-actions class="px-5 pb-5">
           <v-spacer />
