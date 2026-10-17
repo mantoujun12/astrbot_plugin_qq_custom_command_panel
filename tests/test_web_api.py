@@ -28,6 +28,7 @@ from core.web_api import (
     SYNC_ROUTE_SUFFIX,
     StatusCache,
     WebApiBundle,
+    _robot_appid_set,
     build_status,
     mask_appid,
     panel_items_count,
@@ -1101,3 +1102,227 @@ async def test_page_robots_errors_follow_selected_language(
 
     assert response["status_code"] == 400
     assert response["message"] == "version：正の整数である必要があります"
+
+
+def test_robot_appid_set_skips_invalid_entries() -> None:
+    assert _robot_appid_set({"robots": "bad"}) == set()
+    assert _robot_appid_set({"robots": ["bad", {"appid": ""}, {"appid": " app-1 "}]}) == {"app-1"}
+
+
+@pytest.mark.asyncio
+async def test_build_status_handles_platform_list_exception() -> None:
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+
+    async def fail(_client: Any) -> tuple[list[dict[str, Any]], set[str]]:
+        raise RuntimeError("list failed")
+
+    syncer.list_all_panels = fail  # type: ignore[method-assign]
+
+    payload = await build_status(syncer, config)
+
+    platform = payload["platforms"][0]
+    assert platform["error"] == "list failed"
+    assert platform["scenes"] == [{"scope": "c2c", "state": "failed"}]
+    assert payload["panels"]["partial"] is True
+
+
+@pytest.mark.asyncio
+async def test_page_robots_reject_non_object_bodies(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = []
+
+    save_response = await bundle.page_robots_save()
+    import_response = await bundle.page_robots_import_legacy()
+
+    assert save_response["status_code"] == 400
+    assert import_response["status_code"] == 400
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_reports_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    def fail(*_args: Any, **_kwargs: Any) -> Path:
+        raise RobotConfigError("disk full")
+
+    monkeypatch.setattr("core.web_api.save_robot_config", fail)
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+
+    response = await bundle.page_robots_save()
+
+    assert response["status_code"] == 500
+    assert "disk full" in response["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"appids": []}, "appids"),
+        ({"appids": ["", "app-1"]}, "appids[0]"),
+        ({"appids": ["app-1", "app-1"]}, "重复"),
+        ({"appids": ["missing"], "version": 1}, "找不到"),
+    ],
+)
+async def test_page_robots_import_rejects_invalid_appid_payloads(
+    tmp_path: Path,
+    payload: dict[str, Any],
+    expected: str,
+) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = payload
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 400
+    assert expected in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_rejects_invalid_version(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"appids": ["1023456789"], "version": 0}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 400
+    assert "version" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_reports_validation_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    monkeypatch.setattr(
+        "core.web_api.legacy_to_robot_drafts",
+        lambda _config: [
+            {
+                "appid": "1023456789",
+                "name": "",
+                "secret": "s",
+                "platform": "qq_official",
+                "scenes": {
+                    "c2c": {"enabled": False, "items": []},
+                    "group": {"enabled": False, "items": []},
+                    "channel": {"enabled": False, "items": []},
+                    "dm": {"enabled": False, "items": []},
+                },
+            }
+        ],
+    )
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"appids": ["1023456789"], "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 400
+    assert ".name" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_reports_read_failure_on_save_and_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    def fail(_data_dir: Path) -> dict[str, Any]:
+        raise RobotConfigError("cannot read")
+
+    monkeypatch.setattr("core.web_api.load_robot_config", fail)
+    bundle = make_robot_bundle({}, tmp_path)
+
+    request.payload = {"version": 1, "robots": []}
+    save_response = await bundle.page_robots_save()
+    request.payload = {"appids": ["a"], "version": 1}
+    import_response = await bundle.page_robots_import_legacy()
+
+    assert save_response["status_code"] == 500
+    assert import_response["status_code"] == 500
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_rejects_stale_version(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+    saved = await bundle.page_robots_save()
+
+    request.payload = {"appids": ["1023456789"], "version": saved["data"]["version"] - 1}
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 409
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_reports_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    def fail(*_args: Any, **_kwargs: Any) -> Path:
+        raise RobotConfigError("disk full")
+
+    monkeypatch.setattr("core.web_api.save_robot_config", fail)
+    bundle = make_robot_bundle(
+        {},
+        tmp_path,
+        legacy_config=schema_config(),
+    )
+    request.payload = {"appids": ["1023456789"], "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 500
+    assert "disk full" in response["message"]
+
+
+def test_get_legacy_falls_back_to_primary_config() -> None:
+    config = {"scenes": ["c2c"]}
+    bundle = WebApiBundle(lambda: None, lambda: config)
+
+    assert bundle._get_legacy() == config
+
+
+@pytest.mark.asyncio
+async def test_page_sync_events_invalid_since_defaults_to_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    bundle = make_bundle(config, syncer)
+    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    await bundle.page_sync_start()
+    await bundle.runner.join()
+    request.query.set_values({"since": "not-an-int"})
+    captured: dict[str, Any] = {}
+
+    def capture(events: Any) -> str:
+        captured["events"] = events
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+
+    response = await bundle.page_sync_events()
+    events = [event async for event in captured["events"]]
+
+    assert response == "stream"
+    assert events

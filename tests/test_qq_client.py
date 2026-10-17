@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from core.qq_client import QQ_API_BASE, QQClient
-from tests.fakes import FakeSession
+from tests.fakes import FakeResponse, FakeSession
 
 
 def make_client(session: FakeSession) -> QQClient:
@@ -178,6 +178,32 @@ async def test_create_panel_no_id_raises() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scope", "openids_key"),
+    [("c2c", "user_openids"), ("group", "group_openids")],
+)
+async def test_create_panel_specific_maps_target_openids(
+    scope: str,
+    openids_key: str,
+) -> None:
+    session = FakeSession()
+    session.route_token({"access_token": "tok1", "expires_in": 7200})
+    session.route_panels("POST", "/v2/panels", payload={"panel_id": "panel_specific"})
+    client = make_client(session)
+
+    await client.create_panel(
+        scope,
+        [],
+        target_type="specific",
+        target_openids=["target-1"],
+    )
+
+    body = session.requests[-1]["kwargs"]["json"]
+    assert body["target_type"] == "specific"
+    assert body[openids_key] == ["target-1"]
+
+
+@pytest.mark.asyncio
 async def test_create_panel_remark_truncated() -> None:
     session = FakeSession()
     session.route_token({"access_token": "tok1", "expires_in": 7200})
@@ -204,6 +230,17 @@ async def test_get_panel_returns_detail() -> None:
     detail = await client.get_panel("p1")
     assert detail["panel_id"] == "p1"
     assert detail["scope"] == "group"
+
+
+@pytest.mark.asyncio
+async def test_get_panel_non_object_response_raises() -> None:
+    session = FakeSession()
+    session.route_token({"access_token": "tok1", "expires_in": 7200})
+    session.route("GET", f"{QQ_API_BASE}/v2/panels/p1", FakeResponse(payload=[]))
+    client = make_client(session)
+
+    with pytest.raises(RuntimeError, match="object"):
+        await client.get_panel("p1")
 
 
 @pytest.mark.asyncio
@@ -287,6 +324,21 @@ async def test_update_panel_specific_requires_openids() -> None:
 
     with pytest.raises(ValueError, match="target_openids"):
         await client.update_panel("p1", target_type="specific")
+
+
+@pytest.mark.asyncio
+async def test_update_panel_specific_surfaces_scope_lookup_failure() -> None:
+    session = FakeSession()
+    session.route_token({"access_token": "tok1", "expires_in": 7200})
+    session.route_panels("GET", "/v2/panels/p1", status=500, payload={"raw": "boom"})
+    client = make_client(session)
+
+    with pytest.raises(RuntimeError, match="scope"):
+        await client.update_panel(
+            "p1",
+            target_type="specific",
+            target_openids=["u1"],
+        )
 
 
 @pytest.mark.asyncio

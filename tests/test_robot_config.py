@@ -470,3 +470,168 @@ def test_validation_errors_follow_selected_language(
     )
 
     assert errors == ["robots[0].appid: значение не может быть пустым"]
+
+
+def test_load_invalid_utf8_raises(tmp_path: Path) -> None:
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_bytes(b"\xff\xfe")
+
+    with pytest.raises(RobotConfigError):
+        load_robot_config(tmp_path)
+
+
+def test_load_rejects_invalid_version_and_robots_type(tmp_path: Path) -> None:
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text('{"version": 0}', encoding="utf-8")
+    with pytest.raises(RobotConfigError):
+        load_robot_config(tmp_path)
+
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        '{"version": 1, "robots": {}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(RobotConfigError):
+        load_robot_config(tmp_path)
+
+
+def test_save_failure_raises_robot_config_error(tmp_path: Path) -> None:
+    (tmp_path / ROBOT_CONFIG_FILENAME).mkdir()
+
+    with pytest.raises(RobotConfigError):
+        save_robot_config(tmp_path, empty_robot_config())
+
+
+def test_validate_rejects_non_list_robots() -> None:
+    _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": "bad"})
+
+    assert errors == ["robots：必须是列表"]
+
+
+def test_validate_rejects_non_dict_robot_entry() -> None:
+    _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": ["bad"]})
+
+    assert errors == ["robots[0]：必须是对象"]
+
+
+def test_validate_rejects_non_dict_scenes() -> None:
+    _normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes="bad")]},  # type: ignore[arg-type]
+    )
+
+    assert any("scenes" in error for error in errors)
+
+
+def test_validate_rejects_non_dict_scene() -> None:
+    scenes = make_scenes()
+    scenes["c2c"] = "bad"  # type: ignore[assignment]
+
+    _normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert any("scenes.c2c" in error for error in errors)
+
+
+def test_validate_rejects_non_dict_item_and_non_string_desc() -> None:
+    scenes = make_scenes()
+    scenes["c2c"]["items"] = ["bad", {"name": "help", "desc": 123}]
+
+    _normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert any("items[0]" in error for error in errors)
+    assert any("items[1].desc" in error for error in errors)
+
+
+def test_validate_rejects_desc_too_long() -> None:
+    scenes = make_scenes(items=[{"name": "help", "desc": "x" * (PANEL_ITEM_DESC_MAX + 1)}])
+
+    _normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert any("desc" in error for error in errors)
+
+
+def test_validate_accepts_none_desc() -> None:
+    scenes = make_scenes()
+    scenes["c2c"]["items"] = [{"name": "help", "desc": None}]
+
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert errors == []
+    assert normalized["robots"][0]["scenes"]["c2c"]["items"][0]["desc"] == ""
+
+
+def test_validate_ignores_invalid_entries_when_reusing_secret() -> None:
+    existing = {
+        "robots": [
+            "bad",
+            {"appid": "a", "secret": ""},
+            {"appid": "a", "secret": "kept-secret"},
+        ]
+    }
+
+    normalized, errors = validate_robot_config(
+        existing,
+        {"robots": [make_robot(appid="a", secret="")]},
+    )
+
+    assert errors == []
+    assert normalized["robots"][0]["secret"] == "kept-secret"
+
+
+def test_export_handles_invalid_shapes() -> None:
+    assert export_robot_config({"robots": "bad"}) == empty_robot_config()
+
+    exported = export_robot_config(
+        {
+            "version": 0,
+            "robots": [
+                "bad",
+                {"appid": ""},
+                {"appid": "a", "scenes": "bad"},
+            ],
+        }
+    )
+
+    assert exported["version"] == 1
+    assert len(exported["robots"]) == 1
+    assert exported["robots"][0]["appid"] == "a"
+    assert exported["robots"][0]["scenes"] == {}
+
+
+def test_get_runtime_robots_handles_invalid_shapes() -> None:
+    assert get_runtime_robots({"robots": "bad"}) == []
+
+    runtime = get_runtime_robots(
+        {
+            "robots": [
+                "bad",
+                {"appid": ""},
+                {
+                    "appid": "a",
+                    "scenes": {
+                        "c2c": {"enabled": True, "items": "bad"},
+                        "group": {
+                            "enabled": True,
+                            "items": [{"name": ""}, {"name": "ok", "desc": "d"}],
+                        },
+                    },
+                },
+            ]
+        }
+    )
+
+    assert len(runtime) == 1
+    assert runtime[0]["scenes"]["c2c"] == []
+    assert runtime[0]["scenes"]["group"] == [{"name": "ok", "desc": "d"}]
+
+    no_scenes = get_runtime_robots({"robots": [{"appid": "a", "scenes": "bad"}]})
+    assert no_scenes[0]["scenes"] == {scene: [] for scene in ("c2c", "group", "channel", "dm")}

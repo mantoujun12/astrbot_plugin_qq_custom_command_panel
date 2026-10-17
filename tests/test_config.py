@@ -630,3 +630,35 @@ def test_template_keys_match_conf_schema() -> None:
 def test_language_schema_matches_supported_languages() -> None:
     schema = json.loads((REPO_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
     assert tuple(schema["language"]["options"]) == SUPPORTED_LANGUAGES
+
+
+def test_non_list_schema_sections_are_ignored() -> None:
+    assert get_platform_entries({"qq_platforms": "bad"}) == []
+    exported = export_config({"qq_platforms": "bad", "selected_commands": "bad"})
+    assert exported["selected_commands"] == []
+
+
+def test_normalize_config_payload_handles_non_list_sections() -> None:
+    values, errors = normalize_config_payload(
+        make_existing(),
+        {
+            "scenes": None,
+            "qq_platforms": "bad",
+            "selected_commands": "bad",
+        },
+    )
+
+    assert values["scenes"] == DEFAULT_SCENES
+    assert any("qq_platforms" in error for error in errors)
+    assert any("selected_commands" in error for error in errors)
+
+
+def test_normalize_config_payload_handles_non_list_existing_sections() -> None:
+    values, errors = normalize_config_payload(
+        {"qq_platforms": "bad", "selected_commands": "bad"},
+        {"scenes": "bad"},
+    )
+
+    assert values["qq_platforms"] == []
+    assert values["selected_commands"] == []
+    assert any("scenes" in error for error in errors)

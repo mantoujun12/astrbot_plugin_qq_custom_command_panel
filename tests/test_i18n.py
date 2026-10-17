@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import string
 from pathlib import Path
 
@@ -34,6 +35,13 @@ def placeholders(template: str) -> set[str]:
         for _literal, field_name, _format_spec, _conversion in string.Formatter().parse(template)
         if field_name
     }
+
+
+def write_locale(directory: Path, language: str, payload: object) -> None:
+    (directory / f"{language}.json").write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def test_translator_loads_fallback_language() -> None:
@@ -133,4 +141,74 @@ def test_locale_values_are_not_empty() -> None:
 
 def test_translator_missing_locale_dir_returns_empty(tmp_path: pytest.Path) -> None:
     tr = Translator(tmp_path / "no_such_dir", DEFAULT_LANGUAGE)
+    assert tr.t("log.no_scene_enabled") == "log.no_scene_enabled"
+
+
+def test_translator_missing_active_locale_falls_back_with_diagnostics(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    write_locale(tmp_path, DEFAULT_LANGUAGE, {"log.no_scene_enabled": "fallback"})
+
+    with caplog.at_level(logging.WARNING):
+        tr = Translator(tmp_path, "en-US")
+
+    assert tr.language == DEFAULT_LANGUAGE
+    assert tr.t("log.no_scene_enabled") == "fallback"
+    assert "locale file not found" in caplog.text
+    assert "no translations loaded for en-US" in caplog.text
+
+
+def test_translator_invalid_active_locale_reports_load_failure(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    write_locale(tmp_path, DEFAULT_LANGUAGE, {"log.no_scene_enabled": "fallback"})
+    (tmp_path / "en-US.json").write_text("{broken", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        tr = Translator(tmp_path, "en-US")
+
+    assert tr.language == DEFAULT_LANGUAGE
+    assert "load locale" in caplog.text
+    assert "failed" in caplog.text
+
+
+def test_translator_non_object_locale_reports_and_falls_back(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    write_locale(tmp_path, DEFAULT_LANGUAGE, {"log.no_scene_enabled": "fallback"})
+    write_locale(tmp_path, "en-US", [])
+
+    with caplog.at_level(logging.WARNING):
+        tr = Translator(tmp_path, "en-US")
+
+    assert tr.language == DEFAULT_LANGUAGE
+    assert "is not a JSON object" in caplog.text
+
+
+def test_diagnostic_falls_back_when_its_template_is_invalid(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    write_locale(
+        tmp_path,
+        DEFAULT_LANGUAGE,
+        {"log.unsupported_language": "bad template {missing}"},
+    )
+    tr = Translator(tmp_path, DEFAULT_LANGUAGE)
+
+    with caplog.at_level(logging.WARNING):
+        tr.set_language("xx-XX")
+
+    assert tr.language == DEFAULT_LANGUAGE
+    assert "unsupported language='xx-XX'" in caplog.text
+
+
+def test_loader_skips_non_string_values(tmp_path: Path) -> None:
+    write_locale(tmp_path, DEFAULT_LANGUAGE, {"log.no_scene_enabled": 1})
+
+    tr = Translator(tmp_path, DEFAULT_LANGUAGE)
+
     assert tr.t("log.no_scene_enabled") == "log.no_scene_enabled"
