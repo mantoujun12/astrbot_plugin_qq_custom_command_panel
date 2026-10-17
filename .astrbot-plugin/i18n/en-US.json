@@ -102,9 +102,7 @@
         "refresh": "Refresh",
         "loadFailed": "Failed to load status",
         "mockHint": "Local dev environment: showing mock data, not connected to the AstrBot backend.",
-        "panelsPartial": "Some scenes failed to query; this value is a lower bound.",
         "itemsUnit": "items",
-        "limit": "limit",
         "cards": {
           "platforms": "QQ platforms",
           "scenes": "Active scenes",

@@ -102,9 +102,7 @@
         "refresh": "刷新",
         "loadFailed": "获取状态失败",
         "mockHint": "本地开发环境：展示的是 mock 数据，未连接 AstrBot 后端。",
-        "panelsPartial": "部分场景查询失败，该值为下限",
         "itemsUnit": "条",
-        "limit": "上限",
         "cards": {
           "platforms": "QQ 平台",
           "scenes": "生效场景",
