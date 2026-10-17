@@ -64,6 +64,7 @@ const legacyAppidsText = ref('')
 const createDialog = ref(false)
 const createForm = ref<RobotConfigForm>(emptyRobotDraft())
 const createError = ref('')
+const deleteDialog = ref(false)
 
 let draftSeq = 0
 
@@ -221,6 +222,14 @@ function confirmCreate(): void {
   closeCreate()
 }
 
+function openDelete(): void {
+  deleteDialog.value = true
+}
+
+function closeDelete(): void {
+  deleteDialog.value = false
+}
+
 function removeSelectedRobot(): void {
   const index = drafts.value.findIndex((draft) => draft.key === selectedKey.value)
   if (index < 0) return
@@ -234,6 +243,11 @@ function removeSelectedRobot(): void {
     'pages.dashboard.robots.removedLocal',
     '已从本地列表移除。保存后才会写入配置。',
   )
+}
+
+function confirmDelete(): void {
+  removeSelectedRobot()
+  closeDelete()
 }
 
 function addSceneItem(scene: Scene): void {
@@ -640,6 +654,44 @@ async function importLegacy(): Promise<void> {
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="deleteDialog" max-width="480">
+      <v-card class="qc-robot-delete" variant="flat" rounded="lg">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">
+            {{ t('pages.dashboard.robots.deleteConfirmTitle', '删除机器人配置？') }}
+          </v-card-title>
+          <v-card-subtitle>
+            {{ selectedForm.name }}
+            <span v-if="selectedForm.appid">（{{ selectedForm.appid }}）</span>
+          </v-card-subtitle>
+        </v-card-item>
+        <v-card-text class="px-5 pt-2">
+          <v-alert
+            type="warning"
+            variant="tonal"
+            density="compact"
+            :icon="mdiAlertCircleOutline"
+          >
+            {{
+              t(
+                'pages.dashboard.robots.deleteConfirmText',
+                '删除后需要保存才会写入配置，QQ 线上已有的指令面板不会被清理。',
+              )
+            }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-5">
+          <v-spacer />
+          <v-btn variant="text" @click="closeDelete">
+            {{ t('pages.dashboard.robots.cancel', '取消') }}
+          </v-btn>
+          <v-btn color="error" variant="tonal" @click="confirmDelete">
+            {{ t('pages.dashboard.robots.deleteConfirm', '确认删除') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-row class="qc-robots-layout">
       <v-col cols="12" md="4" lg="3">
         <v-card class="qc-card qc-robot-list" variant="outlined">
@@ -938,8 +990,8 @@ async function importLegacy(): Promise<void> {
                 color="error"
                 variant="tonal"
                 :prepend-icon="mdiTrashCanOutline"
-                :disabled="!editable"
-                @click="removeSelectedRobot"
+                :disabled="!selectedDraft || saving"
+                @click="openDelete"
               >
                 {{ t('pages.dashboard.robots.deleteRobot', '删除机器人配置') }}
               </v-btn>
