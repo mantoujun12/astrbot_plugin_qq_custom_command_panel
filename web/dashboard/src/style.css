@@ -17,6 +17,25 @@ body,
   height: 100%;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--v-theme-primary)) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--v-theme-primary));
+  border-radius: 999px;
+}
+
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;

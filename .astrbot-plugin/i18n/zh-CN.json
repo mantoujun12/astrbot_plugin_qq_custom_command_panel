@@ -13,6 +13,14 @@
         "English"
       ]
     },
+    "primary_color": {
+      "description": "插件视图主色",
+      "hint": "插件视图的主强调色，使用 #RRGGBB 格式。也可以到插件视图的「设置」页调整。"
+    },
+    "secondary_color": {
+      "description": "插件视图辅助色",
+      "hint": "插件视图的辅助强调色，使用 #RRGGBB 格式。也可以到插件视图的「设置」页调整。"
+    },
     "scenes": {
       "description": "生效场景（选择哪些场景下要显示 QQ 指令面板）",
       "hint": "c2c=单聊，group=群聊，channel=文字子频道，dm=频道私信。channel/dm 仅支持全局配置。本项属于兼容性配置，仅对未被「机器人」页接管的 AppID 生效。",
@@ -94,9 +102,7 @@
         "refresh": "刷新",
         "loadFailed": "获取状态失败",
         "mockHint": "本地开发环境：展示的是 mock 数据，未连接 AstrBot 后端。",
-        "panelsPartial": "部分场景查询失败，该值为下限",
         "itemsUnit": "条",
-        "limit": "上限",
         "cards": {
           "platforms": "QQ 平台",
           "scenes": "生效场景",
@@ -140,10 +146,23 @@
         "reload": "重新载入",
         "save": "保存",
         "saved": "设置已保存并生效。",
-        "mockHint": "本地开发环境：展示的是 mock 数据，不能保存配置。",
+        "mockHint": "本地开发环境：可编辑预览，但不能保存配置。",
         "basicTitle": "基础配置",
         "basicSubtitle": "日志语言只影响插件日志。",
-        "language": "日志语言"
+        "language": "日志语言",
+        "themeTitle": "主题配色",
+        "themeSubtitle": "调整插件视图的主色和辅助色，保存后立即应用到浅色与深色主题。",
+        "primaryColor": "主色",
+        "secondaryColor": "辅助色",
+        "colorHint": "使用 #RRGGBB 格式。",
+        "colorInvalid": "请输入 #RRGGBB 格式的颜色。",
+        "aboutTitle": "关于插件",
+        "aboutSubtitle": "插件简介与功能概览。",
+        "aboutName": "QQ 自定义指令面板",
+        "aboutDescription": "按机器人和场景维护指令条目，并将内容同步到 QQ 官方机器人指令面板。",
+        "githubTitle": "GitHub 仓库",
+        "githubDescription": "查看项目源码、更新日志与问题反馈。",
+        "githubAction": "访问 GitHub"
       },
       "compatibility": {
         "title": "兼容性",
@@ -211,6 +230,7 @@
         "appidLabel": "AppID：{appid}",
         "untitledRobot": "未命名机器人",
         "removedLocal": "已从本地列表移除。保存后才会写入配置。",
+        "removedMock": "已从本地列表移除（预览），不会写入配置。",
         "basicTitle": "基础信息",
         "basicSubtitle": "名称、AppID 与平台凭证只用于这台机器人。",
         "name": "机器人名称",
@@ -244,6 +264,9 @@
         "dangerTitle": "删除机器人配置",
         "dangerText": "删除只移除这里的配置，不会清理 QQ 线上已有的指令面板。",
         "deleteRobot": "删除机器人配置",
+        "deleteConfirmTitle": "删除机器人配置？",
+        "deleteConfirmText": "删除后需要保存才会写入配置，QQ 线上已有的指令面板不会被清理。",
+        "deleteConfirm": "确认删除",
         "importTitle": "从兼容配置导入",
         "importSubtitle": "选择或填写要导入的旧版平台 AppID，每个 AppID 单独一行或使用逗号分隔。",
         "importAppids": "AppID 列表",

@@ -114,6 +114,22 @@ function clickInDialog(label: string): void {
   ;(dialogButton(label) as HTMLElement).click()
 }
 
+/** 多个弹窗的关闭节点会同时留在 body 里，按弹窗容器限定操作范围 */
+function clickInDialogPanel(selector: string, label: string): void {
+  const panel = document.body.querySelector(selector)
+  if (!panel) {
+    throw new Error(`dialog panel not found: ${selector}`)
+  }
+  const wanted = label.replace(/\s+/g, '')
+  const found = [...panel.querySelectorAll('button')].find(
+    (node) => (node.textContent ?? '').replace(/\s+/g, '') === wanted,
+  )
+  if (!found) {
+    throw new Error(`dialog button not found in ${selector}: ${label}`)
+  }
+  ;(found as HTMLElement).click()
+}
+
 /** 给弹窗里的输入框赋值并派发 input，等价于 wrapper 上的 setValue */
 async function typeInDialog(selector: string, value: string): Promise<void> {
   const el = document.body.querySelector<HTMLInputElement>(selector)
@@ -128,6 +144,7 @@ async function typeInDialog(selector: string, value: string): Promise<void> {
 /** 模板里「从兼容配置导入」在前、「新增机器人」在后 */
 const IMPORT_DIALOG = 0
 const CREATE_DIALOG = 1
+const DELETE_DIALOG = 2
 
 /**
  * 弹窗是否打开看 v-model，而不是等 DOM 消失。
@@ -200,6 +217,21 @@ describe('RobotsView', () => {
     expect((field(wrapper, 'secret').element as HTMLInputElement).value).toBe('')
     expect(wrapper.text()).toContain('当前：abc*****yz')
     expect(wrapper.findAll('[data-scene="c2c"] [data-field="command-name"]')).toHaveLength(1)
+  })
+
+  it('combines robot selection and configuration in one responsive shell', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    const shell = wrapper.find('.qc-robots-shell')
+
+    expect(wrapper.find('.qc-robots-page').exists()).toBe(true)
+    expect(shell.exists()).toBe(true)
+    expect(shell.find('[data-pane="list"]').exists()).toBe(true)
+    expect(shell.find('[data-pane="editor"]').exists()).toBe(true)
+    expect(shell.findAll('.qc-robots-divider--desktop')).toHaveLength(1)
+    expect(shell.findAll('.qc-robots-divider--mobile')).toHaveLength(1)
   })
 
   it('switches between robots and keeps each robot scenes isolated', async () => {
@@ -355,7 +387,12 @@ describe('RobotsView', () => {
 
     const wrapper = await mount()
     await button(wrapper, '删除机器人配置').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
+    clickInDialog('确认删除')
+    await flush()
     await button(wrapper, '删除机器人配置').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
+    clickInDialog('确认删除')
     await flush()
 
     expect(button(wrapper, '保存').attributes('disabled')).toBeUndefined()
@@ -366,7 +403,34 @@ describe('RobotsView', () => {
     expect(wrapper.text()).toContain('机器人配置已保存。')
   })
 
-  it('keeps saving disabled in mock but still lets both dialogs open', async () => {
+  it('asks for confirmation before deleting a robot', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    await button(wrapper, '删除机器人配置').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
+
+    expect(dialogEl('.qc-robot-delete')?.textContent).toContain('主机器人')
+    expect(dialogEl('.qc-robot-delete')?.textContent).toContain('1023456789')
+    expect(wrapper.findAll('.qc-robot-item')).toHaveLength(2)
+
+    clickInDialog('取消')
+    await flush()
+
+    expect(dialogModel(wrapper, DELETE_DIALOG)).toBe(false)
+    expect(wrapper.findAll('.qc-robot-item')).toHaveLength(2)
+
+    await button(wrapper, '删除机器人配置').trigger('click')
+    clickInDialog('确认删除')
+    await flush()
+
+    expect(dialogModel(wrapper, DELETE_DIALOG)).toBe(false)
+    expect(wrapper.findAll('.qc-robot-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('已从本地列表移除。保存后才会写入配置。')
+  })
+
+  it('keeps saving disabled in mock but still lets local dialogs open', async () => {
     const { api, legacyApi, mount } = await loadView({ withBackend: false })
     vi.mocked(api.fetchRobots).mockResolvedValue(MOCK_ROBOTS)
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
@@ -379,15 +443,35 @@ describe('RobotsView', () => {
     expect(button(wrapper, '保存').attributes('disabled')).toBeDefined()
     expect(button(wrapper, '保存并同步').attributes('disabled')).toBeDefined()
 
-    // 但两个弹窗要能打开，方便在本地开发环境里点着看
+    // 但本地交互弹窗要能打开，方便在开发环境里点着看
     expect(button(wrapper, '新增机器人').attributes('disabled')).toBeUndefined()
     expect(button(wrapper, '从兼容配置导入').attributes('disabled')).toBeUndefined()
+    expect(button(wrapper, '删除机器人配置').attributes('disabled')).toBeUndefined()
 
     await button(wrapper, '新增机器人').trigger('click')
     await waitUntil(() => dialogEl('.qc-robot-create') !== null)
     clickInDialog('取消')
     await flush()
     expect(dialogModel(wrapper, CREATE_DIALOG)).toBe(false)
+
+    await button(wrapper, '删除机器人配置').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
+    expect(dialogEl('.qc-robot-delete')?.textContent).toContain('主机器人')
+    expect(dialogEl('.qc-robot-delete')?.textContent).toContain('1023456789')
+    expect(dialogButton('确认删除')).toBeDefined()
+    clickInDialogPanel('.qc-robot-delete', '取消')
+    await flush()
+    expect(dialogModel(wrapper, DELETE_DIALOG)).toBe(false)
+
+    // 确认删除只改本地预览，提示语不能承诺一次在 mock 下不可能发生的保存
+    await button(wrapper, '删除机器人配置').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
+    clickInDialogPanel('.qc-robot-delete', '确认删除')
+    await flush()
+    expect(dialogModel(wrapper, DELETE_DIALOG)).toBe(false)
+    expect(wrapper.findAll('.qc-robot-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('已从本地列表移除（预览），不会写入配置。')
+    expect(wrapper.text()).not.toContain('保存后才会写入配置。')
 
     await button(wrapper, '从兼容配置导入').trigger('click')
     await waitUntil(() => dialogEl('.qc-import-panel') !== null)

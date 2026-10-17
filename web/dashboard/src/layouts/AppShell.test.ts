@@ -1,8 +1,16 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Ref } from 'vue'
 import { VAppBar, VNavigationDrawer } from 'vuetify/components'
 import type { PluginViewContext } from '../bridge'
 import { flush, installBridge, mountView, waitUntil } from '../test/helpers'
+import { MOCK_CONFIG } from '../api/mock'
+import { vuetify } from '../plugins/vuetify'
+import {
+  DEFAULT_THEME_COLORS,
+  THEME_LIGHT,
+  applyThemeColors,
+} from '../theme'
+import type { PluginConfigResponse } from '../types/dashboard'
 
 /**
  * 窄屏/宽屏的判定来自 Vuetify 的 useDisplay，靠 viewport 在 happy-dom 里控制不稳，
@@ -18,11 +26,24 @@ vi.mock('vuetify', async (importOriginal) => {
 })
 
 /** AppShell 依赖 useAppShell → useBridge 的单例，所以每个用例重置模块后再引 */
-async function mountShell(options: { context?: PluginViewContext; mobile?: boolean } = {}) {
+async function mountShell(
+  options: {
+    context?: PluginViewContext
+    mobile?: boolean
+    config?: PluginConfigResponse
+  } = {},
+) {
   const context = options.context
   const bridge = installBridge({
     ready: vi.fn(async () => context ?? {}),
     getContext: vi.fn(() => context ?? null),
+    ...(options.config
+      ? {
+          apiGet: vi.fn(async (endpoint: string) =>
+            endpoint === 'config' ? options.config : null,
+          ),
+        }
+      : {}),
   })
 
   vi.resetModules()
@@ -37,6 +58,10 @@ async function mountShell(options: { context?: PluginViewContext; mobile?: boole
 
   return { wrapper, bridge }
 }
+
+afterEach(() => {
+  applyThemeColors(vuetify.theme, DEFAULT_THEME_COLORS)
+})
 
 function drawerState(wrapper: ReturnType<typeof mountView>): unknown {
   return wrapper.findComponent(VNavigationDrawer).props('modelValue')
@@ -119,5 +144,21 @@ describe('AppShell', () => {
 
     const light = await mountShell({ context: { isDark: false } })
     expect(light.wrapper.get('.v-application').classes()).toContain('v-theme--qcPanelTheme')
+  })
+
+  it('loads saved theme colors after the bridge is ready', async () => {
+    const config = {
+      ...MOCK_CONFIG,
+      primary_color: '#112233',
+      secondary_color: '#445566',
+    }
+    const { bridge, wrapper } = await mountShell({ config })
+
+    await waitUntil(() => vi.mocked(bridge.apiGet).mock.calls.length > 0)
+
+    expect(bridge.apiGet).toHaveBeenCalledWith('config')
+    expect(wrapper.get('.v-application').classes()).toContain('v-theme--qcPanelTheme')
+    expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.primary).toBe('#112233')
+    expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.secondary).toBe('#445566')
   })
 })

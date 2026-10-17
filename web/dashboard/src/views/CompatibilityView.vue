@@ -252,7 +252,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
         </v-card-item>
         <v-card-text class="px-5 pb-5 pt-3">
           <v-row>
-            <v-col cols="12" md="8">
+            <v-col cols="12" md="12">
               <v-select
                 v-model="form.scenes"
                 :items="sceneItems"

@@ -78,7 +78,7 @@ describe('StatusOverviewView', () => {
     expect(wrapper.text()).toContain('已同步')
   })
 
-  it('shows the partial note when some scenes failed to query', async () => {
+  it('does not show a note when some scenes failed to query', async () => {
     const { api, mount } = await loadStatusView()
     vi.mocked(api.fetchStatus).mockResolvedValue(
       statusFixture({ panels: { total: 5, max: 40, partial: true } }),
@@ -86,7 +86,7 @@ describe('StatusOverviewView', () => {
 
     const wrapper = await mount()
 
-    expect(wrapper.text()).toContain('部分场景查询失败，该值为下限')
+    expect(wrapper.text()).not.toContain('部分场景查询失败，该值为下限')
   })
 
   it('keeps the loading indicator up until the slow request answers', async () => {

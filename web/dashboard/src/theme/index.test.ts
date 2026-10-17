@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { THEME_DARK, THEME_LIGHT, darkTheme, lightTheme } from './index'
+import { vuetify } from '../plugins/vuetify'
+import {
+  DEFAULT_THEME_COLORS,
+  THEME_DARK,
+  THEME_LIGHT,
+  applyThemeColors,
+  darkTheme,
+  lightTheme,
+  resolveThemeColors,
+} from './index'
 
 const SHARED_COLOR_KEYS = [
   'primary',
@@ -35,6 +44,34 @@ describe('theme palette', () => {
     for (const key of SHARED_COLOR_KEYS) {
       expect(lightTheme.colors).toHaveProperty(key)
       expect(darkTheme.colors).toHaveProperty(key)
+    }
+  })
+
+  it('resolves saved colors and falls back for invalid values', () => {
+    expect(
+      resolveThemeColors({
+        primary_color: '#AABBCC',
+        secondary_color: 'not-a-color',
+      }),
+    ).toEqual({
+      primary: '#aabbcc',
+      secondary: DEFAULT_THEME_COLORS.secondary,
+    })
+  })
+
+  it('applies configured colors to both registered themes', () => {
+    try {
+      applyThemeColors(vuetify.theme, {
+        primary: '#112233',
+        secondary: '#445566',
+      })
+
+      expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.primary).toBe('#112233')
+      expect(vuetify.theme.themes.value[THEME_LIGHT]?.colors.secondary).toBe('#445566')
+      expect(vuetify.theme.themes.value[THEME_DARK]?.colors.primary).toBe('#112233')
+      expect(vuetify.theme.themes.value[THEME_DARK]?.colors.secondary).toBe('#445566')
+    } finally {
+      applyThemeColors(vuetify.theme, DEFAULT_THEME_COLORS)
     }
   })
 })

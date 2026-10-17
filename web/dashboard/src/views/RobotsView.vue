@@ -64,6 +64,7 @@ const legacyAppidsText = ref('')
 const createDialog = ref(false)
 const createForm = ref<RobotConfigForm>(emptyRobotDraft())
 const createError = ref('')
+const deleteDialog = ref(false)
 
 let draftSeq = 0
 
@@ -221,6 +222,14 @@ function confirmCreate(): void {
   closeCreate()
 }
 
+function openDelete(): void {
+  deleteDialog.value = true
+}
+
+function closeDelete(): void {
+  deleteDialog.value = false
+}
+
 function removeSelectedRobot(): void {
   const index = drafts.value.findIndex((draft) => draft.key === selectedKey.value)
   if (index < 0) return
@@ -230,10 +239,20 @@ function removeSelectedRobot(): void {
   }
   const next = drafts.value[index] ?? drafts.value[index - 1] ?? null
   selectedKey.value = next?.key ?? ''
-  notice.value = t(
-    'pages.dashboard.robots.removedLocal',
-    '已从本地列表移除。保存后才会写入配置。',
-  )
+  notice.value = mockMode.value
+    ? t(
+        'pages.dashboard.robots.removedMock',
+        '已从本地列表移除（预览），不会写入配置。',
+      )
+    : t(
+        'pages.dashboard.robots.removedLocal',
+        '已从本地列表移除。保存后才会写入配置。',
+      )
+}
+
+function confirmDelete(): void {
+  removeSelectedRobot()
+  closeDelete()
 }
 
 function addSceneItem(scene: Scene): void {
@@ -430,7 +449,7 @@ async function importLegacy(): Promise<void> {
 </script>
 
 <template>
-  <v-container fluid class="qc-page pa-4 pa-md-6">
+  <v-container fluid class="qc-page qc-robots-page pa-4 pa-md-6">
     <div class="qc-header">
       <div class="qc-header-main">
         <h1 class="qc-title">{{ t('pages.dashboard.robots.title', '机器人') }}</h1>
@@ -640,62 +659,96 @@ async function importLegacy(): Promise<void> {
       </v-card>
     </v-dialog>
 
-    <v-row class="qc-robots-layout">
-      <v-col cols="12" md="4" lg="3">
-        <v-card class="qc-card qc-robot-list" variant="outlined">
-          <v-card-item class="px-5 pt-5">
-            <v-card-title class="text-body-large">
-              {{ t('pages.dashboard.robots.listTitle', '机器人') }}
-            </v-card-title>
-            <v-card-subtitle>
-              {{ t('pages.dashboard.robots.listSubtitle', '选择一台机器人编辑它的场景指令。') }}
-            </v-card-subtitle>
-          </v-card-item>
+    <v-dialog v-model="deleteDialog" max-width="480">
+      <v-card class="qc-robot-delete" variant="flat" rounded="lg">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">
+            {{ t('pages.dashboard.robots.deleteConfirmTitle', '删除机器人配置？') }}
+          </v-card-title>
+          <v-card-subtitle>
+            {{ selectedForm.name }}
+            <span v-if="selectedForm.appid">（{{ selectedForm.appid }}）</span>
+          </v-card-subtitle>
+        </v-card-item>
+        <v-card-text>
+          <div>
+            {{
+              t(
+                'pages.dashboard.robots.deleteConfirmText',
+                '删除后需要保存才会写入配置，QQ 线上已有的指令面板不会被清理。',
+              )
+            }}
+          </div>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-5">
+          <v-spacer />
+          <v-btn variant="text" @click="closeDelete">
+            {{ t('pages.dashboard.robots.cancel', '取消') }}
+          </v-btn>
+          <v-btn color="error" variant="tonal" @click="confirmDelete">
+            {{ t('pages.dashboard.robots.deleteConfirm', '确认删除') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-          <v-card-text class="px-5 pb-5 pt-2">
-            <div v-if="!drafts.length" class="qc-metric-note">
-              {{ t('pages.dashboard.robots.emptyRobots', '还没有机器人，先新增一台。') }}
-            </div>
+    <v-card class="qc-card qc-robots-layout qc-robots-shell" variant="outlined">
+      <section class="qc-robots-pane qc-robot-list" data-pane="list">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">
+            {{ t('pages.dashboard.robots.listTitle', '机器人') }}
+          </v-card-title>
+          <v-card-subtitle>
+            {{ t('pages.dashboard.robots.listSubtitle', '选择一台机器人编辑它的场景指令。') }}
+          </v-card-subtitle>
+        </v-card-item>
 
-            <v-card
-              v-for="draft in drafts"
-              :key="draft.key"
-              class="qc-config-item qc-robot-item mb-3"
-              :class="{ 'qc-robot-item--active': draft.key === selectedKey }"
-              :variant="draft.key === selectedKey ? 'tonal' : 'flat'"
-              :color="draft.key === selectedKey ? 'primary' : undefined"
-              role="button"
-              tabindex="0"
-              @click="selectRobot(draft.key)"
-              @keydown.enter.prevent="selectRobot(draft.key)"
-              @keydown.space.prevent="selectRobot(draft.key)"
-            >
-              <div class="d-flex align-center ga-3">
-                <v-icon :icon="mdiRobotOutline" size="22" />
-                <div class="qc-row-main flex-grow-1">
-                  <div class="font-weight-medium">{{ robotName(draft) }}</div>
-                  <div class="qc-metric-note">{{ appidText(draft.form.appid) }}</div>
-                  <div class="qc-metric-note">{{ robotMeta(draft) }}</div>
-                </div>
+        <v-card-text class="px-5 pb-5 pt-2">
+          <div v-if="!drafts.length" class="qc-metric-note">
+            {{ t('pages.dashboard.robots.emptyRobots', '还没有机器人，先新增一台。') }}
+          </div>
+
+          <v-card
+            v-for="draft in drafts"
+            :key="draft.key"
+            class="qc-config-item qc-robot-item mb-3"
+            :class="{ 'qc-robot-item--active': draft.key === selectedKey }"
+            :variant="draft.key === selectedKey ? 'tonal' : 'flat'"
+            :color="draft.key === selectedKey ? 'primary' : undefined"
+            role="button"
+            tabindex="0"
+            @click="selectRobot(draft.key)"
+            @keydown.enter.prevent="selectRobot(draft.key)"
+            @keydown.space.prevent="selectRobot(draft.key)"
+          >
+            <div class="d-flex align-center ga-3">
+              <v-icon :icon="mdiRobotOutline" size="22" />
+              <div class="qc-row-main flex-grow-1">
+                <div class="font-weight-medium">{{ robotName(draft) }}</div>
+                <div class="qc-metric-note">{{ appidText(draft.form.appid) }}</div>
+                <div class="qc-metric-note">{{ robotMeta(draft) }}</div>
               </div>
-              <v-alert
-                v-if="robotErrors[draft.key]"
-                class="qc-robot-error mt-3"
-                type="error"
-                variant="tonal"
-                density="compact"
-              >
-                {{ robotErrors[draft.key] }}
-              </v-alert>
-            </v-card>
-          </v-card-text>
-        </v-card>
-      </v-col>
+            </div>
+            <v-alert
+              v-if="robotErrors[draft.key]"
+              class="qc-robot-error mt-3"
+              type="error"
+              variant="tonal"
+              density="compact"
+            >
+              {{ robotErrors[draft.key] }}
+            </v-alert>
+          </v-card>
+        </v-card-text>
+      </section>
 
-      <v-col cols="12" md="8" lg="9">
+      <v-divider class="qc-robots-divider qc-robots-divider--desktop" vertical />
+      <v-divider class="qc-robots-divider qc-robots-divider--mobile" />
+
+      <section class="qc-robots-pane qc-robot-editor" data-pane="editor">
         <v-card
           v-if="!selectedDraft"
-          class="qc-card qc-robot-editor qc-robot-editor--empty"
+          class="qc-card qc-robot-editor--empty"
           variant="outlined"
         >
           <v-card-text class="qc-metric-note py-8">
@@ -938,16 +991,16 @@ async function importLegacy(): Promise<void> {
                 color="error"
                 variant="tonal"
                 :prepend-icon="mdiTrashCanOutline"
-                :disabled="!editable"
-                @click="removeSelectedRobot"
+                :disabled="!selectedDraft || saving"
+                @click="openDelete"
               >
                 {{ t('pages.dashboard.robots.deleteRobot', '删除机器人配置') }}
               </v-btn>
             </v-card-actions>
           </v-card>
         </template>
-      </v-col>
-    </v-row>
+      </section>
+    </v-card>
 
   </v-container>
 </template>

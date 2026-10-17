@@ -141,7 +141,6 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
             :icon="mdiForumOutline"
             :title="t('pages.dashboard.status.cards.scenes', '生效场景')"
             :value="status.scenes.length"
-            :note="status.scenes.join(' / ')"
           />
         </v-col>
         <v-col cols="12" sm="6" lg="3">
@@ -159,11 +158,6 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
             :title="t('pages.dashboard.status.cards.panels', '线上面板')"
             :value="status.panels.total"
             :max="status.panels.partial ? undefined : status.panels.max"
-            :note="
-              status.panels.partial
-                ? t('pages.dashboard.status.panelsPartial', '部分场景查询失败，该值为下限')
-                : undefined
-            "
             emphasize-at-limit
           />
         </v-col>

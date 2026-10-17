@@ -13,6 +13,14 @@
         "English"
       ]
     },
+    "primary_color": {
+      "description": "Plugin view primary color",
+      "hint": "Primary accent color for the plugin view in #RRGGBB format. You can also adjust it on the Settings page of the plugin view."
+    },
+    "secondary_color": {
+      "description": "Plugin view secondary color",
+      "hint": "Secondary accent color for the plugin view in #RRGGBB format. You can also adjust it on the Settings page of the plugin view."
+    },
     "scenes": {
       "description": "Active scenes (where QQ command panel is visible)",
       "hint": "c2c=Private chat, group=Group chat, channel=Text sub-channel, dm=Channel DM. channel/dm only support global configuration. This item belongs to the compatibility configuration and only applies to AppIDs not taken over on the Robots page.",
@@ -94,9 +102,7 @@
         "refresh": "Refresh",
         "loadFailed": "Failed to load status",
         "mockHint": "Local dev environment: showing mock data, not connected to the AstrBot backend.",
-        "panelsPartial": "Some scenes failed to query; this value is a lower bound.",
         "itemsUnit": "items",
-        "limit": "limit",
         "cards": {
           "platforms": "QQ platforms",
           "scenes": "Active scenes",
@@ -140,10 +146,23 @@
         "reload": "Reload",
         "save": "Save",
         "saved": "Settings saved and applied.",
-        "mockHint": "Local dev environment: showing mock data, saving is disabled.",
+        "mockHint": "Local dev environment: editable preview, saving is disabled.",
         "basicTitle": "Basics",
         "basicSubtitle": "The log language only affects plugin logs.",
-        "language": "Log language"
+        "language": "Log language",
+        "themeTitle": "Theme colors",
+        "themeSubtitle": "Adjust the plugin view primary and secondary colors. Saved colors apply to both light and dark themes immediately.",
+        "primaryColor": "Primary color",
+        "secondaryColor": "Secondary color",
+        "colorHint": "Use the #RRGGBB format.",
+        "colorInvalid": "Enter a color in #RRGGBB format.",
+        "aboutTitle": "About",
+        "aboutSubtitle": "Plugin information and feature overview.",
+        "aboutName": "QQ Custom Command Panel",
+        "aboutDescription": "Maintain command entries by robot and scene, then sync them to the QQ Official bot command panel.",
+        "githubTitle": "GitHub repository",
+        "githubDescription": "Browse the source code, changelog, and issue tracker.",
+        "githubAction": "Open GitHub"
       },
       "compatibility": {
         "title": "Compatibility",
@@ -211,6 +230,7 @@
         "appidLabel": "AppID: {appid}",
         "untitledRobot": "Untitled robot",
         "removedLocal": "Removed from the local list. It will be written to config after saving.",
+        "removedMock": "Removed from the local list (preview only); nothing will be written to config.",
         "basicTitle": "Basics",
         "basicSubtitle": "Name, AppID, and platform credentials belong only to this robot.",
         "name": "Robot name",
@@ -244,6 +264,9 @@
         "dangerTitle": "Delete robot configuration",
         "dangerText": "Deleting only removes the configuration here; it does not clean up existing QQ online panels.",
         "deleteRobot": "Delete robot configuration",
+        "deleteConfirmTitle": "Delete robot configuration?",
+        "deleteConfirmText": "The change is written only after saving. Existing QQ online panels will not be removed.",
+        "deleteConfirm": "Delete",
         "importTitle": "Import from compatibility",
         "importSubtitle": "Choose or enter legacy platform AppIDs to import, one per line or separated by commas.",
         "importAppids": "AppID list",
