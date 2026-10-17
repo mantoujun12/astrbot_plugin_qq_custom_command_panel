@@ -149,7 +149,7 @@ Ruff 配置在 `pyproject.toml`：line-length 100、target py312、select `E/W/F
 - 中文文案（文档、注释、docstring、`zh-CN` i18n、`_conf_schema.json`）统一使用全角标点：`，。：；？！（）“”`；中文句读处不得用半角逗号 `,` 代替 `，`，也不得用半角冒号 `:` 代替 `：`。
 - 英文文案、代码、`en-US` locale 文件保持半角标点：`, . : ; ( )`。
 - 只调整注释、docstring 与字符串字面量里的标点；代码位置的标点属于语法，不得改动。改动前端 fallback 文案后需重新 `pnpm build` 并提交 `pages/dashboard/` 产物。
-- 文案分三处，改动时要一起过：`core/i18n/<locale>.json`（后端日志与进度）、`.astrbot-plugin/i18n/<locale>.json`（WebUI 元数据 / 配置项 / 视图标题，也是 `bridge.t` 的 key 来源）、`web/dashboard/src` 里 `bridge.t(key, fallback)` 的 fallback 字面量（编译进产物，改了要重新 `pnpm build`）。新增 key 时 `zh-CN` 与 `en-US` 两份都要补。
+- 文案分三处，改动时要一起过：`core/i18n/<locale>.json`（后端日志与进度）、`.astrbot-plugin/i18n/<locale>.json`（WebUI 元数据 / 配置项 / 视图标题，也是 `bridge.t` 的 key 来源）、`web/dashboard/src` 里 `bridge.t(key, fallback)` 的 fallback 字面量（编译进产物，改了要重新 `pnpm build`）。新增 key 时 `zh-CN`、`en-US`、`ru-RU`、`ja-JP` 四份都要补，并保持占位符一致。
 
 #### 提交规范
 

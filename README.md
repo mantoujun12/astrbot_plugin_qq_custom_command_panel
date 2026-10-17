@@ -179,7 +179,7 @@ scripts/           bump_version.py、package_plugin.py
 
 ## 下一步计划
 
-- [x] i18n - 国际化支持
+- [x] i18n - 国际化支持（简体中文 / English / Русский / 日本語）
 - [x] QQ API 覆盖 - 更新、批量、子频道、富文本
 - [x] Dashboard - 可视化配置，一键同步 AstrBot 指令列表并按需选择
 - [x] 完善调用入口 - 可视化 + 异步进度反馈
