@@ -529,6 +529,8 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
     assert bundle.cache._is_fresh() is True
 
     request.payload = {
+        "primary_color": "#AABBCC",
+        "secondary_color": "#123456",
         "scenes": ["group"],
         "qq_platforms": [
             {"name": "renamed", "appid": "1023456789", "secret": "", "platform": "qq_official"},
@@ -542,10 +544,14 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
     # secret 留空 => 沿用原值
     assert saved["qq_platforms"][0]["secret"] == "old-secret"
     assert saved["scenes"] == ["group"]
+    assert saved["primary_color"] == "#aabbcc"
+    assert saved["secondary_color"] == "#123456"
     assert config["scenes"] == ["group"]
     # 配置变了，状态缓存必须失效
     assert bundle.cache._is_fresh() is False
     assert response["data"]["scenes"] == ["group"]
+    assert response["data"]["primary_color"] == "#aabbcc"
+    assert response["data"]["secondary_color"] == "#123456"
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, t
@@ -29,6 +30,11 @@ SCENES: tuple[str, ...] = ("c2c", "group", "channel", "dm")
 
 # 默认场景
 DEFAULT_SCENES: list[str] = ["c2c", "group"]
+
+# 插件视图主题默认色，与 web/dashboard/src/theme/index.ts 的浅色调色板保持一致
+DEFAULT_PRIMARY_COLOR = "#3c96ca"
+DEFAULT_SECONDARY_COLOR = "#2f86bd"
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 # 支持的 QQ 平台适配器类型
 PLATFORM_TYPES: tuple[str, ...] = ("qq_official", "qq_official_webhook")
@@ -58,6 +64,24 @@ def get_enabled_scenes(config: dict[str, Any]) -> list[str]:
     if not isinstance(scenes, list):
         return list(DEFAULT_SCENES)
     return [s for s in scenes if isinstance(s, str) and s in SCENES]
+
+
+def get_theme_colors(config: dict[str, Any]) -> dict[str, str]:
+    """读取插件视图主题色，缺失或非法值回退到默认配色。"""
+    primary = config.get("primary_color")
+    secondary = config.get("secondary_color")
+    primary_text = primary.strip() if isinstance(primary, str) else ""
+    secondary_text = secondary.strip() if isinstance(secondary, str) else ""
+    return {
+        "primary_color": (
+            primary_text.lower() if _HEX_COLOR_RE.fullmatch(primary_text) else DEFAULT_PRIMARY_COLOR
+        ),
+        "secondary_color": (
+            secondary_text.lower()
+            if _HEX_COLOR_RE.fullmatch(secondary_text)
+            else DEFAULT_SECONDARY_COLOR
+        ),
+    }
 
 
 def build_panel_item(name: str, desc: str = "") -> dict[str, str]:
@@ -264,6 +288,7 @@ def export_config(config: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "language": language,
+        **get_theme_colors(config),
         "scenes": get_enabled_scenes(config),
         "available_scenes": list(SCENES),
         "qq_platforms": [
@@ -307,6 +332,20 @@ def normalize_config_payload(
         )
     else:
         values["language"] = language
+
+    for field, default in (
+        ("primary_color", DEFAULT_PRIMARY_COLOR),
+        ("secondary_color", DEFAULT_SECONDARY_COLOR),
+    ):
+        raw_color = payload.get(field, existing.get(field))
+        if raw_color is None:
+            raw_color = default
+        if isinstance(raw_color, str):
+            raw_color = raw_color.strip()
+        if not isinstance(raw_color, str) or not _HEX_COLOR_RE.fullmatch(raw_color):
+            errors.append(t("config.error.theme_color", field=field, value=raw_color))
+        else:
+            values[field] = raw_color.lower()
 
     raw_scenes = payload.get("scenes", existing.get("scenes"))
     if raw_scenes is None:
@@ -401,7 +440,9 @@ def normalize_config_payload(
 
 __all__ = [
     "COMMAND_TEMPLATE_KEY",
+    "DEFAULT_PRIMARY_COLOR",
     "DEFAULT_SCENES",
+    "DEFAULT_SECONDARY_COLOR",
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
     "PANEL_ITEM_TYPE",
@@ -416,6 +457,7 @@ __all__ = [
     "get_platform_entries",
     "get_platforms_from_schema",
     "get_selected_commands",
+    "get_theme_colors",
     "mask_secret",
     "normalize_config_payload",
     "normalize_panel_items",

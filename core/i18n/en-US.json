@@ -53,6 +53,7 @@
   "log.config_save_failed": "failed to save plugin config: {exc}",
 
   "config.error.language": "language: {value} is not a supported language ({supported})",
+  "config.error.theme_color": "{field}: color {value} must use the #RRGGBB format",
   "config.error.scenes_type": "scenes: must be a list of scenes",
   "config.error.platforms_type": "qq_platforms: must be a list of platforms",
   "config.error.platform_entry": "qq_platforms[{index}]: entry must be an object",

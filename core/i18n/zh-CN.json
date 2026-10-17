@@ -53,6 +53,7 @@
   "log.config_save_failed": "保存插件配置失败：{exc}",
 
   "config.error.language": "language：{value} 不是支持的语言（{supported}）",
+  "config.error.theme_color": "{field}：颜色 {value} 必须是 #RRGGBB 格式",
   "config.error.scenes_type": "scenes：必须是场景列表",
   "config.error.platforms_type": "qq_platforms：必须是平台列表",
   "config.error.platform_entry": "qq_platforms[{index}]：条目必须是对象",

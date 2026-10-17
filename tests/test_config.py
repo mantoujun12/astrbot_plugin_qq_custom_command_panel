@@ -8,7 +8,9 @@ from typing import Any
 
 from core.config import (
     COMMAND_TEMPLATE_KEY,
+    DEFAULT_PRIMARY_COLOR,
     DEFAULT_SCENES,
+    DEFAULT_SECONDARY_COLOR,
     PANEL_ITEM_DESC_MAX,
     PANEL_ITEM_NAME_MAX,
     PANEL_MAX_ITEMS,
@@ -20,6 +22,7 @@ from core.config import (
     get_platform_entries,
     get_platforms_from_schema,
     get_selected_commands,
+    get_theme_colors,
     mask_secret,
     normalize_config_payload,
     normalize_panel_items,
@@ -44,6 +47,29 @@ def test_get_enabled_scenes_filters_invalid() -> None:
 def test_get_enabled_scenes_non_list_falls_back() -> None:
     assert get_enabled_scenes({"scenes": "c2c"}) == DEFAULT_SCENES
     assert get_enabled_scenes({"scenes": {"c2c": True}}) == DEFAULT_SCENES
+
+
+# ---------------------------------------------------------------------------
+# get_theme_colors
+# ---------------------------------------------------------------------------
+
+
+def test_get_theme_colors_normalizes_valid_values() -> None:
+    assert get_theme_colors({"primary_color": "#AABBCC", "secondary_color": "#123456"}) == {
+        "primary_color": "#aabbcc",
+        "secondary_color": "#123456",
+    }
+
+
+def test_get_theme_colors_falls_back_for_missing_or_invalid_values() -> None:
+    assert get_theme_colors({}) == {
+        "primary_color": DEFAULT_PRIMARY_COLOR,
+        "secondary_color": DEFAULT_SECONDARY_COLOR,
+    }
+    assert get_theme_colors({"primary_color": "red", "secondary_color": "#12345"}) == {
+        "primary_color": DEFAULT_PRIMARY_COLOR,
+        "secondary_color": DEFAULT_SECONDARY_COLOR,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +263,8 @@ def test_export_config_never_leaks_secret() -> None:
     exported = export_config(config)
 
     assert exported["language"] == "en-US"
+    assert exported["primary_color"] == DEFAULT_PRIMARY_COLOR
+    assert exported["secondary_color"] == DEFAULT_SECONDARY_COLOR
     assert exported["scenes"] == ["c2c"]
     assert exported["available_scenes"] == list(SCENES)
     assert exported["limits"] == {
@@ -277,6 +305,8 @@ def test_export_config_normalizes_language_and_skips_invalid_commands() -> None:
 def make_existing() -> dict[str, Any]:
     return {
         "language": "zh-CN",
+        "primary_color": "#112233",
+        "secondary_color": "#445566",
         "scenes": ["c2c", "group"],
         "qq_platforms": [
             {
@@ -295,6 +325,8 @@ def test_normalize_config_payload_accepts_full_payload() -> None:
         make_existing(),
         {
             "language": "en-US",
+            "primary_color": "#AABBCC",
+            "secondary_color": "#123456",
             "scenes": ["group", "unknown"],
             "qq_platforms": [
                 {
@@ -310,6 +342,8 @@ def test_normalize_config_payload_accepts_full_payload() -> None:
 
     assert errors == []
     assert values["language"] == "en-US"
+    assert values["primary_color"] == "#aabbcc"
+    assert values["secondary_color"] == "#123456"
     assert values["scenes"] == ["group"]
     assert values["qq_platforms"] == [
         {
@@ -348,6 +382,8 @@ def test_normalize_config_payload_keeps_existing_secret_when_blank() -> None:
     ]
     # 未提交的字段沿用旧配置
     assert values["language"] == "zh-CN"
+    assert values["primary_color"] == "#112233"
+    assert values["secondary_color"] == "#445566"
     assert values["scenes"] == ["c2c", "group"]
     assert values["selected_commands"] == [
         {"__template_key": COMMAND_TEMPLATE_KEY, "name": "help", "desc": "说明"}
@@ -478,6 +514,18 @@ def test_normalize_config_payload_rejects_invalid_language() -> None:
     assert "language" in errors[0]
 
 
+def test_normalize_config_payload_rejects_invalid_theme_colors() -> None:
+    _values, errors = normalize_config_payload(
+        make_existing(),
+        {"primary_color": "rgb(1, 2, 3)", "secondary_color": "#12345"},
+    )
+
+    joined = " | ".join(errors)
+    assert "primary_color" in joined
+    assert "secondary_color" in joined
+    assert "#RRGGBB" in joined
+
+
 def test_normalize_config_payload_rejects_bad_platform_entries() -> None:
     _values, errors = normalize_config_payload(
         make_existing(),
@@ -541,6 +589,8 @@ def test_panel_limits_values() -> None:
     assert PANEL_MAX_ITEMS == 20
     assert DEFAULT_SCENES == ["c2c", "group"]
     assert SCENES == ("c2c", "group", "channel", "dm")
+    assert DEFAULT_PRIMARY_COLOR == "#3c96ca"
+    assert DEFAULT_SECONDARY_COLOR == "#2f86bd"
 
 
 def test_template_keys_match_conf_schema() -> None:
