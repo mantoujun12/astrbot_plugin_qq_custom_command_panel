@@ -154,7 +154,7 @@ async function save(): Promise<void> {
 
       <v-card-text class="px-5 pb-5 pt-3">
         <v-row>
-          <v-col cols="12" sm="6" md="4">
+          <v-col cols="12" md="12">
             <v-select
               v-model="language"
               :items="LANGUAGE_OPTIONS"
