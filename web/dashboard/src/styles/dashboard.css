@@ -314,6 +314,116 @@
   border-radius: 16px;
 }
 
+/* 机器人页固定在可视高度内，顶部标题与操作区保持不动。
+   宽屏时列表和配置各自滚动；窄屏时两段堆叠，由外层统一滚动。 */
+.qc-robots-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--v-layout-top, 0px) - var(--v-layout-bottom, 0px));
+  height: calc(100dvh - var(--v-layout-top, 0px) - var(--v-layout-bottom, 0px));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.qc-robots-page > .qc-header,
+.qc-robots-page > .v-progress-linear,
+.qc-robots-page > .v-alert {
+  flex: 0 0 auto;
+}
+
+/* 机器人页采用宿主设置页的主从布局：列表固定在左侧，配置区自适应。
+   两栏共用一个外框和分隔线，窄屏时改成上下两段。 */
+.qc-robots-shell {
+  display: flex;
+  flex: 1 1 0;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.qc-robots-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.qc-robot-list {
+  --qc-robot-list-bg: color-mix(
+    in srgb,
+    rgb(var(--v-theme-surface)) 98%,
+    rgb(var(--v-theme-on-surface))
+  );
+  flex: 0 0 clamp(260px, 27%, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--qc-robot-list-bg);
+}
+
+.qc-robot-list > .v-card-item {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--qc-robot-list-bg);
+}
+
+.qc-robot-editor {
+  flex: 1 1 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+}
+
+.qc-robots-divider {
+  flex: 0 0 auto;
+  border-color: var(--qc-border);
+  opacity: 1;
+}
+
+.qc-robots-divider--desktop {
+  align-self: stretch;
+  height: auto;
+  margin: 0;
+}
+
+.qc-robots-divider--mobile {
+  display: none;
+}
+
+@media (max-width: 959.98px) {
+  .qc-robots-shell {
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .qc-robot-list {
+    flex: 0 0 auto;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .qc-robot-list > .v-card-item {
+    position: static;
+  }
+
+  .qc-robot-editor {
+    flex: 0 0 auto;
+    overflow: visible;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .qc-robots-divider--desktop {
+    display: none;
+  }
+
+  .qc-robots-divider--mobile {
+    display: flex;
+    width: auto;
+    height: 0;
+    margin: 0 20px;
+  }
+}
+
 /* 浮层里的卡片一律给实底。outlined / text 变体在 Vuetify 里是 background: transparent，
    页面卡片这么写没问题（下面就是页面实色底），但同一套写法搬进弹窗就会透出遮罩、
    看着像坏了，所以在这里兜住，新加的弹窗不用记这条。

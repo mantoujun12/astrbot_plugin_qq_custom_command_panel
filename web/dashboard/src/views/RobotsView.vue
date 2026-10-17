@@ -444,7 +444,7 @@ async function importLegacy(): Promise<void> {
 </script>
 
 <template>
-  <v-container fluid class="qc-page pa-4 pa-md-6">
+  <v-container fluid class="qc-page qc-robots-page pa-4 pa-md-6">
     <div class="qc-header">
       <div class="qc-header-main">
         <h1 class="qc-title">{{ t('pages.dashboard.robots.title', '机器人') }}</h1>
@@ -692,62 +692,63 @@ async function importLegacy(): Promise<void> {
       </v-card>
     </v-dialog>
 
-    <v-row class="qc-robots-layout">
-      <v-col cols="12" md="4" lg="3">
-        <v-card class="qc-card qc-robot-list" variant="outlined">
-          <v-card-item class="px-5 pt-5">
-            <v-card-title class="text-body-large">
-              {{ t('pages.dashboard.robots.listTitle', '机器人') }}
-            </v-card-title>
-            <v-card-subtitle>
-              {{ t('pages.dashboard.robots.listSubtitle', '选择一台机器人编辑它的场景指令。') }}
-            </v-card-subtitle>
-          </v-card-item>
+    <v-card class="qc-card qc-robots-layout qc-robots-shell" variant="outlined">
+      <section class="qc-robots-pane qc-robot-list" data-pane="list">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">
+            {{ t('pages.dashboard.robots.listTitle', '机器人') }}
+          </v-card-title>
+          <v-card-subtitle>
+            {{ t('pages.dashboard.robots.listSubtitle', '选择一台机器人编辑它的场景指令。') }}
+          </v-card-subtitle>
+        </v-card-item>
 
-          <v-card-text class="px-5 pb-5 pt-2">
-            <div v-if="!drafts.length" class="qc-metric-note">
-              {{ t('pages.dashboard.robots.emptyRobots', '还没有机器人，先新增一台。') }}
-            </div>
+        <v-card-text class="px-5 pb-5 pt-2">
+          <div v-if="!drafts.length" class="qc-metric-note">
+            {{ t('pages.dashboard.robots.emptyRobots', '还没有机器人，先新增一台。') }}
+          </div>
 
-            <v-card
-              v-for="draft in drafts"
-              :key="draft.key"
-              class="qc-config-item qc-robot-item mb-3"
-              :class="{ 'qc-robot-item--active': draft.key === selectedKey }"
-              :variant="draft.key === selectedKey ? 'tonal' : 'flat'"
-              :color="draft.key === selectedKey ? 'primary' : undefined"
-              role="button"
-              tabindex="0"
-              @click="selectRobot(draft.key)"
-              @keydown.enter.prevent="selectRobot(draft.key)"
-              @keydown.space.prevent="selectRobot(draft.key)"
-            >
-              <div class="d-flex align-center ga-3">
-                <v-icon :icon="mdiRobotOutline" size="22" />
-                <div class="qc-row-main flex-grow-1">
-                  <div class="font-weight-medium">{{ robotName(draft) }}</div>
-                  <div class="qc-metric-note">{{ appidText(draft.form.appid) }}</div>
-                  <div class="qc-metric-note">{{ robotMeta(draft) }}</div>
-                </div>
+          <v-card
+            v-for="draft in drafts"
+            :key="draft.key"
+            class="qc-config-item qc-robot-item mb-3"
+            :class="{ 'qc-robot-item--active': draft.key === selectedKey }"
+            :variant="draft.key === selectedKey ? 'tonal' : 'flat'"
+            :color="draft.key === selectedKey ? 'primary' : undefined"
+            role="button"
+            tabindex="0"
+            @click="selectRobot(draft.key)"
+            @keydown.enter.prevent="selectRobot(draft.key)"
+            @keydown.space.prevent="selectRobot(draft.key)"
+          >
+            <div class="d-flex align-center ga-3">
+              <v-icon :icon="mdiRobotOutline" size="22" />
+              <div class="qc-row-main flex-grow-1">
+                <div class="font-weight-medium">{{ robotName(draft) }}</div>
+                <div class="qc-metric-note">{{ appidText(draft.form.appid) }}</div>
+                <div class="qc-metric-note">{{ robotMeta(draft) }}</div>
               </div>
-              <v-alert
-                v-if="robotErrors[draft.key]"
-                class="qc-robot-error mt-3"
-                type="error"
-                variant="tonal"
-                density="compact"
-              >
-                {{ robotErrors[draft.key] }}
-              </v-alert>
-            </v-card>
-          </v-card-text>
-        </v-card>
-      </v-col>
+            </div>
+            <v-alert
+              v-if="robotErrors[draft.key]"
+              class="qc-robot-error mt-3"
+              type="error"
+              variant="tonal"
+              density="compact"
+            >
+              {{ robotErrors[draft.key] }}
+            </v-alert>
+          </v-card>
+        </v-card-text>
+      </section>
 
-      <v-col cols="12" md="8" lg="9">
+      <v-divider class="qc-robots-divider qc-robots-divider--desktop" vertical />
+      <v-divider class="qc-robots-divider qc-robots-divider--mobile" />
+
+      <section class="qc-robots-pane qc-robot-editor" data-pane="editor">
         <v-card
           v-if="!selectedDraft"
-          class="qc-card qc-robot-editor qc-robot-editor--empty"
+          class="qc-card qc-robot-editor--empty"
           variant="outlined"
         >
           <v-card-text class="qc-metric-note py-8">
@@ -998,8 +999,8 @@ async function importLegacy(): Promise<void> {
             </v-card-actions>
           </v-card>
         </template>
-      </v-col>
-    </v-row>
+      </section>
+    </v-card>
 
   </v-container>
 </template>

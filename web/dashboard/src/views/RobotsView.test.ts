@@ -219,6 +219,21 @@ describe('RobotsView', () => {
     expect(wrapper.findAll('[data-scene="c2c"] [data-field="command-name"]')).toHaveLength(1)
   })
 
+  it('combines robot selection and configuration in one responsive shell', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    const shell = wrapper.find('.qc-robots-shell')
+
+    expect(wrapper.find('.qc-robots-page').exists()).toBe(true)
+    expect(shell.exists()).toBe(true)
+    expect(shell.find('[data-pane="list"]').exists()).toBe(true)
+    expect(shell.find('[data-pane="editor"]').exists()).toBe(true)
+    expect(shell.findAll('.qc-robots-divider--desktop')).toHaveLength(1)
+    expect(shell.findAll('.qc-robots-divider--mobile')).toHaveLength(1)
+  })
+
   it('switches between robots and keeps each robot scenes isolated', async () => {
     const { api, mount } = await loadView()
     vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
