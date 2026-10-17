@@ -9,6 +9,7 @@
 
 ### 新增
 
+- 视图「设置」页新增「关于插件」卡片，展示插件简介、版本号并提供 GitHub 仓库入口
 - 视图「设置」页新增主题配色：可配置主色与辅助色（`#RRGGBB`），保存后同步应用到浅色与深色主题
 - 新增新版机器人配置：按「机器人 → 场景 → 指令条目」组织，每台机器人独立维护 AppID / ClientSecret / platform 与四种场景的指令条目；视图侧边栏新增「新版配置」页，旧的全局设置页改名为「兼容性」并继续可用
 - 新增新版配置 Web API：`GET /<plugin>/robots`、`POST /<plugin>/robots`、`POST /<plugin>/robots/import-legacy`；旧配置可从兼容性配置按 AppID 导入，新版配置持久化到 `plugin_data/astrbot_plugin_qq_custom_command_panel/robot_config.json`

@@ -5,6 +5,7 @@ import {
   mdiAlertCircleOutline,
   mdiCheckCircleOutline,
   mdiContentSave,
+  mdiGithub,
   mdiInformationOutline,
 } from '@mdi/js'
 import { fetchConfig, saveConfig } from '../api/dashboard'
@@ -17,11 +18,14 @@ import {
   resolveThemeColors,
 } from '../theme'
 import type { PluginConfigResponse } from '../types/dashboard'
+import { PLUGIN_VERSION } from '../version'
 
 const { t, ready, hasBackend } = useBridge()
 const theme = useTheme()
 
 const LANGUAGE_OPTIONS: string[] = ['zh-CN', 'en-US']
+const GITHUB_REPOSITORY_URL =
+  'https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel'
 
 const config = ref<PluginConfigResponse | null>(null)
 const language = ref('zh-CN')
@@ -186,6 +190,33 @@ async function save(): Promise<void> {
     <v-card v-if="config" class="qc-card mb-4" variant="outlined">
       <v-card-item class="px-5 pt-5">
         <v-card-title class="text-body-large">
+          {{ t('pages.dashboard.settings.basicTitle', '基础配置') }}
+        </v-card-title>
+        <v-card-subtitle>
+          {{ t('pages.dashboard.settings.basicSubtitle', '日志语言只影响插件日志。') }}
+        </v-card-subtitle>
+      </v-card-item>
+
+      <v-card-text class="px-5 pb-5 pt-3">
+        <v-row>
+          <v-col cols="12" md="12">
+            <v-select
+              v-model="language"
+              :items="LANGUAGE_OPTIONS"
+              :disabled="!editable"
+              :label="t('pages.dashboard.settings.language', '日志语言')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+        </v-row>
+      </v-card-text>
+    </v-card>
+
+    <v-card v-if="config" class="qc-card mb-4" variant="outlined">
+      <v-card-item class="px-5 pt-5">
+        <v-card-title class="text-body-large">
           {{ t('pages.dashboard.settings.themeTitle', '主题配色') }}
         </v-card-title>
         <v-card-subtitle>
@@ -226,30 +257,63 @@ async function save(): Promise<void> {
       </v-card-text>
     </v-card>
 
-    <v-card v-if="config" class="qc-card mb-4" variant="outlined">
+    <v-card v-if="config" class="qc-card qc-about-plugin mb-4" variant="outlined">
       <v-card-item class="px-5 pt-5">
         <v-card-title class="text-body-large">
-          {{ t('pages.dashboard.settings.basicTitle', '基础配置') }}
+          {{ t('pages.dashboard.settings.aboutTitle', '关于插件') }}
         </v-card-title>
         <v-card-subtitle>
-          {{ t('pages.dashboard.settings.basicSubtitle', '日志语言只影响插件日志。') }}
+          {{ t('pages.dashboard.settings.aboutSubtitle', '插件简介与功能概览。') }}
         </v-card-subtitle>
       </v-card-item>
 
       <v-card-text class="px-5 pb-5 pt-3">
-        <v-row>
-          <v-col cols="12" md="12">
-            <v-select
-              v-model="language"
-              :items="LANGUAGE_OPTIONS"
-              :disabled="!editable"
-              :label="t('pages.dashboard.settings.language', '日志语言')"
-              variant="outlined"
-              density="compact"
-              hide-details
-            />
-          </v-col>
-        </v-row>
+        <div class="d-flex flex-wrap align-center justify-space-between gap-4">
+          <div>
+            <div class="text-body-1 font-weight-medium">
+              {{ t('pages.dashboard.settings.aboutName', 'QQ 自定义指令面板') }}
+            </div>
+            <p class="text-body-2 text-medium-emphasis mt-1 mb-0">
+              {{
+                t(
+                  'pages.dashboard.settings.aboutDescription',
+                  '按机器人和场景维护指令条目，并将内容同步到 QQ 官方机器人指令面板。',
+                )
+              }}
+            </p>
+          </div>
+          <v-chip class="qc-about-version" color="primary" variant="tonal">
+            {{ PLUGIN_VERSION }}
+          </v-chip>
+        </div>
+      </v-card-text>
+      <v-card-text class="px-5 pb-5 pt-3">
+        <div class="d-flex flex-wrap align-center justify-space-between gap-4">
+          <div>
+            <div class="text-body-1 font-weight-medium">
+              {{ t('pages.dashboard.settings.githubTitle', 'GitHub 仓库') }}
+            </div>
+            <p class="text-body-2 text-medium-emphasis mt-1 mb-0">
+              {{
+                t(
+                  'pages.dashboard.settings.githubDescription',
+                  '查看项目源码、更新日志与问题反馈。',
+                )
+              }}
+            </p>
+          </div>
+          <v-btn
+            class="qc-github-link"
+            :href="GITHUB_REPOSITORY_URL"
+            target="_blank"
+            rel="noopener noreferrer"
+            color="primary"
+            variant="tonal"
+            :prepend-icon="mdiGithub"
+          >
+            {{ t('pages.dashboard.settings.githubAction', '访问 GitHub') }}
+          </v-btn>
+        </div>
       </v-card-text>
     </v-card>
   </v-container>

@@ -155,7 +155,14 @@
         "primaryColor": "Primary color",
         "secondaryColor": "Secondary color",
         "colorHint": "Use the #RRGGBB format.",
-        "colorInvalid": "Enter a color in #RRGGBB format."
+        "colorInvalid": "Enter a color in #RRGGBB format.",
+        "aboutTitle": "About",
+        "aboutSubtitle": "Plugin information and feature overview.",
+        "aboutName": "QQ Custom Command Panel",
+        "aboutDescription": "Maintain command entries by robot and scene, then sync them to the QQ Official bot command panel.",
+        "githubTitle": "GitHub repository",
+        "githubDescription": "Browse the source code, changelog, and issue tracker.",
+        "githubAction": "Open GitHub"
       },
       "compatibility": {
         "title": "Compatibility",

@@ -9,6 +9,7 @@ import {
   THEME_LIGHT,
   applyThemeColors,
 } from '../theme'
+import { PLUGIN_VERSION } from '../version'
 
 vi.mock('../api/dashboard', () => ({
   fetchStatus: vi.fn(),
@@ -81,6 +82,17 @@ describe('SettingsView', () => {
     expect(wrapper.text()).toContain('主题配色')
     expect(wrapper.text()).toContain('主色')
     expect(wrapper.text()).toContain('辅助色')
+    expect(wrapper.text()).toContain('关于插件')
+    expect(wrapper.text()).toContain('QQ 自定义指令面板')
+    expect(wrapper.text()).toContain(PLUGIN_VERSION)
+    expect(wrapper.text()).toContain('GitHub 仓库')
+    const repositoryLink = wrapper
+      .findAll('a')
+      .find((node) => node.text().replace(/\s+/g, '') === '访问GitHub')
+    expect(repositoryLink?.attributes('href')).toBe(
+      'https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel',
+    )
+    expect(repositoryLink?.attributes('target')).toBe('_blank')
     // 生效场景已挪回「兼容性」页，这里只剩日志语言
     expect(wrapper.text()).not.toContain('生效场景')
 

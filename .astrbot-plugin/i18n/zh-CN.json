@@ -155,7 +155,14 @@
         "primaryColor": "主色",
         "secondaryColor": "辅助色",
         "colorHint": "使用 #RRGGBB 格式。",
-        "colorInvalid": "请输入 #RRGGBB 格式的颜色。"
+        "colorInvalid": "请输入 #RRGGBB 格式的颜色。",
+        "aboutTitle": "关于插件",
+        "aboutSubtitle": "插件简介与功能概览。",
+        "aboutName": "QQ 自定义指令面板",
+        "aboutDescription": "按机器人和场景维护指令条目，并将内容同步到 QQ 官方机器人指令面板。",
+        "githubTitle": "GitHub 仓库",
+        "githubDescription": "查看项目源码、更新日志与问题反馈。",
+        "githubAction": "访问 GitHub"
       },
       "compatibility": {
         "title": "兼容性",
