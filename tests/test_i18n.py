@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import string
+from pathlib import Path
+
 import pytest
 
 from core.i18n import (
@@ -11,9 +15,25 @@ from core.i18n import (
     Translator,
 )
 
+LOCALES_DIR = Path("core/i18n")
+
 
 def make_translator(language: str = DEFAULT_LANGUAGE) -> Translator:
-    return Translator("core/i18n", language)
+    return Translator(LOCALES_DIR, language)
+
+
+def load_locale(language: str) -> dict[str, str]:
+    data = json.loads((LOCALES_DIR / f"{language}.json").read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+def placeholders(template: str) -> set[str]:
+    return {
+        field_name
+        for _literal, field_name, _format_spec, _conversion in string.Formatter().parse(template)
+        if field_name
+    }
 
 
 def test_translator_loads_fallback_language() -> None:
@@ -47,6 +67,14 @@ def test_translator_switch_language() -> None:
     tr.set_language("en-US")
     assert tr.language == "en-US"
 
+    tr.set_language("ru-RU")
+    assert tr.language == "ru-RU"
+    assert tr.t("log.no_scene_enabled") == "нет включённых сценариев, синхронизация пропущена"
+
+    tr.set_language("ja-JP")
+    assert tr.language == "ja-JP"
+    assert tr.t("log.no_scene_enabled") == "有効なシーンがないため、同期をスキップしました"
+
     tr.set_language("zh-CN")
     assert tr.language == "zh-CN"
 
@@ -76,7 +104,31 @@ def test_log_tag_constant() -> None:
 
 
 def test_supported_languages() -> None:
-    assert set(SUPPORTED_LANGUAGES) == {"zh-CN", "en-US"}
+    assert SUPPORTED_LANGUAGES == ("zh-CN", "en-US", "ru-RU", "ja-JP")
+
+
+def test_locale_files_keep_the_same_key_set() -> None:
+    expected = set(load_locale(DEFAULT_LANGUAGE))
+    for language in SUPPORTED_LANGUAGES:
+        assert set(load_locale(language)) == expected, language
+
+
+def test_locale_files_keep_the_same_placeholders() -> None:
+    fallback = load_locale(DEFAULT_LANGUAGE)
+    for language in SUPPORTED_LANGUAGES:
+        locale = load_locale(language)
+        mismatched = {
+            key: (placeholders(fallback[key]), placeholders(locale[key]))
+            for key in fallback
+            if placeholders(fallback[key]) != placeholders(locale[key])
+        }
+        assert mismatched == {}, language
+
+
+def test_locale_values_are_not_empty() -> None:
+    for language in SUPPORTED_LANGUAGES:
+        locale = load_locale(language)
+        assert [key for key, value in locale.items() if not value.strip()] == [], language
 
 
 def test_translator_missing_locale_dir_returns_empty(tmp_path: pytest.Path) -> None:
