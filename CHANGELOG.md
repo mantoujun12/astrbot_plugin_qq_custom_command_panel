@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 变更
+
+- 视图「机器人」页在窄屏下将机器人列表改为下拉菜单，避免机器人较多时在编辑器上方堆积。
+
 ## [v0.6.0] - 2026-10-17
 
 ### 新增

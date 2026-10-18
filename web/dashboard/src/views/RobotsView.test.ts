@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
-import { VDialog } from 'vuetify/components'
+import { VDialog, VSelect } from 'vuetify/components'
 import type { PluginViewBridge } from '../bridge'
 import type { PluginConfigResponse } from '../types/dashboard'
 import type { RobotConfigResponse } from '../types/robotConfig'
@@ -232,6 +232,8 @@ describe('RobotsView', () => {
     expect(shell.find('[data-pane="editor"]').exists()).toBe(true)
     expect(shell.findAll('.qc-robots-divider--desktop')).toHaveLength(1)
     expect(shell.findAll('.qc-robots-divider--mobile')).toHaveLength(1)
+    expect(shell.find('.qc-robot-card-list').exists()).toBe(true)
+    expect(shell.find('.qc-robot-select').exists()).toBe(true)
   })
 
   it('switches between robots and keeps each robot scenes isolated', async () => {
@@ -252,6 +254,25 @@ describe('RobotsView', () => {
 
     expect((field(wrapper, 'appid').element as HTMLInputElement).value).toBe('1023456789')
     expect(scene(wrapper, 'c2c').text()).toContain('1/20 条')
+  })
+
+  it('switches robots from the compact select', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    const select = wrapper.find('.qc-robot-select').findComponent(VSelect)
+
+    expect(select.props('modelValue')).toBe('robot:robot-1')
+    select.vm.$emit('update:modelValue', 'robot:robot-2')
+    await flush()
+
+    expect((field(wrapper, 'appid').element as HTMLInputElement).value).toBe('1038765432')
+
+    select.vm.$emit('update:modelValue', null)
+    await flush()
+
+    expect((field(wrapper, 'appid').element as HTMLInputElement).value).toBe('1038765432')
   })
 
   it('adds a new robot and edits its scene commands independently', async () => {

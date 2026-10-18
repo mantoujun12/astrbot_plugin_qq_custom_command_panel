@@ -105,6 +105,14 @@ const platformTypeItems = computed(() =>
   })),
 )
 
+const robotSelectItems = computed(() =>
+  drafts.value.map((draft) => ({
+    value: draft.key,
+    title: robotName(draft),
+    subtitle: `${appidText(draft.form.appid)} ${robotMeta(draft)}`,
+  })),
+)
+
 function sceneTitle(scene: Scene): string {
   if (scene === 'c2c') return t('pages.dashboard.robots.scene.c2c', '单聊')
   if (scene === 'group') return t('pages.dashboard.robots.scene.group', '群聊')
@@ -178,8 +186,10 @@ watch(
   { immediate: true },
 )
 
-function selectRobot(key: string): void {
-  selectedKey.value = key
+function selectRobot(key: string | null): void {
+  if (key) {
+    selectedKey.value = key
+  }
 }
 
 /** 新增机器人走弹窗：先填基础信息，创建后再去配各场景的指令条目。
@@ -708,37 +718,66 @@ async function importLegacy(): Promise<void> {
             {{ t('pages.dashboard.robots.emptyRobots', '还没有机器人，先新增一台。') }}
           </div>
 
-          <v-card
-            v-for="draft in drafts"
-            :key="draft.key"
-            class="qc-config-item qc-robot-item mb-3"
-            :class="{ 'qc-robot-item--active': draft.key === selectedKey }"
-            :variant="draft.key === selectedKey ? 'tonal' : 'flat'"
-            :color="draft.key === selectedKey ? 'primary' : undefined"
-            role="button"
-            tabindex="0"
-            @click="selectRobot(draft.key)"
-            @keydown.enter.prevent="selectRobot(draft.key)"
-            @keydown.space.prevent="selectRobot(draft.key)"
-          >
-            <div class="d-flex align-center ga-3">
-              <v-icon :icon="mdiRobotOutline" size="22" />
-              <div class="qc-row-main flex-grow-1">
-                <div class="font-weight-medium">{{ robotName(draft) }}</div>
-                <div class="qc-metric-note">{{ appidText(draft.form.appid) }}</div>
-                <div class="qc-metric-note">{{ robotMeta(draft) }}</div>
+          <div v-else class="qc-robot-card-list">
+            <v-card
+              v-for="draft in drafts"
+              :key="draft.key"
+              class="qc-config-item qc-robot-item mb-3"
+              :class="{ 'qc-robot-item--active': draft.key === selectedKey }"
+              :variant="draft.key === selectedKey ? 'tonal' : 'flat'"
+              :color="draft.key === selectedKey ? 'primary' : undefined"
+              role="button"
+              tabindex="0"
+              @click="selectRobot(draft.key)"
+              @keydown.enter.prevent="selectRobot(draft.key)"
+              @keydown.space.prevent="selectRobot(draft.key)"
+            >
+              <div class="d-flex align-center ga-3">
+                <v-icon :icon="mdiRobotOutline" size="22" />
+                <div class="qc-row-main flex-grow-1">
+                  <div class="font-weight-medium">{{ robotName(draft) }}</div>
+                  <div class="qc-metric-note">{{ appidText(draft.form.appid) }}</div>
+                  <div class="qc-metric-note">{{ robotMeta(draft) }}</div>
+                </div>
               </div>
-            </div>
+              <v-alert
+                v-if="robotErrors[draft.key]"
+                class="qc-robot-error mt-3"
+                type="error"
+                variant="tonal"
+                density="compact"
+              >
+                {{ robotErrors[draft.key] }}
+              </v-alert>
+            </v-card>
+          </div>
+
+          <div v-if="drafts.length" class="qc-robot-select">
+            <v-select
+              :model-value="selectedKey"
+              :items="robotSelectItems"
+              :label="t('pages.dashboard.robots.listTitle', '机器人')"
+              :menu-props="{ maxHeight: 320 }"
+              :prepend-inner-icon="mdiRobotOutline"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              @update:model-value="selectRobot"
+            >
+              <template #item="{ props, item }">
+                <v-list-item v-bind="props" :subtitle="item.subtitle" role="option" />
+              </template>
+            </v-select>
             <v-alert
-              v-if="robotErrors[draft.key]"
+              v-if="selectedDraft && robotErrors[selectedDraft.key]"
               class="qc-robot-error mt-3"
               type="error"
               variant="tonal"
               density="compact"
             >
-              {{ robotErrors[draft.key] }}
+              {{ robotErrors[selectedDraft.key] }}
             </v-alert>
-          </v-card>
+          </div>
         </v-card-text>
       </section>
 
