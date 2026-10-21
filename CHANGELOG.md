@@ -5,21 +5,21 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.6.1] - 2026-10-21
 
 ### 新增
 
-- 视图侧边栏新增「日志」页：通过 SSE 实时查看插件输出，支持搜索、日志等级过滤、暂停、自动滚动、堆栈展开与清空当前视图；后端按插件日志前缀收集并保留当前进程最近 1000 条。
+- 视图侧边栏新增「日志」页：通过 SSE 实时查看插件输出，支持搜索、日志等级过滤、暂停、自动滚动、堆栈展开与清空当前视图；后端按插件日志前缀收集并保留当前进程最近 1000 条 (#62)
 
 ### 变更
 
-- 视图「机器人」页在窄屏下将机器人列表改为下拉菜单，避免机器人较多时在编辑器上方堆积。
+- 视图「机器人」页在窄屏下将机器人列表改为下拉菜单，避免机器人较多时在编辑器上方堆积 (#60)
 
 ### 修复
 
-- 修复在 AstrBot 4.29+ 上插件加载失败并报 `__init__() missing 1 required positional argument: 'config'` 的问题：`astrbot.api.logger` 现为按调用方模块解析目标的转发代理，日志缓冲改为解析出插件共享的 logger 再安装 handler，插件入口也显式使用 `Star.logger`，不再误走 Loguru 分支抛 `TypeError`，也不会把 handler 挂到其他模块的 logger 上导致面板日志为空。
-- 修复日志采集与 Loguru 宿主不兼容、调试日志遗漏、插件重载后流游标失效及旧订阅卡住的问题；同时仅采集本插件源码发出的日志，并限制并发日志流数量。
-- 修复日志页从 mock 切换到真实流时启动日志被游标过滤，以及清空搜索后列表异常的问题。
+- 修复在 AstrBot 4.29+ 上插件加载失败并报 `__init__() missing 1 required positional argument: 'config'` 的问题：`astrbot.api.logger` 现为按调用方模块解析目标的转发代理，日志缓冲改为解析出插件共享的 logger 再安装 handler，插件入口也显式使用 `Star.logger`，不再误走 Loguru 分支抛 `TypeError`，也不会把 handler 挂到其他模块的 logger 上导致面板日志为空 (#63)
+- 修复日志采集与 Loguru 宿主不兼容、调试日志遗漏、插件重载后流游标失效及旧订阅卡住的问题；同时仅采集本插件源码发出的日志，并限制并发日志流数量 (#62)
+- 修复日志页从 mock 切换到真实流时启动日志被游标过滤，以及清空搜索后列表异常的问题 (#62)
 
 ## [v0.6.0] - 2026-10-17
 
@@ -189,6 +189,7 @@
 
 - 首次发布：QQ 官方机器人指令面板同步功能 (#1)
 
+[v0.6.1]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.6.0...v0.6.1
 [v0.6.0]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.2...v0.6.0
 [v0.5.2]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.1...v0.5.2
 [v0.5.1]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.0...v0.5.1
