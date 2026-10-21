@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -98,37 +99,49 @@ def test_install_supports_loguru_logger_and_captures_debug() -> None:
     assert entry.message == "debug details"
 
 
-def test_install_accepts_forwarding_logger_proxy() -> None:
-    """AstrBot 4.29+ 的 astrbot.api.logger 是只转发标准 logging 接口的代理。
+def test_install_targets_shared_logger_not_caller_module() -> None:
+    """AstrBot 4.29+ 的 astrbot.api.logger 按调用方模块解析目标，必须绕开这点。
 
-    代理不是 logging.Logger 实例，也没有 Loguru 的 add/remove，
-    安装时必须按 addHandler/removeHandler 能力识别，否则会抛 TypeError。
+    代理不是 logging.Logger 实例，也没有 Loguru 的 add/remove。如果直接用代理
+    的 addHandler，handler 会挂到 `core.log_stream` 解析出的 logger（这里用
+    caller 模拟）上，插件其他模块的日志就进不了缓冲区。
     """
 
-    class ForwardingLoggerProxy:
-        def __init__(self, target: logging.Logger) -> None:
-            self._target = target
+    shared = make_logger("proxy-shared")
+    caller = make_logger("proxy-caller")
+
+    class CallerAwareLoggerProxy:
+        """模拟 astrbot.api._PluginContextLogger：普通属性按调用方模块解析。"""
+
+        def __init__(self) -> None:
+            self.targets: dict[str, logging.Logger] = {}
+            self.fallback = caller
 
         def __getattr__(self, item: str):  # noqa: ANN401
-            return getattr(self._target, item)
+            if item == "name":
+                return shared.name
+            module_name = sys._getframe(1).f_globals.get("__name__", "")
+            return getattr(self.targets.get(module_name, self.fallback), item)
 
-    logger = make_logger("proxy")
-    proxy = ForwardingLoggerProxy(logger)
+    proxy = CallerAwareLoggerProxy()
     assert not isinstance(proxy, logging.Logger)
-    assert not hasattr(logger, "add")
+    assert not hasattr(caller, "add")
 
     buffer = LogBuffer()
     buffer.install(proxy)
     try:
-        assert len(logger.handlers) == 1
-        logger.info("%s via proxy", LOG_TAG)
+        assert len(shared.handlers) == 1
+        assert caller.handlers == []
+        shared.info("%s via shared logger", LOG_TAG)
     finally:
         buffer.close()
 
-    assert logger.handlers == []
+    # close() 使用安装期间绑定的移除方法，不重新走代理解析（此时仍指向 caller）。
+    assert shared.handlers == []
+    assert caller.handlers == []
     entry = asyncio.run(next_entry(buffer))
     assert entry is not None
-    assert entry.message == "via proxy"
+    assert entry.message == "via shared logger"
 
 
 def test_same_prefix_from_another_plugin_is_not_captured(tmp_path: Path) -> None:

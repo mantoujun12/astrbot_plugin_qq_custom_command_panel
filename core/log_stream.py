@@ -119,16 +119,16 @@ class LogBuffer:
 
         try:
             # AstrBot 4.29+ 的 `astrbot.api.logger` 是转发代理，不是 logging.Logger
-            # 实例也不会暴露 Loguru 的 add/remove，但会把标准 logging 接口（如
-            # addHandler / removeHandler）转发给真正的 logger，因此按能力检测。
-            add_handler = getattr(host_logger, "addHandler", None)
-            remove_handler = getattr(host_logger, "removeHandler", None)
-            if callable(add_handler) and callable(remove_handler):
+            # 实例也不会暴露 Loguru 的 add/remove；代理按调用方所在模块解析目标，
+            # 直接调用它的 addHandler 会把 handler 挂到 `core.log_stream` 解析出的
+            # logger 上。这里先解析出具体的标准库 logger，再在其上安装。
+            target = _resolve_standard_logger(host_logger)
+            if target is not None:
                 handler = _LogBufferHandler(self)
-                add_handler(handler)
-                # 代理的属性解析依赖调用方所在模块，这里捕获绑定方法，
-                # 保证 close() 从任意模块调用都能移除同一个 handler。
-                self._remove_handler = remove_handler
+                target.addHandler(handler)
+                # close() 可能从任意模块调用，捕获绑定方法，
+                # 保证移除的是安装时同一个 logger 上的 handler。
+                self._remove_handler = target.removeHandler
                 self._handler = handler
                 return
 
@@ -304,6 +304,24 @@ class LogBuffer:
                 loop.call_soon_threadsafe(event.set)
             except RuntimeError:
                 pass
+
+
+def _resolve_standard_logger(host_logger: Any) -> logging.Logger | None:
+    """把宿主 logger（可能是 AstrBot 的转发代理）解析成具体的标准库 logger。
+
+    AstrBot 4.29+ 的 `astrbot.api.logger` 是按调用方模块解析目标的转发代理，
+    直接调用它的 `addHandler` 会把 handler 挂到 `core.log_stream` 解析出的
+    logger 上。代理会转发 `name`，据此取回插件共享的 logger，这样 handler
+    始终落在插件日志目标上，与调用 `install()` 的模块无关。
+    """
+    if isinstance(host_logger, logging.Logger):
+        return host_logger
+    name = getattr(host_logger, "name", None)
+    if isinstance(name, str) and name:
+        candidate = logging.getLogger(name)
+        if callable(getattr(candidate, "addHandler", None)):
+            return candidate
+    return None
 
 
 def _normalize_level(record: logging.LogRecord) -> str:
