@@ -94,7 +94,7 @@ class LogBuffer:
         self._seq = 0
         self._stream_id = uuid4().hex
         self._closed = False
-        self._logger: Any | None = None
+        self._remove_handler: Any | None = None
         self._handler: _LogBufferHandler | None = None
         self._sink_id: int | None = None
         self._remove_sink: Any | None = None
@@ -118,23 +118,31 @@ class LogBuffer:
             self._closed = False
 
         try:
-            if isinstance(host_logger, logging.Logger):
+            # AstrBot 4.29+ 的 `astrbot.api.logger` 是转发代理，不是 logging.Logger
+            # 实例也不会暴露 Loguru 的 add/remove，但会把标准 logging 接口（如
+            # addHandler / removeHandler）转发给真正的 logger，因此按能力检测。
+            add_handler = getattr(host_logger, "addHandler", None)
+            remove_handler = getattr(host_logger, "removeHandler", None)
+            if callable(add_handler) and callable(remove_handler):
                 handler = _LogBufferHandler(self)
-                host_logger.addHandler(handler)
-                self._logger = host_logger
+                add_handler(handler)
+                # 代理的属性解析依赖调用方所在模块，这里捕获绑定方法，
+                # 保证 close() 从任意模块调用都能移除同一个 handler。
+                self._remove_handler = remove_handler
                 self._handler = handler
                 return
 
             add_sink = getattr(host_logger, "add", None)
             remove_sink = getattr(host_logger, "remove", None)
             if not callable(add_sink) or not callable(remove_sink):
-                raise TypeError("host_logger must be a logging.Logger or provide Loguru add/remove")
+                raise TypeError(
+                    "host_logger must provide addHandler/removeHandler or Loguru add/remove"
+                )
             sink_id = add_sink(
                 self._add_loguru_message,
                 level="DEBUG",
                 filter=self._is_loguru_source,
             )
-            self._logger = host_logger
             self._sink_id = sink_id
             self._remove_sink = remove_sink
         except Exception:
@@ -143,17 +151,17 @@ class LogBuffer:
 
     def close(self) -> None:
         """停止收集并唤醒所有等待中的订阅者。"""
-        logger = self._logger
         handler = self._handler
+        remove_handler = self._remove_handler
         sink_id = self._sink_id
         remove_sink = self._remove_sink
-        self._logger = None
         self._handler = None
+        self._remove_handler = None
         self._sink_id = None
         self._remove_sink = None
         try:
-            if logger is not None and handler is not None:
-                logger.removeHandler(handler)
+            if handler is not None and remove_handler is not None:
+                remove_handler(handler)
                 handler.close()
             elif sink_id is not None and remove_sink is not None:
                 remove_sink(sink_id)

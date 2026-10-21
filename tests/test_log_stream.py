@@ -98,6 +98,39 @@ def test_install_supports_loguru_logger_and_captures_debug() -> None:
     assert entry.message == "debug details"
 
 
+def test_install_accepts_forwarding_logger_proxy() -> None:
+    """AstrBot 4.29+ 的 astrbot.api.logger 是只转发标准 logging 接口的代理。
+
+    代理不是 logging.Logger 实例，也没有 Loguru 的 add/remove，
+    安装时必须按 addHandler/removeHandler 能力识别，否则会抛 TypeError。
+    """
+
+    class ForwardingLoggerProxy:
+        def __init__(self, target: logging.Logger) -> None:
+            self._target = target
+
+        def __getattr__(self, item: str):  # noqa: ANN401
+            return getattr(self._target, item)
+
+    logger = make_logger("proxy")
+    proxy = ForwardingLoggerProxy(logger)
+    assert not isinstance(proxy, logging.Logger)
+    assert not hasattr(logger, "add")
+
+    buffer = LogBuffer()
+    buffer.install(proxy)
+    try:
+        assert len(logger.handlers) == 1
+        logger.info("%s via proxy", LOG_TAG)
+    finally:
+        buffer.close()
+
+    assert logger.handlers == []
+    entry = asyncio.run(next_entry(buffer))
+    assert entry is not None
+    assert entry.message == "via proxy"
+
+
 def test_same_prefix_from_another_plugin_is_not_captured(tmp_path: Path) -> None:
     buffer = LogBuffer()
     outside_record = logging.LogRecord(

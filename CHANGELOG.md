@@ -17,6 +17,7 @@
 
 ### 修复
 
+- 修复在 AstrBot 4.29+ 上插件加载失败并报 `__init__() missing 1 required positional argument: 'config'` 的问题：`astrbot.api.logger` 现为转发代理，日志缓冲安装改为按 `addHandler` / `removeHandler` 能力识别，不再误走 Loguru 分支抛 `TypeError`。
 - 修复日志采集与 Loguru 宿主不兼容、调试日志遗漏、插件重载后流游标失效及旧订阅卡住的问题；同时仅采集本插件源码发出的日志，并限制并发日志流数量。
 - 修复日志页从 mock 切换到真实流时启动日志被游标过滤，以及清空搜索后列表异常的问题。
 
