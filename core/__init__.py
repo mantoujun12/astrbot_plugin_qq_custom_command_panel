@@ -28,6 +28,7 @@ from .i18n import (
     initialize,
     t,
 )
+from .log_stream import LogBuffer, LogEntry
 from .panel_syncer import EventCallback, PanelSyncer, PanelSyncError, ProgressCallback
 from .paths import PLUGIN_NAME, PLUGIN_VERSION, resolve_plugin_data_dir
 from .qq_client import QQClient
@@ -47,6 +48,7 @@ from .state import STATE_FILENAME, PanelStateStore
 from .sync_runner import SyncRunCallable, SyncRunner
 from .web_api import (
     CONFIG_ROUTE_SUFFIX,
+    LOG_EVENTS_ROUTE_SUFFIX,
     STATUS_ROUTE_SUFFIX,
     SYNC_EVENTS_ROUTE_SUFFIX,
     SYNC_ROUTE_SUFFIX,
@@ -62,6 +64,7 @@ __all__ = [
     "DEFAULT_LANGUAGE",
     "DEFAULT_SCENES",
     "LOG_TAG",
+    "LOG_EVENTS_ROUTE_SUFFIX",
     "PANEL_ITEM_DESC_MAX",
     "PANEL_ITEM_NAME_MAX",
     "PANEL_ITEM_TYPE",
@@ -76,6 +79,8 @@ __all__ = [
     "SYNC_EVENTS_ROUTE_SUFFIX",
     "SYNC_ROUTE_SUFFIX",
     "EventCallback",
+    "LogBuffer",
+    "LogEntry",
     "PanelStateStore",
     "PanelSyncError",
     "PanelSyncer",

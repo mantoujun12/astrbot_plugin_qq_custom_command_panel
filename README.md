@@ -167,7 +167,7 @@ python scripts/package_plugin.py       # 生成 dist/<插件名>-<版本>.zip
 
 ```text
 main.py            插件入口（@register / initialize / terminate）
-core/              业务逻辑：config、robot_config、qq_client、panel_syncer、sync_runner、web_api、state、paths、i18n
+core/              业务逻辑：config、robot_config、qq_client、panel_syncer、sync_runner、log_stream、web_api、state、paths、i18n
 _conf_schema.json  WebUI 插件配置 schema（兼容性配置）
 metadata.yaml      插件元数据（版本号唯一来源）
 .astrbot-plugin/   WebUI 侧 i18n（metadata / config / pages）

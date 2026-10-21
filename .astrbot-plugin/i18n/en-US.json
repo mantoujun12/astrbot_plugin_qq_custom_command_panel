@@ -96,7 +96,44 @@
         "openDrawer": "Open sidebar",
         "closeDrawer": "Close sidebar",
         "robots": "Robots",
+        "logs": "Logs",
         "compatibility": "Compatibility"
+      },
+      "logs": {
+        "title": "Logs",
+        "subtitle": "Watch plugin logs in real time. The latest 1000 entries from this process are kept in memory.",
+        "search": "Search logs",
+        "searchPlaceholder": "Search messages or tracebacks",
+        "levelFilter": "Log level filter",
+        "allLevels": "All",
+        "levels": {
+          "debug": "Debug",
+          "info": "Info",
+          "warning": "Warning",
+          "error": "Error",
+          "critical": "Critical"
+        },
+        "pause": "Pause",
+        "resume": "Resume",
+        "resumeWithPending": "Resume ({count} pending)",
+        "autoScroll": "Auto-scroll",
+        "clear": "Clear current view",
+        "retry": "Reconnect",
+        "connection": {
+          "mock": "Local mock",
+          "connected": "Live",
+          "connecting": "Connecting",
+          "disconnected": "Disconnected"
+        },
+        "connectionError": "The log stream was interrupted. Use Reconnect in the toolbar to continue.",
+        "count": "Showing {visible} of {total}",
+        "paused": "Display is paused; logs are still being collected in the background.",
+        "noMatches": "No logs match the current filters.",
+        "empty": "No logs yet. Waiting for plugin output.",
+        "emptyHint": "Sync the panel, save settings, or switch log language to generate new plugin logs.",
+        "showTraceback": "Show traceback",
+        "hideTraceback": "Hide traceback",
+        "mockHint": "Local dev environment: showing mock logs, not connected to the AstrBot backend."
       },
       "status": {
         "title": "Overview",

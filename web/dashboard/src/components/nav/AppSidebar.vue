@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { mdiCogOutline, mdiHistory, mdiRobotOutline, mdiViewDashboardOutline } from '@mdi/js'
+import {
+  mdiCogOutline,
+  mdiConsoleLine,
+  mdiHistory,
+  mdiRobotOutline,
+  mdiViewDashboardOutline,
+} from '@mdi/js'
 import NavItem from './NavItem.vue'
 import { PLUGIN_VERSION } from '../../version'
 
@@ -26,7 +32,13 @@ const mainItems = [
     icon: mdiRobotOutline,
     labelKey: 'pages.dashboard.nav.robots',
     fallback: '机器人',
-  }
+  },
+  {
+    to: '/logs',
+    icon: mdiConsoleLine,
+    labelKey: 'pages.dashboard.nav.logs',
+    fallback: '日志',
+  },
 ]
 
 const bottomItems = [

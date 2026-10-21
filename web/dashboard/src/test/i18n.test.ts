@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { SCENES, type SceneState } from '../types/dashboard'
 import { ROBOT_MESSAGES } from '../api/robots'
 import { MESSAGES } from '../views/compatibilityForm'
+import { LOG_LEVELS } from '../types/logs'
 
 type Dict = Record<string, unknown>
 
@@ -145,6 +146,7 @@ describe('t() calls in the view source', () => {
         (type) => `pages.dashboard.compatibility.platformTypeName.${type}`,
       ),
       ...LANGUAGES.map((language) => `pages.dashboard.settings.languageName.${language}`),
+      ...LOG_LEVELS.map((level) => `pages.dashboard.logs.levels.${level}`),
     ]
 
     const missing = LOCALES.flatMap((locale) =>

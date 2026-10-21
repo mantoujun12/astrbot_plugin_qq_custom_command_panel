@@ -10,6 +10,7 @@
 - ``POST /<plugin_name>/robots/import-legacy`` 从兼容配置导入机器人
 - ``POST /<plugin_name>/sync``        触发一次面板同步（后台任务，单飞）
 - ``GET  /<plugin_name>/sync/events`` SSE 推送同步进度（结构化事件 + 本地化文本）
+- ``GET  /<plugin_name>/logs/events`` SSE 推送插件实时日志（最近 1000 条可回放）
 
 业务逻辑都留在 core 的配置 / 同步模块里，视图层只做组装与协议转换。
 """
@@ -38,6 +39,7 @@ from .config import (
     normalize_config_payload,
 )
 from .i18n import LOG_TAG, t
+from .log_stream import LogBuffer
 from .panel_syncer import PanelSyncer
 from .paths import PLUGIN_NAME, PLUGIN_VERSION
 from .robot_config import (
@@ -58,6 +60,7 @@ ROBOTS_ROUTE_SUFFIX = "robots"
 ROBOTS_IMPORT_ROUTE_SUFFIX = "robots/import-legacy"
 SYNC_ROUTE_SUFFIX = "sync"
 SYNC_EVENTS_ROUTE_SUFFIX = "sync/events"
+LOG_EVENTS_ROUTE_SUFFIX = "logs/events"
 
 # 状态结果缓存时间（秒）：连续查询不重复打 QQ API，刷新/保存配置时绕过或失效
 STATUS_CACHE_TTL = 5.0
@@ -357,6 +360,7 @@ class WebApiBundle:
         save_config: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
         robot_config_dir: Path | None = None,
         get_legacy_config: Callable[[], dict[str, Any]] | None = None,
+        log_buffer: LogBuffer | None = None,
         version: str = PLUGIN_VERSION,
         cache_ttl: float = STATUS_CACHE_TTL,
     ) -> None:
@@ -365,6 +369,7 @@ class WebApiBundle:
         self._save_config = save_config
         self._robot_config_dir = Path(robot_config_dir) if robot_config_dir is not None else None
         self._get_legacy_config = get_legacy_config
+        self._log_buffer = log_buffer
         self._version = version
         self.cache = StatusCache(cache_ttl)
         self.runner = SyncRunner()
@@ -435,6 +440,12 @@ class WebApiBundle:
             self.page_sync_events,
             ["GET"],
             "Plugin dashboard panel sync progress (SSE)",
+        )
+        context.register_web_api(
+            f"{prefix}/{LOG_EVENTS_ROUTE_SUFFIX}",
+            self.page_log_events,
+            ["GET"],
+            "Plugin dashboard live logs (SSE)",
         )
         return True
 
@@ -712,6 +723,28 @@ class WebApiBundle:
 
         return web.stream_response(events())
 
+    async def page_log_events(self) -> Any:
+        """SSE 推送插件日志；since 用于断线重连和页面重新打开后的回放。"""
+        web = _web()
+        log_buffer = self._log_buffer
+        if log_buffer is None:
+            return web.error_response(t("web.not_ready"), status_code=503)
+
+        raw_since = web.request.query.get("since", "")
+        try:
+            since = max(0, int(raw_since))
+        except (TypeError, ValueError):
+            since = 0
+
+        async def events():  # noqa: ANN202 - astrbot.api.web 的流式响应体
+            async for entry in log_buffer.follow(since):
+                if entry is None:
+                    yield ": keep-alive\n\n"
+                    continue
+                yield f"data: {json.dumps(entry.as_event(), ensure_ascii=False)}\n\n"
+
+        return web.stream_response(events())
+
     def _make_run(
         self,
         syncer: PanelSyncer,
@@ -737,6 +770,7 @@ def register_web_apis(
     save_config: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     robot_config_dir: Path | None = None,
     get_legacy_config: Callable[[], dict[str, Any]] | None = None,
+    log_buffer: LogBuffer | None = None,
     version: str = PLUGIN_VERSION,
     cache_ttl: float = STATUS_CACHE_TTL,
 ) -> WebApiBundle | None:
@@ -747,6 +781,7 @@ def register_web_apis(
         save_config=save_config,
         robot_config_dir=robot_config_dir,
         get_legacy_config=get_legacy_config,
+        log_buffer=log_buffer,
         version=version,
         cache_ttl=cache_ttl,
     )
@@ -757,6 +792,7 @@ def register_web_apis(
 
 __all__ = [
     "CONFIG_ROUTE_SUFFIX",
+    "LOG_EVENTS_ROUTE_SUFFIX",
     "ROBOTS_IMPORT_ROUTE_SUFFIX",
     "ROBOTS_ROUTE_SUFFIX",
     "STATUS_CACHE_TTL",

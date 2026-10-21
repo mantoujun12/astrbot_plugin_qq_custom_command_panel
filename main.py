@@ -22,6 +22,7 @@ from .core import (
     PLUGIN_NAME,
     PLUGIN_VERSION,
     SCENES,
+    LogBuffer,
     PanelSyncer,
     WebApiBundle,
     register_web_apis,
@@ -43,6 +44,9 @@ class QQCommandPanelPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+        # 尽早安装日志缓冲，dashboard 打开时才能看到插件启动阶段的记录。
+        self._log_buffer = LogBuffer()
+        self._log_buffer.install(logger)
         # 尽早按配置初始化翻译器，让数据目录解析等启动日志也使用目标语言。
         initialize(
             Path(__file__).resolve().parent / "core" / "i18n",
@@ -54,7 +58,7 @@ class QQCommandPanelPlugin(Star):
         self._http: aiohttp.ClientSession | None = None
         self._syncer: PanelSyncer | None = None
         self._web_api: WebApiBundle | None = None
-        # 注册视图 (Dashboard) 的 Web API：状态概览、配置读写、同步入口；
+        # 注册视图 (Dashboard) 的 Web API：状态、配置、同步与实时日志；
         # syncer 到 initialize() 才创建，因此 handler 在每次请求时再取最新的 syncer / config
         self._web_api = register_web_apis(
             self.context,
@@ -62,6 +66,7 @@ class QQCommandPanelPlugin(Star):
             lambda: dict(self.config),
             save_config=self._save_config,
             robot_config_dir=self.data_dir,
+            log_buffer=self._log_buffer,
         )
 
     async def _save_config(self, values: dict[str, Any]) -> None:
@@ -112,6 +117,7 @@ class QQCommandPanelPlugin(Star):
             await self._http.close()
             self._http = None
         self._syncer = None
+        self._log_buffer.close()
 
 
 __all__ = [

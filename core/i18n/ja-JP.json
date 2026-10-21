@@ -27,6 +27,7 @@
   "log.web_api_unavailable": "プラグインビューの Web API を登録できません（現在の AstrBot バージョンでは未対応です）：{exc}",
   "log.progress_callback_failed": "進捗コールバックに失敗しました：{exc}",
   "log.event_callback_failed": "イベントコールバックに失敗しました：{exc}",
+  "log.stream_entry_truncated": "…（ログは切り詰められました）",
   "log.robot_config_load_failed": "ロボット設定の読み込みに失敗しました：{exc}",
   "log.robot_config_read_failed": "新しいロボット設定の読み込みに失敗しました：{exc}",
   "log.robot_config_save_failed": "新しいロボット設定の保存に失敗しました：{exc}",
