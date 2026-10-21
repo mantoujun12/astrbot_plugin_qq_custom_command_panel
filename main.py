@@ -45,8 +45,11 @@ class QQCommandPanelPlugin(Star):
         super().__init__(context)
         self.config = config
         # 尽早安装日志缓冲，dashboard 打开时才能看到插件启动阶段的记录。
+        # Star 会为插件创建专属 logger，优先挂在它上面：AstrBot 4.29+ 的
+        # astrbot.api.logger 是按调用方模块解析目标的转发代理，直接传它可能
+        # 让 handler 落到别的模块的 logger 上，导致面板看不到日志。
         self._log_buffer = LogBuffer()
-        self._log_buffer.install(logger)
+        self._log_buffer.install(getattr(self, "logger", None) or logger)
         # 尽早按配置初始化翻译器，让数据目录解析等启动日志也使用目标语言。
         initialize(
             Path(__file__).resolve().parent / "core" / "i18n",

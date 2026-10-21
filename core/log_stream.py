@@ -94,7 +94,7 @@ class LogBuffer:
         self._seq = 0
         self._stream_id = uuid4().hex
         self._closed = False
-        self._logger: Any | None = None
+        self._remove_handler: Any | None = None
         self._handler: _LogBufferHandler | None = None
         self._sink_id: int | None = None
         self._remove_sink: Any | None = None
@@ -118,23 +118,31 @@ class LogBuffer:
             self._closed = False
 
         try:
-            if isinstance(host_logger, logging.Logger):
+            # AstrBot 4.29+ 的 `astrbot.api.logger` 是转发代理，不是 logging.Logger
+            # 实例也不会暴露 Loguru 的 add/remove；代理按调用方所在模块解析目标，
+            # 直接调用它的 addHandler 会把 handler 挂到 `core.log_stream` 解析出的
+            # logger 上。这里先解析出具体的标准库 logger，再在其上安装。
+            target = _resolve_standard_logger(host_logger)
+            if target is not None:
                 handler = _LogBufferHandler(self)
-                host_logger.addHandler(handler)
-                self._logger = host_logger
+                target.addHandler(handler)
+                # close() 可能从任意模块调用，捕获绑定方法，
+                # 保证移除的是安装时同一个 logger 上的 handler。
+                self._remove_handler = target.removeHandler
                 self._handler = handler
                 return
 
             add_sink = getattr(host_logger, "add", None)
             remove_sink = getattr(host_logger, "remove", None)
             if not callable(add_sink) or not callable(remove_sink):
-                raise TypeError("host_logger must be a logging.Logger or provide Loguru add/remove")
+                raise TypeError(
+                    "host_logger must provide addHandler/removeHandler or Loguru add/remove"
+                )
             sink_id = add_sink(
                 self._add_loguru_message,
                 level="DEBUG",
                 filter=self._is_loguru_source,
             )
-            self._logger = host_logger
             self._sink_id = sink_id
             self._remove_sink = remove_sink
         except Exception:
@@ -143,17 +151,17 @@ class LogBuffer:
 
     def close(self) -> None:
         """停止收集并唤醒所有等待中的订阅者。"""
-        logger = self._logger
         handler = self._handler
+        remove_handler = self._remove_handler
         sink_id = self._sink_id
         remove_sink = self._remove_sink
-        self._logger = None
         self._handler = None
+        self._remove_handler = None
         self._sink_id = None
         self._remove_sink = None
         try:
-            if logger is not None and handler is not None:
-                logger.removeHandler(handler)
+            if handler is not None and remove_handler is not None:
+                remove_handler(handler)
                 handler.close()
             elif sink_id is not None and remove_sink is not None:
                 remove_sink(sink_id)
@@ -296,6 +304,24 @@ class LogBuffer:
                 loop.call_soon_threadsafe(event.set)
             except RuntimeError:
                 pass
+
+
+def _resolve_standard_logger(host_logger: Any) -> logging.Logger | None:
+    """把宿主 logger（可能是 AstrBot 的转发代理）解析成具体的标准库 logger。
+
+    AstrBot 4.29+ 的 `astrbot.api.logger` 是按调用方模块解析目标的转发代理，
+    直接调用它的 `addHandler` 会把 handler 挂到 `core.log_stream` 解析出的
+    logger 上。代理会转发 `name`，据此取回插件共享的 logger，这样 handler
+    始终落在插件日志目标上，与调用 `install()` 的模块无关。
+    """
+    if isinstance(host_logger, logging.Logger):
+        return host_logger
+    name = getattr(host_logger, "name", None)
+    if isinstance(name, str) and name:
+        candidate = logging.getLogger(name)
+        if callable(getattr(candidate, "addHandler", None)):
+            return candidate
+    return None
 
 
 def _normalize_level(record: logging.LogRecord) -> str:
