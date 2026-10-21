@@ -25,7 +25,7 @@ from .i18n import LOG_TAG, t
 
 PLUGIN_NAME = "astrbot_plugin_qq_custom_command_panel"
 # 插件版本，与 metadata.yaml 的 version 保持一致；供 @register 与视图状态接口共用
-PLUGIN_VERSION = "v0.6.0"
+PLUGIN_VERSION = "v0.6.1"
 
 
 def _import_optional(module_name: str) -> Any:
