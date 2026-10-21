@@ -1043,12 +1043,15 @@ async def test_page_log_events_streams_history(monkeypatch: pytest.MonkeyPatch) 
     try:
         response = await bundle.page_log_events()
         events = captured["events"]
+        stream = await asyncio.wait_for(anext(events), timeout=1)
         first = await asyncio.wait_for(anext(events), timeout=1)
         await events.aclose()
     finally:
         log_buffer.close()
 
     assert response == "stream"
+    assert '"type": "stream"' in stream
+    assert f'"id": "{log_buffer.stream_id}"' in stream
     assert first.startswith("data: ")
     assert '"message": "dashboard ready"' in first
 
@@ -1077,12 +1080,70 @@ async def test_page_log_events_invalid_since_defaults_to_zero(
     monkeypatch.setattr("astrbot.api.web.stream_response", capture)
     try:
         await bundle.page_log_events()
-        first = await asyncio.wait_for(anext(captured["events"]), timeout=1)
-        await captured["events"].aclose()
+        events = captured["events"]
+        await asyncio.wait_for(anext(events), timeout=1)
+        first = await asyncio.wait_for(anext(events), timeout=1)
+        await events.aclose()
     finally:
         log_buffer.close()
 
     assert '"message": "replay"' in first
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_resets_cursor_for_reloaded_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    log_buffer = LogBuffer(heartbeat_seconds=0.01)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    request.query.set_values({"since": "5", "streamId": "old-stream"})
+    captured: dict[str, Any] = {}
+
+    def capture(events: Any) -> str:
+        captured["events"] = events
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    await bundle.page_log_events()
+    events = captured["events"]
+    try:
+        first = await asyncio.wait_for(anext(events), timeout=1)
+        heartbeat = await asyncio.wait_for(anext(events), timeout=1)
+    finally:
+        await events.aclose()
+
+    assert '"reset": true' in first
+    assert heartbeat == ": keep-alive\n\n"
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_closes_excess_subscriber(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    log_buffer = LogBuffer(max_subscribers=1, heartbeat_seconds=0.01)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    captured: list[Any] = []
+
+    def capture(events: Any) -> str:
+        captured.append(events)
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    await bundle.page_log_events()
+    await bundle.page_log_events()
+    first, second = captured
+    try:
+        await anext(first)
+        assert await asyncio.wait_for(anext(first), timeout=1) == ": keep-alive\n\n"
+        await anext(second)
+        rejected = await asyncio.wait_for(anext(second), timeout=1)
+    finally:
+        await first.aclose()
+        await second.aclose()
+
+    assert '"code": "subscriber_limit"' in rejected
 
 
 @pytest.mark.asyncio
@@ -1103,6 +1164,7 @@ async def test_page_log_events_emits_keep_alive(
     monkeypatch.setattr("astrbot.api.web.stream_response", capture)
     await bundle.page_log_events()
     try:
+        await asyncio.wait_for(anext(captured["events"]), timeout=1)
         heartbeat = await asyncio.wait_for(anext(captured["events"]), timeout=1)
     finally:
         await captured["events"].aclose()

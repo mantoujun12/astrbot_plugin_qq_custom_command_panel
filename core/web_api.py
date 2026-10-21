@@ -39,7 +39,7 @@ from .config import (
     normalize_config_payload,
 )
 from .i18n import LOG_TAG, t
-from .log_stream import LogBuffer
+from .log_stream import LogBuffer, LogSubscriberLimitError
 from .panel_syncer import PanelSyncer
 from .paths import PLUGIN_NAME, PLUGIN_VERSION
 from .robot_config import (
@@ -735,13 +735,25 @@ class WebApiBundle:
             since = max(0, int(raw_since))
         except (TypeError, ValueError):
             since = 0
+        client_stream_id = web.request.query.get("streamId", "")
+        stream_id = log_buffer.stream_id
+        reset = (bool(client_stream_id) and client_stream_id != stream_id) or (
+            since > log_buffer.last_seq
+        )
+        if reset:
+            since = 0
 
         async def events():  # noqa: ANN202 - astrbot.api.web 的流式响应体
-            async for entry in log_buffer.follow(since):
-                if entry is None:
-                    yield ": keep-alive\n\n"
-                    continue
-                yield f"data: {json.dumps(entry.as_event(), ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'stream', 'id': stream_id, 'reset': reset})}\n\n"
+            try:
+                async for entry in log_buffer.follow(since):
+                    if entry is None:
+                        yield ": keep-alive\n\n"
+                        continue
+                    yield f"data: {json.dumps(entry.as_event(), ensure_ascii=False)}\n\n"
+            except LogSubscriberLimitError:
+                event = {"type": "error", "code": "subscriber_limit"}
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
         return web.stream_response(events())
 

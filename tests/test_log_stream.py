@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from core.i18n import LOG_TAG, t
-from core.log_stream import MAX_LOG_ENTRY_CHARS, LogBuffer
+from core.log_stream import (
+    MAX_LOG_ENTRY_CHARS,
+    LogBuffer,
+    LogSubscriberLimitError,
+)
 
 
 def make_logger(name: str) -> logging.Logger:
@@ -45,6 +52,67 @@ async def test_install_filters_prefix_and_formats_record() -> None:
     assert entry.level == "info"
     assert entry.message == "plugin booted"
     assert entry.timestamp.endswith("Z")
+
+
+def test_install_supports_loguru_logger_and_captures_debug() -> None:
+    class FakeLoguruLogger:
+        def __init__(self) -> None:
+            self.sink = None
+            self.filter = None
+            self.level = None
+            self.removed = None
+
+        def add(self, sink, *, level, filter):  # noqa: ANN001, ANN202
+            self.sink = sink
+            self.filter = filter
+            self.level = level
+            return 42
+
+        def remove(self, sink_id):  # noqa: ANN001
+            self.removed = sink_id
+
+    logger = FakeLoguruLogger()
+    buffer = LogBuffer()
+    buffer.install(logger)
+    try:
+        source = SimpleNamespace(path=str(Path(__file__).resolve()))
+        record = {
+            "file": source,
+            "level": SimpleNamespace(no=logging.DEBUG),
+            "name": "core.panel_syncer",
+            "line": 20,
+            "message": f"{LOG_TAG} debug details",
+            "exception": None,
+            "time": datetime.now(timezone.utc),  # noqa: UP017 - Python 3.10 compatibility
+        }
+        assert logger.level == "DEBUG"
+        assert logger.filter(record)
+        logger.sink(SimpleNamespace(record=record))
+    finally:
+        buffer.close()
+
+    entry = asyncio.run(next_entry(buffer))
+    assert logger.removed == 42
+    assert entry is not None
+    assert entry.level == "debug"
+    assert entry.message == "debug details"
+
+
+def test_same_prefix_from_another_plugin_is_not_captured(tmp_path: Path) -> None:
+    buffer = LogBuffer()
+    outside_record = logging.LogRecord(
+        name="another-plugin",
+        level=logging.INFO,
+        pathname=str(tmp_path / "another_plugin.py"),
+        lineno=1,
+        msg=f"{LOG_TAG} should not be captured",
+        args=(),
+        exc_info=None,
+    )
+
+    buffer.add_record(outside_record)
+
+    assert buffer.last_seq == 0
 
 
 @pytest.mark.asyncio
@@ -157,6 +225,53 @@ async def test_follow_receives_live_entries_and_supports_multiple_subscribers() 
 
 
 @pytest.mark.asyncio
+async def test_install_does_not_replace_an_active_buffer_handler() -> None:
+    logger = make_logger("replace")
+    first_buffer = LogBuffer()
+    first_buffer.install(logger)
+    stream = first_buffer.follow(0, heartbeat_seconds=10)
+    pending = asyncio.create_task(anext(stream))
+    await asyncio.sleep(0)
+
+    second_buffer = LogBuffer()
+    second_buffer.install(logger)
+    assert len(logger.handlers) == 2
+    first_buffer.close()
+
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(pending, timeout=1)
+    await stream.aclose()
+
+    try:
+        logger.info(f"{LOG_TAG} after replacement")
+    finally:
+        second_buffer.close()
+
+    entry = await next_entry(second_buffer)
+    assert len(logger.handlers) == 0
+    assert entry is not None
+    assert entry.message == "after replacement"
+
+
+@pytest.mark.asyncio
+async def test_follow_limits_concurrent_subscribers() -> None:
+    buffer = LogBuffer(max_subscribers=1)
+    first = buffer.follow()
+    pending = asyncio.create_task(anext(first))
+    await asyncio.sleep(0)
+    second = buffer.follow()
+
+    with pytest.raises(LogSubscriberLimitError):
+        await anext(second)
+
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    await first.aclose()
+    buffer.close()
+
+
+@pytest.mark.asyncio
 async def test_follow_is_woken_by_logs_from_worker_threads() -> None:
     buffer = LogBuffer()
     logger = make_logger("thread")
@@ -165,8 +280,11 @@ async def test_follow_is_woken_by_logs_from_worker_threads() -> None:
     pending = asyncio.create_task(anext(stream))
     await asyncio.sleep(0)
 
+    def log_from_plugin_thread() -> None:
+        logger.info(f"{LOG_TAG} from thread")
+
     try:
-        await asyncio.to_thread(logger.info, f"{LOG_TAG} from thread")
+        await asyncio.to_thread(log_from_plugin_thread)
         entry = await asyncio.wait_for(pending, timeout=1)
     finally:
         await stream.aclose()
