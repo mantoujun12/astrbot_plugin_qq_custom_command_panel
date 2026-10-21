@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,11 +17,13 @@ import pytest
 
 from core.config import PANEL_MAX_ITEMS, SCENES
 from core.i18n import Translator
+from core.log_stream import LogBuffer
 from core.panel_syncer import PanelSyncer
 from core.paths import PLUGIN_NAME, PLUGIN_VERSION
 from core.robot_config import RobotConfigError, load_robot_config
 from core.web_api import (
     CONFIG_ROUTE_SUFFIX,
+    LOG_EVENTS_ROUTE_SUFFIX,
     ROBOTS_IMPORT_ROUTE_SUFFIX,
     ROBOTS_ROUTE_SUFFIX,
     STATUS_ROUTE_SUFFIX,
@@ -1017,6 +1020,168 @@ async def test_page_sync_events_not_ready() -> None:
     assert response["status_code"] == 503
 
 
+@pytest.mark.asyncio
+async def test_page_log_events_streams_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    from astrbot.api.web import request
+
+    host_logger = logging.getLogger("test-web-api-logs")
+    host_logger.handlers.clear()
+    host_logger.propagate = False
+    host_logger.setLevel(logging.INFO)
+    log_buffer = LogBuffer()
+    log_buffer.install(host_logger)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    host_logger.info("[qq-command-panel] dashboard ready")
+    request.query.set_values({"since": "0"})
+    captured: dict[str, Any] = {}
+
+    def capture(events: Any) -> str:
+        captured["events"] = events
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    try:
+        response = await bundle.page_log_events()
+        events = captured["events"]
+        stream = await asyncio.wait_for(anext(events), timeout=1)
+        first = await asyncio.wait_for(anext(events), timeout=1)
+        await events.aclose()
+    finally:
+        log_buffer.close()
+
+    assert response == "stream"
+    assert '"type": "stream"' in stream
+    assert f'"id": "{log_buffer.stream_id}"' in stream
+    assert first.startswith("data: ")
+    assert '"message": "dashboard ready"' in first
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_invalid_since_defaults_to_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    host_logger = logging.getLogger("test-web-api-invalid-since")
+    host_logger.handlers.clear()
+    host_logger.propagate = False
+    host_logger.setLevel(logging.INFO)
+    log_buffer = LogBuffer()
+    log_buffer.install(host_logger)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    host_logger.info("[qq-command-panel] replay")
+    request.query.set_values({"since": "bad"})
+    captured: dict[str, Any] = {}
+
+    def capture(events: Any) -> str:
+        captured["events"] = events
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    try:
+        await bundle.page_log_events()
+        events = captured["events"]
+        await asyncio.wait_for(anext(events), timeout=1)
+        first = await asyncio.wait_for(anext(events), timeout=1)
+        await events.aclose()
+    finally:
+        log_buffer.close()
+
+    assert '"message": "replay"' in first
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_resets_cursor_for_reloaded_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    log_buffer = LogBuffer(heartbeat_seconds=0.01)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    request.query.set_values({"since": "5", "streamId": "old-stream"})
+    captured: dict[str, Any] = {}
+
+    def capture(events: Any) -> str:
+        captured["events"] = events
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    await bundle.page_log_events()
+    events = captured["events"]
+    try:
+        first = await asyncio.wait_for(anext(events), timeout=1)
+        heartbeat = await asyncio.wait_for(anext(events), timeout=1)
+    finally:
+        await events.aclose()
+
+    assert '"reset": true' in first
+    assert heartbeat == ": keep-alive\n\n"
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_closes_excess_subscriber(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    log_buffer = LogBuffer(max_subscribers=1, heartbeat_seconds=0.01)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    captured: list[Any] = []
+
+    def capture(events: Any) -> str:
+        captured.append(events)
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    await bundle.page_log_events()
+    await bundle.page_log_events()
+    first, second = captured
+    try:
+        await anext(first)
+        assert await asyncio.wait_for(anext(first), timeout=1) == ": keep-alive\n\n"
+        await anext(second)
+        rejected = await asyncio.wait_for(anext(second), timeout=1)
+    finally:
+        await first.aclose()
+        await second.aclose()
+
+    assert '"code": "subscriber_limit"' in rejected
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_emits_keep_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.api.web import request
+
+    log_buffer = LogBuffer(heartbeat_seconds=0.01)
+    bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
+    request.query.set_values({})
+    captured: dict[str, Any] = {}
+
+    def capture(events: Any) -> str:
+        captured["events"] = events
+        return "stream"
+
+    monkeypatch.setattr("astrbot.api.web.stream_response", capture)
+    await bundle.page_log_events()
+    try:
+        await asyncio.wait_for(anext(captured["events"]), timeout=1)
+        heartbeat = await asyncio.wait_for(anext(captured["events"]), timeout=1)
+    finally:
+        await captured["events"].aclose()
+
+    assert heartbeat == ": keep-alive\n\n"
+
+
+@pytest.mark.asyncio
+async def test_page_log_events_not_ready_without_buffer() -> None:
+    bundle = WebApiBundle(lambda: None, lambda: {})
+
+    response = await bundle.page_log_events()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 503
+
+
 # ---------------------------------------------------------------------------
 # register_web_apis
 # ---------------------------------------------------------------------------
@@ -1040,6 +1205,7 @@ def test_register_web_apis_registers_all_routes() -> None:
         (f"/{PLUGIN_NAME}/{ROBOTS_IMPORT_ROUTE_SUFFIX}", ("POST",)),
         (f"/{PLUGIN_NAME}/{SYNC_ROUTE_SUFFIX}", ("POST",)),
         (f"/{PLUGIN_NAME}/{SYNC_EVENTS_ROUTE_SUFFIX}", ("GET",)),
+        (f"/{PLUGIN_NAME}/{LOG_EVENTS_ROUTE_SUFFIX}", ("GET",)),
     }
 
 

@@ -27,6 +27,7 @@
   "log.web_api_unavailable": "无法注册插件视图 Web API（当前 AstrBot 版本不支持）：{exc}",
   "log.progress_callback_failed": "进度回调失败：{exc}",
   "log.event_callback_failed": "事件回调失败：{exc}",
+  "log.stream_entry_truncated": "…（日志已截断）",
   "log.robot_config_load_failed": "加载机器人配置失败：{exc}",
   "log.robot_config_read_failed": "读取新版机器人配置失败：{exc}",
   "log.robot_config_save_failed": "保存新版机器人配置失败：{exc}",

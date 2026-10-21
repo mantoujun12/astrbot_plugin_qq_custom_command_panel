@@ -436,6 +436,310 @@
   }
 }
 
+/* 日志页固定在可视高度内：标题和工具栏不动，只有日志列表滚动。 */
+.qc-logs-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--v-layout-top, 0px) - var(--v-layout-bottom, 0px));
+  height: calc(100dvh - var(--v-layout-top, 0px) - var(--v-layout-bottom, 0px));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.qc-logs-page > .qc-header,
+.qc-logs-page > .qc-logs-alert {
+  flex: 0 0 auto;
+}
+
+.qc-logs-alert {
+  margin-bottom: 16px;
+}
+
+.qc-logs-card {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.qc-logs-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid var(--qc-border);
+}
+
+.qc-log-search {
+  flex: 1 1 260px;
+  min-width: 210px;
+}
+
+.qc-log-levels,
+.qc-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-log-actions {
+  margin-left: auto;
+}
+
+.qc-log-level-all,
+.qc-log-level {
+  border-radius: 999px;
+  text-transform: none;
+}
+
+.qc-log-level.qc-log-level--active.qc-log-level--debug {
+  background: rgba(var(--v-theme-on-surface), 0.14);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.qc-log-level.qc-log-level--active.qc-log-level--info {
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+}
+
+.qc-log-level.qc-log-level--active.qc-log-level--warning {
+  background: rgb(var(--v-theme-warning));
+  color: rgb(var(--v-theme-on-warning));
+}
+
+.qc-log-level.qc-log-level--active.qc-log-level--error {
+  background: color-mix(in srgb, rgb(var(--v-theme-error)) 48%, white);
+  color: color-mix(in srgb, rgb(var(--v-theme-error)) 40%, black);
+}
+
+.qc-log-level.qc-log-level--active.qc-log-level--critical {
+  background: color-mix(in srgb, rgb(var(--v-theme-error)) 62%, black);
+  color: rgb(var(--v-theme-on-error));
+}
+
+.qc-log-autoscroll {
+  flex: 0 0 auto;
+}
+
+.qc-log-autoscroll .v-label {
+  font-size: 13px;
+  opacity: 0.82;
+}
+
+.qc-log-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--qc-border);
+  border-radius: 999px;
+  color: var(--qc-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qc-log-connection::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-on-surface), 0.36);
+  content: '';
+}
+
+.qc-log-connection--connected::before {
+  background: rgb(var(--v-theme-success));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-success), 0.14);
+}
+
+.qc-log-connection--connecting::before {
+  background: rgb(var(--v-theme-warning));
+}
+
+.qc-log-connection--disconnected {
+  color: rgb(var(--v-theme-error));
+}
+
+.qc-log-connection--disconnected::before {
+  background: rgb(var(--v-theme-error));
+}
+
+.qc-log-connection--mock::before {
+  background: rgb(var(--v-theme-info));
+}
+
+.qc-logs-summary {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--qc-border);
+  color: var(--qc-subtle);
+  font-size: 12px;
+}
+
+.qc-log-paused-note {
+  color: rgb(var(--v-theme-warning));
+}
+
+.qc-log-viewport {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: color-mix(in srgb, rgb(var(--v-theme-surface)) 96%, rgb(var(--v-theme-on-surface)));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.qc-logs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.qc-logs-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qc-logs-empty-hint {
+  max-width: 520px;
+  margin-top: 7px;
+  color: var(--qc-subtle);
+  font-family: var(--v-font-body);
+  font-size: 12px;
+}
+
+.qc-log-row {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 5px 16px;
+  padding: 11px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--qc-border) 65%, transparent);
+}
+
+.qc-log-row:hover {
+  background: rgba(var(--v-theme-on-surface), 0.03);
+}
+
+.qc-log-time {
+  color: var(--qc-subtle);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.qc-log-level-badge {
+  min-width: 3.5rem;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  font-family: var(--v-font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.qc-log-level-badge--info {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+}
+
+.qc-log-level-badge--warning {
+  background: rgba(var(--v-theme-warning), 0.14);
+  color: rgb(var(--v-theme-warning));
+}
+
+.qc-log-level-badge--error {
+  background: rgba(var(--v-theme-error), 0.14);
+  color: color-mix(in srgb, rgb(var(--v-theme-error)) 52%, white);
+}
+
+.qc-log-level-badge--critical {
+  background: color-mix(in srgb, rgb(var(--v-theme-error)) 68%, black);
+  color: white;
+}
+
+.qc-log-level-badge--critical {
+  font-weight: 800;
+}
+
+.qc-log-content {
+  min-width: 0;
+}
+
+.qc-log-message {
+  color: var(--qc-text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.qc-log-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(var(--v-theme-primary), 0.9);
+  cursor: pointer;
+  font-family: var(--v-font-body);
+  font-size: 11.5px;
+}
+
+.qc-log-traceback {
+  margin: 7px 0 2px;
+  padding: 9px 11px;
+  overflow: auto;
+  border: 1px solid var(--qc-border);
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  color: var(--qc-muted);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 699.98px) {
+  .qc-logs-toolbar {
+    align-items: stretch;
+    padding: 14px;
+  }
+
+  .qc-log-search,
+  .qc-log-levels,
+  .qc-log-actions {
+    width: 100%;
+  }
+
+  .qc-log-actions {
+    margin-left: 0;
+  }
+
+  .qc-log-row {
+    grid-template-columns: max-content max-content;
+    gap: 6px 12px;
+    padding: 11px 14px;
+  }
+
+  .qc-log-content {
+    grid-column: 1 / -1;
+  }
+}
+
 /* 浮层里的卡片一律给实底。outlined / text 变体在 Vuetify 里是 background: transparent，
    页面卡片这么写没问题（下面就是页面实色底），但同一套写法搬进弹窗就会透出遮罩、
    看着像坏了，所以在这里兜住，新加的弹窗不用记这条。

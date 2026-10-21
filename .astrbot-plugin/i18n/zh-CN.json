@@ -96,7 +96,44 @@
         "openDrawer": "打开侧边栏",
         "closeDrawer": "关闭侧边栏",
         "robots": "机器人",
+        "logs": "日志",
         "compatibility": "兼容性"
+      },
+      "logs": {
+        "title": "日志",
+        "subtitle": "实时查看本插件输出的日志，最多保留当前进程最近 1000 条。",
+        "search": "搜索日志",
+        "searchPlaceholder": "搜索消息或堆栈内容",
+        "levelFilter": "日志等级过滤",
+        "allLevels": "全部",
+        "levels": {
+          "debug": "调试",
+          "info": "信息",
+          "warning": "警告",
+          "error": "错误",
+          "critical": "严重"
+        },
+        "pause": "暂停",
+        "resume": "继续",
+        "resumeWithPending": "继续（{count} 条待显示）",
+        "autoScroll": "自动滚动",
+        "clear": "清空当前视图",
+        "retry": "重新连接",
+        "connection": {
+          "mock": "本地模拟",
+          "connected": "实时连接",
+          "connecting": "连接中",
+          "disconnected": "连接已断开"
+        },
+        "connectionError": "日志流已中断，点击工具栏里的重新连接继续接收。",
+        "count": "显示 {visible} / {total} 条",
+        "paused": "已暂停显示，后台仍在收集日志。",
+        "noMatches": "没有符合筛选条件的日志。",
+        "empty": "还没有日志，等待插件输出。",
+        "emptyHint": "同步面板、保存配置或切换日志语言后，新的插件日志会显示在这里。",
+        "showTraceback": "展开堆栈",
+        "hideTraceback": "收起堆栈",
+        "mockHint": "本地开发环境：展示的是 mock 日志，未连接 AstrBot 后端。"
       },
       "status": {
         "title": "状态概览",

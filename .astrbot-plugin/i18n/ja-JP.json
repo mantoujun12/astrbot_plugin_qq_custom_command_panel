@@ -96,7 +96,44 @@
         "openDrawer": "サイドバーを開く",
         "closeDrawer": "サイドバーを閉じる",
         "robots": "ロボット",
+        "logs": "ログ",
         "compatibility": "互換性"
+      },
+      "logs": {
+        "title": "ログ",
+        "subtitle": "プラグインのログをリアルタイムで表示します。現在のプロセスで直近 1000 件をメモリに保持します。",
+        "search": "ログを検索",
+        "searchPlaceholder": "メッセージまたはスタックトレースを検索",
+        "levelFilter": "ログレベルフィルター",
+        "allLevels": "すべて",
+        "levels": {
+          "debug": "デバッグ",
+          "info": "情報",
+          "warning": "警告",
+          "error": "エラー",
+          "critical": "重大"
+        },
+        "pause": "一時停止",
+        "resume": "再開",
+        "resumeWithPending": "再開（{count} 件待機）",
+        "autoScroll": "自動スクロール",
+        "clear": "現在の表示をクリア",
+        "retry": "再接続",
+        "connection": {
+          "mock": "ローカルモック",
+          "connected": "リアルタイム接続",
+          "connecting": "接続中",
+          "disconnected": "接続が切れました"
+        },
+        "connectionError": "ログストリームが中断されました。ツールバーの「再接続」を押してください。",
+        "count": "{visible} / {total} 件を表示",
+        "paused": "表示は一時停止中です。バックグラウンドではログを収集しています。",
+        "noMatches": "フィルターに一致するログはありません。",
+        "empty": "ログはまだありません。プラグインの出力を待っています。",
+        "emptyHint": "パネル同期、設定保存、ログ言語の変更後に新しいログが表示されます。",
+        "showTraceback": "スタックトレースを表示",
+        "hideTraceback": "スタックトレースを閉じる",
+        "mockHint": "ローカル開発環境：AstrBot バックエンドに接続せず、モックログを表示しています。"
       },
       "status": {
         "title": "概要",

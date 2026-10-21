@@ -27,6 +27,7 @@
   "log.web_api_unavailable": "cannot register plugin view Web API (unsupported AstrBot version): {exc}",
   "log.progress_callback_failed": "progress callback failed: {exc}",
   "log.event_callback_failed": "event callback failed: {exc}",
+  "log.stream_entry_truncated": "... (log truncated)",
   "log.robot_config_load_failed": "failed to load robot config: {exc}",
   "log.robot_config_read_failed": "failed to read robot config: {exc}",
   "log.robot_config_save_failed": "failed to save robot config: {exc}",

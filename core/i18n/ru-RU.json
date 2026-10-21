@@ -27,6 +27,7 @@
   "log.web_api_unavailable": "не удалось зарегистрировать Web API представления плагина (текущая версия AstrBot не поддерживает его): {exc}",
   "log.progress_callback_failed": "ошибка обратного вызова прогресса: {exc}",
   "log.event_callback_failed": "ошибка обратного вызова события: {exc}",
+  "log.stream_entry_truncated": "... (журнал усечён)",
   "log.robot_config_load_failed": "не удалось загрузить конфигурацию роботов: {exc}",
   "log.robot_config_read_failed": "не удалось прочитать новую конфигурацию роботов: {exc}",
   "log.robot_config_save_failed": "не удалось сохранить новую конфигурацию роботов: {exc}",

@@ -23,11 +23,13 @@ describe('AppSidebar', () => {
     expect(wrapper.get('.qc-sidebar-brand-title').text()).toBe('指令面板')
     expect(wrapper.text()).toContain('状态概览')
     expect(wrapper.text()).toContain('机器人')
+    expect(wrapper.text()).toContain('日志')
     expect(wrapper.text()).toContain('兼容性')
     expect(wrapper.text()).toContain('设置')
     expect(wrapper.findAll('a').map((link) => link.attributes('href'))).toEqual([
       expect.stringContaining('/status'),
       expect.stringContaining('/robots'),
+      expect.stringContaining('/logs'),
       expect.stringContaining('/compatibility'),
       expect.stringContaining('/settings'),
     ])
