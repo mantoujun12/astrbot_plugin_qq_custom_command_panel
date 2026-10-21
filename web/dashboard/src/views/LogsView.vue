@@ -14,7 +14,7 @@ import { getMockLogs, subscribeLogs } from '../api/logs'
 import type { LogSubscription } from '../api/logs'
 import { useBridge } from '../composables/useBridge'
 import { LOG_LEVELS } from '../types/logs'
-import type { LogEvent, LogLevel } from '../types/logs'
+import type { LogEvent, LogLevel, LogStreamInfo } from '../types/logs'
 
 const MAX_VIEW_LOGS = 1000
 const LEVEL_FALLBACKS: Record<LogLevel, string> = {
@@ -30,12 +30,13 @@ const logs = ref<LogEvent[]>([])
 const pendingLogs = ref<LogEvent[]>([])
 const frozenLogs = ref<LogEvent[]>([])
 const paused = ref(false)
-const search = ref('')
+const search = ref<string | null>('')
 const selectedLevels = ref<LogLevel[]>([...LOG_LEVELS])
 const autoScroll = ref(true)
 const connection = ref<'connecting' | 'connected' | 'disconnected' | 'mock'>('connecting')
 const connectionError = ref(false)
 const lastSeq = ref(0)
+const streamId = ref<string | undefined>()
 const expandedSeqs = ref<Set<number>>(new Set())
 const viewport = ref<HTMLElement | null>(null)
 
@@ -45,7 +46,7 @@ let disposed = false
 
 const sourceLogs = computed(() => (paused.value ? frozenLogs.value : logs.value))
 const visibleLogs = computed(() => {
-  const query = search.value.trim().toLocaleLowerCase(locale.value)
+  const query = (search.value ?? '').trim().toLocaleLowerCase(locale.value)
   const levels = new Set(selectedLevels.value)
   return sourceLogs.value.filter((entry) => {
     if (!levels.has(entry.level)) {
@@ -147,11 +148,21 @@ function clearView(): void {
   expandedSeqs.value = new Set()
 }
 
+function resetStream(): void {
+  logs.value = []
+  frozenLogs.value = []
+  pendingLogs.value = []
+  expandedSeqs.value = new Set()
+  paused.value = false
+  lastSeq.value = 0
+}
+
 function loadMock(): void {
   generation += 1
   void stopSubscription()
+  resetStream()
+  streamId.value = undefined
   logs.value = getMockLogs()
-  lastSeq.value = logs.value.at(-1)?.seq ?? 0
   connection.value = 'mock'
   connectionError.value = false
   if (autoScroll.value) {
@@ -178,6 +189,12 @@ async function connectLogs(since = 0): Promise<void> {
     return
   }
 
+  if (connection.value === 'mock') {
+    resetStream()
+    streamId.value = undefined
+    since = 0
+  }
+
   generation += 1
   const currentGeneration = generation
   await stopSubscription()
@@ -187,6 +204,7 @@ async function connectLogs(since = 0): Promise<void> {
   try {
     const next = await subscribeLogs({
       since,
+      streamId: streamId.value,
       onOpen: () => {
         if (!disposed && currentGeneration === generation) {
           connection.value = 'connected'
@@ -197,6 +215,15 @@ async function connectLogs(since = 0): Promise<void> {
         if (!disposed && currentGeneration === generation) {
           receive(entry)
         }
+      },
+      onStream: (info: LogStreamInfo) => {
+        if (disposed || currentGeneration !== generation) {
+          return
+        }
+        if (info.reset) {
+          resetStream()
+        }
+        streamId.value = info.id
       },
       onError: () => {
         if (disposed || currentGeneration !== generation) {

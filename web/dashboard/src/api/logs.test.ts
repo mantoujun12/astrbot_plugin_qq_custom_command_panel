@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getMockLogs, isLogEvent, subscribeLogs } from './logs'
+import { getMockLogs, isLogEvent, isLogStreamInfo, subscribeLogs } from './logs'
 import { createBridgeStub } from '../test/helpers'
-import type { LogEvent } from '../types/logs'
+import type { LogEvent, LogStreamInfo } from '../types/logs'
 
 afterEach(() => {
   delete window.AstrBotPluginView
@@ -23,6 +23,14 @@ describe('isLogEvent', () => {
   it('accepts the backend log contract', () => {
     expect(isLogEvent(logEvent())).toBe(true)
     expect(isLogEvent(logEvent({ traceback: 'Traceback' }))).toBe(true)
+  })
+
+  describe('isLogStreamInfo', () => {
+    it('accepts stream identity and reset state', () => {
+      const info: LogStreamInfo = { type: 'stream', id: 'stream-1', reset: true }
+      expect(isLogStreamInfo(info)).toBe(true)
+      expect(isLogStreamInfo({ ...info, reset: 'yes' })).toBe(false)
+    })
   })
 
   it('rejects malformed or foreign events', () => {
@@ -50,14 +58,21 @@ describe('subscribeLogs', () => {
     const bridge = createBridgeStub()
     window.AstrBotPluginView = bridge
     const onEvent = vi.fn()
+    const onStream = vi.fn()
     const onOpen = vi.fn()
 
-    const subscription = await subscribeLogs({ since: 17, onEvent, onOpen })
+    const subscription = await subscribeLogs({
+      since: 17,
+      streamId: 'stream-1',
+      onEvent,
+      onStream,
+      onOpen,
+    })
 
     expect(bridge.subscribeSSE).toHaveBeenCalledWith(
       'logs/events',
       expect.objectContaining({ onMessage: expect.any(Function), onError: expect.any(Function) }),
-      { since: 17 },
+      { since: 17, streamId: 'stream-1' },
     )
 
     const handlers = vi.mocked(bridge.subscribeSSE).mock.calls[0][1]
@@ -71,6 +86,14 @@ describe('subscribeLogs', () => {
       eventType: 'message',
     })
     expect(onEvent).toHaveBeenCalledWith(event)
+
+    const streamInfo: LogStreamInfo = { type: 'stream', id: 'stream-2', reset: true }
+    handlers?.onMessage?.({
+      raw: JSON.stringify(streamInfo),
+      parsed: streamInfo,
+      eventType: 'message',
+    })
+    expect(onStream).toHaveBeenCalledWith(streamInfo)
 
     handlers?.onMessage?.({
       raw: '{"type":"finish"}',

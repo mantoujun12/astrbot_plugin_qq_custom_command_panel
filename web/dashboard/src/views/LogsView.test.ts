@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { LogEvent } from '../types/logs'
+import type { LogEvent, LogStreamInfo } from '../types/logs'
 import { flush, installBridge, mountView, waitUntil } from '../test/helpers'
 
 vi.mock('../api/logs', () => ({
@@ -20,7 +20,14 @@ function logEvent(seq: number, overrides: Partial<LogEvent> = {}): LogEvent {
   }
 }
 
-async function loadView(options: { backend?: boolean; initial?: LogEvent[] } = {}) {
+async function loadView(
+  options: {
+    backend?: boolean
+    initial?: LogEvent[]
+    reconnect?: LogEvent[]
+    streamInfos?: LogStreamInfo[]
+  } = {},
+) {
   delete window.AstrBotPluginView
   delete window.AstrBotPluginPage
   if (options.backend !== false) {
@@ -34,9 +41,18 @@ async function loadView(options: { backend?: boolean; initial?: LogEvent[] } = {
   const stop = vi.fn(async (): Promise<void> => {})
   vi.mocked(api.getMockLogs).mockReturnValue([logEvent(1, { message: 'mock-message' })])
   vi.mocked(api.subscribeLogs).mockImplementation(async (next) => {
+    const index = handlers.length
     handlers.push(next)
+    next.onStream?.(
+      options.streamInfos?.[index] ?? {
+        type: 'stream',
+        id: `stream-${index + 1}`,
+        reset: false,
+      },
+    )
     next.onOpen?.()
-    for (const entry of options.initial ?? []) {
+    const entries = index === 0 ? options.initial : options.reconnect
+    for (const entry of entries ?? []) {
       next.onEvent(entry)
     }
     return { stop }
@@ -100,6 +116,16 @@ describe('LogsView', () => {
     expect(wrapper.text()).toContain('Beta failed')
 
     await wrapper.get('.qc-log-level-all').trigger('click')
+    expect(wrapper.findAll('.qc-log-row')).toHaveLength(2)
+  })
+
+  it('treats a cleared search model as an empty query', async () => {
+    const state = await loadView({ initial: [logEvent(1), logEvent(2)] })
+    const wrapper = await state.mount()
+
+    wrapper.findComponent({ name: 'VTextField' }).vm.$emit('update:modelValue', null)
+    await flush()
+
     expect(wrapper.findAll('.qc-log-row')).toHaveLength(2)
   })
 
@@ -188,12 +214,37 @@ describe('LogsView', () => {
     await wrapper.get('.qc-log-retry').trigger('click')
     await waitUntil(() => vi.mocked(state.api.subscribeLogs).mock.calls.length === 2)
     expect(vi.mocked(state.api.subscribeLogs).mock.calls[1][0]).toEqual(
-      expect.objectContaining({ since: 5 }),
+      expect.objectContaining({ since: 5, streamId: 'stream-1' }),
     )
 
     wrapper.unmount()
     await flush()
     expect(state.stop).toHaveBeenCalledTimes(2)
+  })
+
+  it('resets the display and sequence when reconnecting to a new process stream', async () => {
+    const state = await loadView({
+      initial: [logEvent(5, { message: 'previous process' })],
+      reconnect: [logEvent(1, { message: 'new process' })],
+      streamInfos: [
+        { type: 'stream', id: 'stream-1', reset: false },
+        { type: 'stream', id: 'stream-2', reset: true },
+      ],
+    })
+    const wrapper = await state.mount()
+
+    state.handlers[0]?.onError?.(new Error('stream stopped'))
+    await flush()
+    await wrapper.get('.qc-log-retry').trigger('click')
+    await waitUntil(() => vi.mocked(state.api.subscribeLogs).mock.calls.length === 2)
+    await flush()
+
+    expect(wrapper.text()).not.toContain('previous process')
+    expect(wrapper.text()).toContain('new process')
+    expect(wrapper.findAll('.qc-log-row')).toHaveLength(1)
+
+    wrapper.unmount()
+    await flush()
   })
 
   it('labels local mock logs without pretending to be live', async () => {

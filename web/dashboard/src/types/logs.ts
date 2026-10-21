@@ -13,3 +13,9 @@ export interface LogEvent {
   message: string
   traceback?: string
 }
+
+export interface LogStreamInfo {
+  type: 'stream'
+  id: string
+  reset: boolean
+}

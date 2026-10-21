@@ -8,7 +8,7 @@
 import { getBridge } from '../bridge'
 import { toPlain } from './serialize'
 import { LOG_LEVELS } from '../types/logs'
-import type { LogEvent, LogLevel } from '../types/logs'
+import type { LogEvent, LogLevel, LogStreamInfo } from '../types/logs'
 
 const LOG_EVENTS_ENDPOINT = 'logs/events'
 
@@ -81,9 +81,19 @@ export function isLogEvent(value: unknown): value is LogEvent {
   )
 }
 
+export function isLogStreamInfo(value: unknown): value is LogStreamInfo {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const event = value as Record<string, unknown>
+  return event.type === 'stream' && typeof event.id === 'string' && typeof event.reset === 'boolean'
+}
+
 export async function subscribeLogs(options: {
   since?: number
+  streamId?: string
   onEvent(event: LogEvent): void
+  onStream?(info: LogStreamInfo): void
   onOpen?(): void
   onError?(error: Error): void
 }): Promise<LogSubscription> {
@@ -99,11 +109,22 @@ export async function subscribeLogs(options: {
       onMessage: (message) => {
         if (isLogEvent(message.parsed)) {
           options.onEvent(message.parsed)
+        } else if (isLogStreamInfo(message.parsed)) {
+          options.onStream?.(message.parsed)
+        } else if (
+          message.parsed &&
+          typeof message.parsed === 'object' &&
+          (message.parsed as Record<string, unknown>).type === 'error'
+        ) {
+          options.onError?.(new Error('log stream rejected'))
         }
       },
       onError: () => options.onError?.(new Error('log stream error')),
     },
-    toPlain({ since: options.since ?? 0 }),
+    toPlain({
+      since: options.since ?? 0,
+      ...(options.streamId ? { streamId: options.streamId } : {}),
+    }),
   )
 
   return {
