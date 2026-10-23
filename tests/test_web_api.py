@@ -36,6 +36,7 @@ from core.web_api import (
     mask_appid,
     panel_items_count,
     register_web_apis,
+    startup_sync,
 )
 from tests.fakes import FakeQQClient
 
@@ -966,7 +967,7 @@ async def test_startup_sync_blocks_dashboard_sync() -> None:
 
     syncer.sync_all = slow_sync  # type: ignore[method-assign]
 
-    startup = asyncio.create_task(bundle.run_startup_sync(syncer))
+    startup = asyncio.create_task(startup_sync(syncer, bundle))
     await entered.wait()
 
     response = await bundle.page_sync_start()
@@ -1004,6 +1005,31 @@ async def test_run_startup_sync_waits_for_existing_task() -> None:
 
     release.set()
     assert await startup is False
+
+
+@pytest.mark.asyncio
+async def test_startup_sync_without_web_api_runs_directly() -> None:
+    """Web API 不可用时没有视图入口，启动同步直接执行"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    calls = 0
+
+    async def direct_sync(**_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {}
+
+    syncer.sync_all = direct_sync  # type: ignore[method-assign]
+
+    assert await startup_sync(syncer, None) is False
+    assert calls == 1
+
+
+def test_start_sync_without_syncer_returns_false() -> None:
+    """syncer 尚未创建（插件未初始化）时启动同步直接返回 False"""
+    bundle = WebApiBundle(lambda: None, lambda: {})
+
+    assert bundle.start_sync() is False
 
 
 @pytest.mark.asyncio

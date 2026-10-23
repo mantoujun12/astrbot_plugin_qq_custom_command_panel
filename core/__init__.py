@@ -57,6 +57,7 @@ from .web_api import (
     mask_appid,
     panel_items_count,
     register_web_apis,
+    startup_sync,
 )
 
 __all__ = [
@@ -116,6 +117,7 @@ __all__ = [
     "register_web_apis",
     "resolve_plugin_data_dir",
     "save_robot_config",
+    "startup_sync",
     "t",
     "validate_robot_config",
 ]

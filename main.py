@@ -27,6 +27,7 @@ from .core import (
     WebApiBundle,
     register_web_apis,
     resolve_plugin_data_dir,
+    startup_sync,
 )
 from .core.i18n import DEFAULT_LANGUAGE, LOG_TAG, initialize, t
 
@@ -102,13 +103,10 @@ class QQCommandPanelPlugin(Star):
             data_dir=self.data_dir,
             config=dict(self.config),
         )
-        if self._web_api is not None:
-            # 启动同步与视图触发的同步共用 runner，避免重载 / 重启期间
-            # 仪表盘再触发一轮同步，两边并发创建重复面板。
-            await self._web_api.run_startup_sync(self._syncer)
-            return
         try:
-            await self._syncer.sync_all()
+            # Web API 可用时复用视图同步的 runner，避免重载 / 重启期间
+            # 仪表盘再触发一轮同步，两边并发创建重复面板。
+            await startup_sync(self._syncer, self._web_api)
         except Exception as exc:
             logger.error(
                 f"{LOG_TAG} {t('log.startup_sync_failed', exc=exc)}",

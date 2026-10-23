@@ -794,6 +794,21 @@ class WebApiBundle:
         return run
 
 
+async def startup_sync(
+    syncer: PanelSyncer,
+    web_api: WebApiBundle | None,
+) -> bool:
+    """插件启动时同步一次面板
+
+    Web API 可用时复用其单飞 runner；不可用时没有视图入口，直接同步即可。
+    返回是否通过 runner 发起，调用方负责按启动语境记录异常。
+    """
+    if web_api is None:
+        await syncer.sync_all()
+        return False
+    return await web_api.run_startup_sync(syncer)
+
+
 def register_web_apis(
     context: Context,
     get_syncer: Callable[[], PanelSyncer | None],
@@ -837,4 +852,5 @@ __all__ = [
     "mask_appid",
     "panel_items_count",
     "register_web_apis",
+    "startup_sync",
 ]
