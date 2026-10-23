@@ -9,7 +9,7 @@
 
 ### 修复
 
-- 修复创建 `robot_config.json` 所在数据目录失败时，`save_robot_config` 直接抛出未包装的 `OSError`，导致「机器人」页保存与导入返回非本地化 500 的问题；目录创建、写入与替换失败现在统一转换为 `RobotConfigError` (#72)
+- 修复 `robot_config.json` 读取或保存时的目录检查、目录创建、序列化与写入失败会直接抛出未包装的 `OSError` / `TypeError`，导致「机器人」页读取、保存与导入返回非本地化 500 的问题；这些失败现在统一转换为 `RobotConfigError` (#72)
 
 ## [v0.6.1] - 2026-10-21
 
