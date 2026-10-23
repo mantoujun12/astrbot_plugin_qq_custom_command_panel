@@ -743,8 +743,12 @@ async def test_page_robots_save_rejects_missing_robots_without_overwriting(
 
     bundle = make_robot_bundle({}, tmp_path)
     request.payload = {"version": 1, "robots": [robot_payload()]}
-    await bundle.page_robots_save()
+    initial = await bundle.page_robots_save()
+    assert initial["__json__"] is True
+    assert initial["data"]["version"] == 2
     before = load_robot_config(tmp_path)
+    assert len(before["robots"]) == 1
+    assert before["robots"][0]["appid"] == "1023456789"
 
     request.payload = {"version": 2}
     response = await bundle.page_robots_save()
@@ -761,7 +765,12 @@ async def test_page_robots_save_accepts_explicit_empty_robots(tmp_path: Path) ->
 
     bundle = make_robot_bundle({}, tmp_path)
     request.payload = {"version": 1, "robots": [robot_payload()]}
-    await bundle.page_robots_save()
+    initial = await bundle.page_robots_save()
+    assert initial["__json__"] is True
+    assert initial["data"]["version"] == 2
+    before = load_robot_config(tmp_path)
+    assert len(before["robots"]) == 1
+    assert before["robots"][0]["appid"] == "1023456789"
 
     request.payload = {"version": 2, "robots": []}
     response = await bundle.page_robots_save()
