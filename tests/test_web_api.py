@@ -640,8 +640,11 @@ async def test_page_config_save_reports_save_failure() -> None:
 
     config = schema_config()
     bundle = make_bundle(config, make_syncer(config))
+    await bundle.cache.get(_async_status_payload)
+    assert bundle.cache._is_fresh()
 
-    async def boom(_values: dict[str, Any]) -> None:
+    async def boom(values: dict[str, Any]) -> None:
+        config.update(values)
         raise RuntimeError("disk full")
 
     bundle._save_config = boom  # type: ignore[attr-defined]
@@ -652,6 +655,7 @@ async def test_page_config_save_reports_save_failure() -> None:
     assert response["__error__"] is True
     assert response["status_code"] == 500
     assert "disk full" in response["message"]
+    assert not bundle.cache._is_fresh()
 
 
 # ---------------------------------------------------------------------------

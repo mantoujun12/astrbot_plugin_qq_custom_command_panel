@@ -109,6 +109,10 @@ class QQCommandPanelPlugin(Star):
                 f"{LOG_TAG} {t('log.startup_sync_failed', exc=exc)}",
                 exc_info=True,
             )
+        finally:
+            # 启动同步也可能与状态查询并发，结束后同样要让缓存失效
+            if self._web_api is not None:
+                self._web_api.cache.invalidate()
 
     async def terminate(self) -> None:
         """插件销毁：关闭 HTTP 会话"""

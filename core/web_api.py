@@ -516,9 +516,10 @@ class WebApiBundle:
         except Exception as exc:
             logger.error(f"{LOG_TAG} " + t("log.config_save_failed", exc=exc), exc_info=True)
             return web.error_response(t("web.config_save_failed", exc=exc), status_code=500)
+        finally:
+            # 保存回调可能先改内存再落盘失败，失败路径同样需要失效缓存
+            self.cache.invalidate()
 
-        # 配置变了，状态缓存里的平台/场景信息随即过期
-        self.cache.invalidate()
         return web.json_response(export_config(self._get_config()))
 
     # ------------------------------------------------------------------
