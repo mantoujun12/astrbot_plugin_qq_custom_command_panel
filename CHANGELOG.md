@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复从兼容配置导入未填写备注名或备注名超过 14 个字符的机器人时必定失败的问题；空备注现在回退到脱敏 AppID，超长备注会截断为合法长度 (#67)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

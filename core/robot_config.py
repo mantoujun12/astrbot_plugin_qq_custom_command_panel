@@ -444,10 +444,25 @@ def build_runtime_robots(
     return runtime
 
 
+def _legacy_robot_draft_name(name: str, appid: str) -> str:
+    """生成符合新版配置限制的导入名称，空备注回退到脱敏 AppID。"""
+    normalized = name.strip()
+    if normalized:
+        return normalized[:PANEL_ITEM_NAME_MAX]
+
+    appid_text = appid.strip()
+    if len(appid_text) <= 6:
+        return "*" * len(appid_text)
+
+    masked_length = min(len(appid_text), PANEL_ITEM_NAME_MAX)
+    return f"{appid_text[:3]}{'*' * (masked_length - 5)}{appid_text[-2:]}"
+
+
 def legacy_to_robot_drafts(legacy_config: dict[str, Any]) -> list[dict[str, Any]]:
     """把旧 schema 机器人转换成新版配置草稿，可直接作为导入时的初始值。
 
     为每个启用场景准备同样的 ``selected_commands`` 条目并保留 secret，不含稳定 id。
+    可选备注名留空时使用脱敏 AppID，超长时截断到新版配置允许的长度。
     """
     enabled_scenes = get_enabled_scenes(legacy_config)
     selected_commands = get_selected_commands(legacy_config)
@@ -466,7 +481,7 @@ def legacy_to_robot_drafts(legacy_config: dict[str, Any]) -> list[dict[str, Any]
             }
         drafts.append(
             {
-                "name": entry["name"],
+                "name": _legacy_robot_draft_name(entry["name"], entry["appid"]),
                 "appid": entry["appid"],
                 "secret": entry["secret"],
                 "platform": entry["platform"],
