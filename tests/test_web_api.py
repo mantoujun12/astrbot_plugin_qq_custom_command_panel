@@ -1328,6 +1328,22 @@ async def test_page_robots_save_reports_write_failure(
 
 
 @pytest.mark.asyncio
+async def test_page_robots_save_reports_directory_creation_failure(tmp_path: Path) -> None:
+    """数据目录创建失败应返回本地化 500，而不是把原始 OSError 抛给宿主。"""
+    from astrbot.api.web import request
+
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+    bundle = make_robot_bundle({}, data_dir)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+
+    response = await bundle.page_robots_save()
+
+    assert response["status_code"] == 500
+    assert "无法保存机器人配置" in response["message"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [

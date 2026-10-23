@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复创建 `robot_config.json` 所在数据目录失败时，`save_robot_config` 直接抛出未包装的 `OSError`，导致「机器人」页保存与导入返回非本地化 500 的问题；目录创建、写入与替换失败现在统一转换为 `RobotConfigError` (#72)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

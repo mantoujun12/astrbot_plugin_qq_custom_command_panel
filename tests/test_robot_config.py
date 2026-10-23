@@ -499,6 +499,17 @@ def test_save_failure_raises_robot_config_error(tmp_path: Path) -> None:
         save_robot_config(tmp_path, empty_robot_config())
 
 
+def test_save_wraps_directory_creation_failure(tmp_path: Path) -> None:
+    """数据目录本身无法创建时也要包装成 RobotConfigError，不能漏出原始 OSError。"""
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(data_dir, empty_robot_config())
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+
+
 def test_validate_rejects_non_list_robots() -> None:
     _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": "bad"})
 
