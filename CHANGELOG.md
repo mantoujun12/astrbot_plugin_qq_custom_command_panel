@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复同步进度组件在订阅尚未建立完成时离开页面后 SSE 流仍然常驻的问题：`stop()` 现在会让所有未完成的订阅失效，订阅返回后立即退订，不再继续写入全局同步状态 (#75)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增
