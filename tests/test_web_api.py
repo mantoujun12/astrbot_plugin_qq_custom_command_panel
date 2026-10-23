@@ -1344,6 +1344,22 @@ async def test_page_robots_save_reports_directory_creation_failure(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_page_robots_import_reports_directory_creation_failure(tmp_path: Path) -> None:
+    """导入同样要经过真实保存路径，目录创建失败应返回本地化 500。"""
+    from astrbot.api.web import request
+
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+    bundle = make_robot_bundle({}, data_dir, legacy_config=schema_config())
+    request.payload = {"appids": ["1023456789"], "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 500
+    assert "无法保存机器人配置" in response["message"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [
