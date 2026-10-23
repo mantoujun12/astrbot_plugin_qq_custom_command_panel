@@ -429,6 +429,20 @@ def test_legacy_to_robot_drafts_truncates_overlong_name() -> None:
     assert len(drafts[0]["name"]) == PANEL_ITEM_NAME_MAX
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        (f"{'a' * (PANEL_ITEM_NAME_MAX - 1)}😀后缀", "a" * (PANEL_ITEM_NAME_MAX - 1)),
+        ("😀" * (PANEL_ITEM_NAME_MAX // 2), "😀" * (PANEL_ITEM_NAME_MAX // 2)),
+    ],
+)
+def test_legacy_to_robot_drafts_truncates_by_utf16_units(name: str, expected: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=name))
+
+    assert drafts[0]["name"] == expected
+    assert len(drafts[0]["name"].encode("utf-16-le")) // 2 <= PANEL_ITEM_NAME_MAX
+
+
 @pytest.mark.parametrize("name", ["", f"{'名' * PANEL_ITEM_NAME_MAX}超长"])
 def test_legacy_drafts_with_optional_names_can_be_validated_into_v2(name: str) -> None:
     drafts = legacy_to_robot_drafts(make_legacy_config(name=name))

@@ -444,11 +444,25 @@ def build_runtime_robots(
     return runtime
 
 
+def _truncate_utf16_units(value: str, max_units: int) -> str:
+    """按 JavaScript ``String.length`` 口径截断，避免拆开非 BMP 字符。"""
+    units = 0
+    for index, char in enumerate(value):
+        char_units = 2 if ord(char) > 0xFFFF else 1
+        if units + char_units > max_units:
+            return value[:index]
+        units += char_units
+    return value
+
+
 def _legacy_robot_draft_name(name: str, appid: str) -> str:
-    """生成符合新版配置限制的导入名称，空备注回退到脱敏 AppID。"""
+    """生成符合新版配置与前端长度限制的导入名称。
+
+    空备注回退到脱敏 AppID；非空备注按前端使用的 UTF-16 代码单元截断。
+    """
     normalized = name.strip()
     if normalized:
-        return normalized[:PANEL_ITEM_NAME_MAX]
+        return _truncate_utf16_units(normalized, PANEL_ITEM_NAME_MAX)
 
     appid_text = appid.strip()
     if len(appid_text) <= 6:

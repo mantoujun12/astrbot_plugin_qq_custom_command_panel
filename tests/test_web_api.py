@@ -848,6 +848,7 @@ async def test_page_robots_import_legacy_copies_secret_without_response_leak(
     [
         ("", "102*****89"),
         ("名" * 15, "名" * 14),
+        (f"{'a' * 13}😀后缀", "a" * 13),
     ],
 )
 @pytest.mark.asyncio
