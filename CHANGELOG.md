@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复 `scripts/package_plugin.py` 的 `-v/--version` 只改压缩包与顶层目录名、包内 `metadata.yaml` 仍是旧版本的问题：现在会同步覆盖包内版本号，并在打包后校验包内版本与目标版本一致，不一致时删除产物并报错 (#73)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增
