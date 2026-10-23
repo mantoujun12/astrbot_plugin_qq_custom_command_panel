@@ -765,7 +765,7 @@ async def test_page_robots_save_invalidates_status_cache(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_kind", ["scene", "duplicate"])
+@pytest.mark.parametrize("invalid_kind", ["scene", "duplicate", "secret"])
 async def test_page_robots_save_rejects_invalid_payload(
     tmp_path: Path,
     invalid_kind: str,
@@ -784,12 +784,18 @@ async def test_page_robots_save_rejects_invalid_payload(
         )
         payload = {"version": 1, "robots": [first]}
         expected = "至少需要 1 条"
-    else:
+    elif invalid_kind == "duplicate":
         payload = {
             "version": 1,
             "robots": [robot_payload(), robot_payload(name="重复")],
         }
         expected = "重复"
+    else:
+        payload = {
+            "version": 1,
+            "robots": [robot_payload(secret=123)],  # type: ignore[arg-type]
+        }
+        expected = "secret"
     request.payload = payload
 
     response = await bundle.page_robots_save()
@@ -834,6 +840,37 @@ async def test_page_robots_save_rejects_stale_version(tmp_path: Path) -> None:
     assert stale["status_code"] == 409
     assert "重新载入" in stale["message"]
     assert load_robot_config(tmp_path)["robots"][0]["name"] == "初次保存"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["save", "import"])
+async def test_page_robots_mutations_hold_config_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    lock_states: list[bool] = []
+
+    def capture_save(_data_dir: Path, _payload: dict[str, Any]) -> Path:
+        lock_states.append(bundle._robot_config_lock.locked())
+        return tmp_path / "robot_config.json"
+
+    monkeypatch.setattr("core.web_api.save_robot_config", capture_save)
+    if operation == "save":
+        request.payload = {"version": 1, "robots": [robot_payload()]}
+        response = await bundle.page_robots_save()
+    else:
+        request.payload = {"appid": "1023456789", "version": 1}
+        response = await bundle.page_robots_import_legacy()
+
+    assert response["__json__"] is True
+    assert lock_states == [True]
 
 
 @pytest.mark.asyncio

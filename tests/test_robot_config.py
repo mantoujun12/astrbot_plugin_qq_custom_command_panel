@@ -144,6 +144,7 @@ def test_load_corrupt_json_does_not_silently_fallback(tmp_path: Path) -> None:
         [make_robot(scenes="bad")],  # type: ignore[arg-type]
         [make_robot(scenes={**make_scenes(), "c2c": {"enabled": True, "items": "bad"}})],
         [make_robot(scenes={**make_scenes(), "group": "bad"})],
+        [make_robot(scenes={**make_scenes(), "other": {"enabled": False, "items": []}})],
     ],
 )
 def test_load_rejects_invalid_nested_robot_config(
@@ -176,14 +177,17 @@ def test_load_rejects_duplicate_appid(tmp_path: Path) -> None:
         load_robot_config(tmp_path)
 
 
-def test_load_preserves_existing_version(tmp_path: Path) -> None:
-    payload = {"version": 7, "robots": [make_robot()]}
+def test_load_normalizes_secret_and_preserves_existing_version(tmp_path: Path) -> None:
+    payload = {"version": 7, "robots": [make_robot(secret="  plain-secret-value  ")]}
     (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
         json.dumps(payload, ensure_ascii=False),
         encoding="utf-8",
     )
 
-    assert load_robot_config(tmp_path) == payload
+    loaded = load_robot_config(tmp_path)
+
+    assert loaded["version"] == 7
+    assert loaded["robots"][0]["secret"] == "plain-secret-value"
 
 
 # 校验
@@ -347,6 +351,21 @@ def test_validate_rejects_non_list_items() -> None:
     assert any("items" in error and "列表" in error for error in errors)
 
 
+def test_validate_rejects_unknown_scene() -> None:
+    scenes = {
+        **make_scenes(),
+        "other": {"enabled": False, "items": []},
+    }
+
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("scenes.other" in error and "不支持" in error for error in errors)
+
+
 def test_validate_does_not_silently_truncate() -> None:
     items = [{"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)}]
 
@@ -396,6 +415,16 @@ def test_validate_requires_secret_for_new_robot() -> None:
     assert any("secret" in error for error in errors)
 
 
+def test_validate_rejects_non_string_secret() -> None:
+    normalized, errors = validate_robot_config(
+        {"version": 1, "robots": [make_robot()]},
+        {"robots": [make_robot(secret=123)]},  # type: ignore[arg-type]
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("secret" in error and "字符串" in error for error in errors)
+
+
 # 新旧合并 / legacy 转换
 
 
@@ -412,6 +441,17 @@ def test_build_runtime_v2_wins_on_same_appid() -> None:
     assert robot["source"] == "v2"
     assert robot["scenes"]["c2c"] == [{"name": "help", "desc": "查看帮助"}]
     assert robot["scenes"]["group"] == []
+
+
+def test_build_runtime_v2_wins_when_legacy_appid_has_whitespace() -> None:
+    legacy = make_legacy_config(appid="  shared-appid  ")
+    robot_config = {"robots": [make_robot(appid="shared-appid")]}
+
+    runtime = build_runtime_robots(legacy, robot_config)
+
+    assert len(runtime) == 1
+    assert runtime[0]["source"] == "v2"
+    assert runtime[0]["appid"] == "shared-appid"
 
 
 def test_build_runtime_keeps_unmatched_legacy_robot() -> None:

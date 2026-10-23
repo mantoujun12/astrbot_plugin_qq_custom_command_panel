@@ -106,6 +106,7 @@
   "robot.error.scenes_type": "{path}: должен быть объектом",
   "robot.error.scene_missing": "{path}: отсутствует конфигурация сценария",
   "robot.error.scene_type": "{path}: должен быть объектом",
+  "robot.error.scene_unknown": "{path}: неподдерживаемый сценарий {scene}",
   "robot.error.scene_enabled_type": "{path}: должно быть логическим значением",
   "robot.error.scene_items_type": "{path}: должен быть списком",
   "robot.error.scene_items_limit": "{path}: не более {limit} элементов",
@@ -122,6 +123,7 @@
   "robot.error.name_too_long": "{path}: не более {limit} символов",
   "robot.error.platform_unsupported": "{path}: неподдерживаемый тип {platform}",
   "robot.error.secret_required": "{path}: для нового робота необходимо указать secret",
+  "robot.error.secret_type": "{path}: должно быть строкой",
   "robot.error.id_duplicate": "{path}: повторяющийся id {id}",
 
   "progress.sync_no_scene": "⚠️ Нет включённых сценариев, синхронизация не требуется",

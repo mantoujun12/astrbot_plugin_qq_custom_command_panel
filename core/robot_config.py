@@ -73,13 +73,13 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     if not isinstance(payload.get("robots", []), list):
         raise RobotConfigError(t("robot.error.robots_type"))
 
-    # 只复用写入路径的校验结果，不返回归一化配置：原文件中的 version 必须保留，
-    # 否则乐观并发检查会被重置为 1。
-    _normalized, errors = validate_robot_config(empty_robot_config(), payload)
+    # 复用写入路径的归一化结果，但保留原文件中的 revision，避免乐观并发检查被重置。
+    normalized, errors = validate_robot_config(empty_robot_config(), payload)
     if errors:
         raise RobotConfigError("\n".join(errors))
+    normalized["version"] = version
 
-    return payload
+    return normalized
 
 
 def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
@@ -131,6 +131,16 @@ def _validate_scenes(
     if not isinstance(scenes, dict):
         path = f"robots[{robot_index}].scenes"
         return normalized, [t("robot.error.scenes_type", path=path)]
+
+    for scene in scenes:
+        if scene not in SCENES:
+            errors.append(
+                t(
+                    "robot.error.scene_unknown",
+                    path=f"robots[{robot_index}].scenes.{scene}",
+                    scene=scene,
+                )
+            )
 
     for scene in SCENES:
         scene_path = f"robots[{robot_index}].scenes.{scene}"
@@ -285,7 +295,10 @@ def validate_robot_config(
             continue
 
         raw_secret = raw_robot.get("secret")
-        secret = raw_secret.strip() if isinstance(raw_secret, str) else ""
+        if not isinstance(raw_secret, str):
+            errors.append(t("robot.error.secret_type", path=f"{robot_path}.secret"))
+            continue
+        secret = raw_secret.strip()
         if not secret:
             secret = secret_by_appid.get(appid, "")
         if not secret:
@@ -413,6 +426,9 @@ def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]
     selected_commands = get_selected_commands(legacy_config)
     runtime: list[dict[str, Any]] = []
     for entry in get_platform_entries(legacy_config):
+        appid = entry["appid"].strip()
+        if not appid:
+            continue
         scenes: dict[str, list[dict[str, str]]] = {scene: [] for scene in SCENES}
         for scene in enabled_scenes:
             scenes[scene] = [
@@ -422,7 +438,7 @@ def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]
             {
                 "id": entry["pf_id"],
                 "name": entry["name"],
-                "appid": entry["appid"],
+                "appid": appid,
                 "secret": entry["secret"],
                 "platform": entry["platform"],
                 "source": "legacy",

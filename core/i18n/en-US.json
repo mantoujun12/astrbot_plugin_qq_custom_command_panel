@@ -106,6 +106,7 @@
   "robot.error.scenes_type": "{path}: must be an object",
   "robot.error.scene_missing": "{path}: scene configuration is required",
   "robot.error.scene_type": "{path}: must be an object",
+  "robot.error.scene_unknown": "{path}: unsupported scene {scene}",
   "robot.error.scene_enabled_type": "{path}: must be a boolean",
   "robot.error.scene_items_type": "{path}: must be a list",
   "robot.error.scene_items_limit": "{path}: at most {limit} entries",
@@ -122,6 +123,7 @@
   "robot.error.name_too_long": "{path}: at most {limit} characters",
   "robot.error.platform_unsupported": "{path}: unsupported type {platform}",
   "robot.error.secret_required": "{path}: a new robot must include a secret",
+  "robot.error.secret_type": "{path}: must be a string",
   "robot.error.id_duplicate": "{path}: duplicate id {id}",
 
   "progress.sync_no_scene": "⚠️ No scenes enabled, nothing to sync",
