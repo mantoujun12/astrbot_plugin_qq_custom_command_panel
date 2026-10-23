@@ -1252,6 +1252,48 @@ async def test_build_status_reports_v2_source_and_name() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_status_scales_v2_item_limit_by_active_scene_panels() -> None:
+    """多机器人、多场景的条目总数应与全部场景的面板容量比较。"""
+    items = [{"name": f"cmd-{index}", "desc": ""} for index in range(PANEL_MAX_ITEMS)]
+
+    def robot(robot_id: str) -> dict[str, Any]:
+        return {
+            "id": robot_id,
+            "name": robot_id,
+            "appid": f"app-{robot_id}",
+            "secret": "sec",
+            "platform": "qq_official",
+            "scenes": {
+                "c2c": scene_config(enabled=True, items=items),
+                "group": scene_config(enabled=True, items=items),
+                "channel": scene_config(),
+                "dm": scene_config(),
+            },
+        }
+
+    robot_config = {
+        "version": 1,
+        "robots": [robot("robot-1"), robot("robot-2")],
+    }
+    syncer = make_syncer(config={"scenes": [], "qq_platforms": []})
+    syncer.build_clients = lambda config=None, **kwargs: {  # type: ignore[method-assign]
+        "robot-1": FakeQQClient(existing={}),
+        "robot-2": FakeQQClient(existing={}),
+    }
+
+    payload = await build_status(
+        syncer,
+        {"scenes": []},
+        robot_config=robot_config,
+    )
+
+    assert payload["items"] == {
+        "count": PANEL_MAX_ITEMS * 4,
+        "max": PANEL_MAX_ITEMS * 4,
+    }
+
+
+@pytest.mark.asyncio
 async def test_page_robots_errors_follow_selected_language(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
