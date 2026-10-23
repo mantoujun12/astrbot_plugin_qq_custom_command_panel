@@ -102,6 +102,11 @@ class QQCommandPanelPlugin(Star):
             data_dir=self.data_dir,
             config=dict(self.config),
         )
+        if self._web_api is not None:
+            # 启动同步与视图触发的同步共用 runner，避免重载 / 重启期间
+            # 仪表盘再触发一轮同步，两边并发创建重复面板。
+            await self._web_api.run_startup_sync(self._syncer)
+            return
         try:
             await self._syncer.sync_all()
         except Exception as exc:

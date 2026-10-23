@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复插件启动同步绕过 `SyncRunner`、与视图触发的同步并发执行并可能重复创建面板的问题：启动同步与 `POST /sync` 现在共用同一个单飞任务，启动期间从视图触发同步会返回忙碌 (#74)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

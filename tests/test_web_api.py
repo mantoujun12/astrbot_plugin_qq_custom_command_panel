@@ -948,6 +948,65 @@ async def test_page_sync_start_and_busy() -> None:
 
 
 @pytest.mark.asyncio
+async def test_startup_sync_blocks_dashboard_sync() -> None:
+    """启动同步占用 runner 时，视图触发同步必须返回 busy 而不是再跑一轮"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    bundle = make_bundle(config, syncer)
+    release = asyncio.Event()
+    entered = asyncio.Event()
+    calls = 0
+
+    async def slow_sync(**_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await release.wait()
+        return {}
+
+    syncer.sync_all = slow_sync  # type: ignore[method-assign]
+
+    startup = asyncio.create_task(bundle.run_startup_sync(syncer))
+    await entered.wait()
+
+    response = await bundle.page_sync_start()
+
+    assert response["__json__"] is True
+    assert response["data"] == {"started": False, "busy": True}
+    assert calls == 1
+
+    release.set()
+    assert await startup is True
+    assert calls == 1
+    assert bundle.runner.running is False
+
+
+@pytest.mark.asyncio
+async def test_run_startup_sync_waits_for_existing_task() -> None:
+    """启动同步发现已有任务时只等待，不再启动第二轮"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    bundle = make_bundle(config, syncer)
+    release = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def slow_run(_emit: Any) -> dict[str, Any]:
+        entered.set()
+        await release.wait()
+        return {}
+
+    assert bundle.runner.start(slow_run) is True
+    await entered.wait()
+
+    startup = asyncio.create_task(bundle.run_startup_sync(syncer))
+    await asyncio.sleep(0)
+    assert startup.done() is False
+
+    release.set()
+    assert await startup is False
+
+
+@pytest.mark.asyncio
 async def test_page_sync_start_not_ready() -> None:
     bundle = WebApiBundle(lambda: None, lambda: {})
 

@@ -693,13 +693,33 @@ class WebApiBundle:
     # 同步入口 + 进度流
     # ------------------------------------------------------------------
 
+    def start_sync(self, syncer: PanelSyncer | None = None) -> bool:
+        """启动一次后台同步；已有任务在跑时返回 False
+
+        dashboard 的同步入口与插件启动同步共用同一个 runner，
+        确保任一时刻只有一个 sync_all 在访问 QQ API。
+        """
+        target = syncer if syncer is not None else self._get_syncer()
+        if target is None:
+            return False
+        return self.runner.start(self._make_run(target))
+
+    async def run_startup_sync(self, syncer: PanelSyncer) -> bool:
+        """插件启动时同步一次，与视图入口共用单飞任务
+
+        已有任务在跑时不再启动第二轮，而是等它结束；返回是否由本次调用发起。
+        """
+        started = self.start_sync(syncer)
+        await self.runner.join()
+        return started
+
     async def page_sync_start(self) -> Any:
         """触发一次同步；已有任务在跑时返回 busy，不排队"""
         web = _web()
         syncer = self._get_syncer()
         if syncer is None:
             return web.error_response(t("web.not_ready"), status_code=503)
-        started = self.runner.start(self._make_run(syncer))
+        started = self.start_sync(syncer)
         return web.json_response({"started": started, "busy": not started})
 
     async def page_sync_events(self) -> Any:
