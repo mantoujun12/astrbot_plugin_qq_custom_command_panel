@@ -18,6 +18,7 @@ from .config import (
     mask_secret,
     normalize_config_payload,
     normalize_panel_items,
+    save_config_values,
 )
 from .i18n import (
     DEFAULT_LANGUAGE,
@@ -115,6 +116,7 @@ __all__ = [
     "panel_items_count",
     "register_web_apis",
     "resolve_plugin_data_dir",
+    "save_config_values",
     "save_robot_config",
     "t",
     "validate_robot_config",
