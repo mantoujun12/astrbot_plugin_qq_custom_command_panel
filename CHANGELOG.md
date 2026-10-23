@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复状态概览缓存未在面板同步完成后失效，以及同步或保存配置与状态查询并发时旧结果重新写回缓存的问题 (#70)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

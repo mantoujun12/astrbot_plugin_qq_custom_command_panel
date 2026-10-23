@@ -300,12 +300,13 @@ class StatusCache:
     """状态结果的单飞 (single-flight) 内存缓存
 
     并发请求只计算一次，TTL 内复用，避免重复打 QQ API；
-    force=True（视图手动刷新）时绕过缓存，invalidate() 在配置写回后主动失效。
+    force=True（视图手动刷新）时绕过缓存，配置写回或同步结束后通过 invalidate() 主动失效。
     """
 
     def __init__(self, ttl: float = STATUS_CACHE_TTL) -> None:
         self._ttl = ttl
         self._lock = asyncio.Lock()
+        self._generation = 0
         self._expires_at = 0.0
         self._value: dict[str, Any] | None = None
 
@@ -324,13 +325,18 @@ class StatusCache:
             cached = self._peek(force)
             if cached is not None:
                 return cached
+            generation = self._generation
             value = await compute()
+            # 计算期间被失效时，结果已经过期，不能重新写回缓存
+            if generation != self._generation:
+                return value
             self._value = value
             self._expires_at = time.monotonic() + self._ttl
             return value
 
     def invalidate(self) -> None:
-        """主动失效缓存（配置变更后调用）"""
+        """主动失效缓存，并阻止正在进行的旧计算回写"""
+        self._generation += 1
         self._value = None
         self._expires_at = 0.0
 
@@ -764,12 +770,16 @@ class WebApiBundle:
         """构造同步任务执行体：先刷新配置，再同时推送文本与结构化事件"""
 
         async def run(emit: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
-            syncer.set_config(self._get_config())
+            try:
+                syncer.set_config(self._get_config())
 
-            async def push_text(message: str) -> None:
-                await emit({"type": "message", "text": message})
+                async def push_text(message: str) -> None:
+                    await emit({"type": "message", "text": message})
 
-            return await syncer.sync_all(on_progress=push_text, on_event=emit)
+                return await syncer.sync_all(on_progress=push_text, on_event=emit)
+            finally:
+                # 同步会改变线上状态，结束后必须让下一次状态查询重新计算
+                self.cache.invalidate()
 
         return run
 

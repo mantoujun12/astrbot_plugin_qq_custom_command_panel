@@ -357,6 +357,33 @@ async def test_status_cache_invalidate_drops_value() -> None:
 
 
 @pytest.mark.asyncio
+async def test_status_cache_invalidate_discards_in_flight_result() -> None:
+    """失效发生在计算期间时，旧结果不能写回缓存"""
+    cache = StatusCache(ttl=60)
+    calls = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def compute() -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await release.wait()
+        return {"n": calls}
+
+    pending = asyncio.create_task(cache.get(compute))
+    await started.wait()
+    cache.invalidate()
+    release.set()
+
+    assert await pending == {"n": 1}
+    assert not cache._is_fresh()
+    assert await cache.get(compute) == {"n": 2}
+    assert calls == 2
+
+
+@pytest.mark.asyncio
 async def test_status_cache_coalesces_concurrent_calls() -> None:
     """并发请求只计算一次 (single-flight)，避免重复打 QQ API"""
     cache = StatusCache(ttl=60)
@@ -945,6 +972,19 @@ async def test_page_sync_start_and_busy() -> None:
 
     release.set()
     await bundle.runner.join()
+
+
+@pytest.mark.asyncio
+async def test_page_sync_finish_invalidates_status_cache() -> None:
+    config = schema_config(scenes=[])
+    bundle = make_bundle(config, make_syncer(config))
+    await bundle.cache.get(_async_status_payload)
+    assert bundle.cache._is_fresh()
+
+    await bundle.page_sync_start()
+    await bundle.runner.join()
+
+    assert not bundle.cache._is_fresh()
 
 
 @pytest.mark.asyncio
