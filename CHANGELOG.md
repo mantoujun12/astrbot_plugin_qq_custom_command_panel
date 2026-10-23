@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复 `POST /<plugin>/robots` 缺少 `robots` 字段时被误当成显式清空的问题；现在返回 HTTP 400 并保留原配置，只有传入 `"robots": []` 才会删除全部机器人 (#68)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

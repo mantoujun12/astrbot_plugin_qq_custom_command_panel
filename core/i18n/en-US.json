@@ -101,6 +101,7 @@
   "robot.error.save_failed": "failed to save robot config {path}: {exc}",
   "robot.error.runtime_id_duplicate": "duplicate runtime robot id: {robot_id}",
   "robot.error.payload_type": "payload: must be an object",
+  "robot.error.robots_required": "robots: must be provided explicitly as a list",
   "robot.error.robots_list": "robots: must be a list",
   "robot.error.scenes_type": "{path}: must be an object",
   "robot.error.scene_missing": "{path}: scene configuration is required",

@@ -220,7 +220,10 @@ def validate_robot_config(
     if not isinstance(payload, dict):
         return empty_robot_config(), [t("robot.error.payload_type")]
 
-    raw_robots = payload.get("robots", [])
+    if "robots" not in payload:
+        return empty_robot_config(), [t("robot.error.robots_required")]
+
+    raw_robots = payload.get("robots")
     if not isinstance(raw_robots, list):
         return empty_robot_config(), [t("robot.error.robots_list")]
 
