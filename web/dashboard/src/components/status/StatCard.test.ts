@@ -40,4 +40,12 @@ describe('StatCard', () => {
     expect(atLimit.get('.qc-metric-value').classes()).toContain('text-error')
     expect(belowLimit.get('.qc-metric-value').classes()).not.toContain('text-error')
   })
+
+  it('keeps the value neutral when no capacity exists', () => {
+    const card = mountView(StatCard, {
+      props: { title: '指令条目', value: 0, max: 0, emphasizeAtLimit: true },
+    })
+
+    expect(card.get('.qc-metric-value').classes()).not.toContain('text-error')
+  })
 })

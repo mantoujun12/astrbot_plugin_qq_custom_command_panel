@@ -239,7 +239,7 @@ async def build_status(
     ]
     total_items = sum(len(items) for items in item_lists)
     # 每个非空场景对应一个独立面板，累计条目数应与这些面板的总容量比较。
-    items_max = PANEL_MAX_ITEMS * max(len(item_lists), 1)
+    items_max = PANEL_MAX_ITEMS * len(item_lists)
     panels: dict[str, Any] = {
         "total": sum(count for _, count, _ in results),
         "partial": any(not complete for _, _, complete in results),

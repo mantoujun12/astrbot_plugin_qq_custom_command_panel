@@ -12,7 +12,11 @@ const props = defineProps<{
 }>()
 
 const warn = computed(
-  () => props.emphasizeAtLimit === true && props.max !== undefined && props.value >= props.max,
+  () =>
+    props.emphasizeAtLimit === true &&
+    props.max !== undefined &&
+    props.value > 0 &&
+    props.value >= props.max,
 )
 </script>
 

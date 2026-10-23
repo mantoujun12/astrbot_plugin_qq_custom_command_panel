@@ -40,7 +40,7 @@ export interface StatusResponse {
   platforms: PlatformStatus[]
   /** 当前生效的场景 */
   scenes: Scene[]
-  /** 所有生效场景的条目总数；max 为生效场景数 × 单面板上限 */
+  /** 所有生效场景的条目总数；max 为非空机器人–场景面板数 × 单面板上限，无生效面板时为 0 */
   items: { count: number; max: number }
   panels: {
     total: number
