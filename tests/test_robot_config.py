@@ -367,6 +367,20 @@ def test_build_runtime_keeps_unmatched_legacy_robot() -> None:
     assert legacy_robot["scenes"]["channel"] == []
 
 
+def test_build_runtime_keeps_legacy_robots_sharing_a_name() -> None:
+    legacy = make_legacy_config(appid="legacy-a", name="bot")
+    legacy["qq_platforms"].append(
+        {"name": "bot", "appid": "legacy-b", "secret": "secret-b", "platform": "qq_official"}
+    )
+
+    runtime = build_runtime_robots(legacy, {"robots": []})
+
+    assert [(robot["id"], robot["appid"], robot["name"]) for robot in runtime] == [
+        ("legacy-a", "legacy-a", "bot"),
+        ("legacy-b", "legacy-b", "bot"),
+    ]
+
+
 def test_build_runtime_rejects_duplicate_robot_ids() -> None:
     robot_config = {
         "robots": [

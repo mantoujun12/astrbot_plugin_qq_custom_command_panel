@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复兼容性配置按备注名识别平台，导致同名但 AppID 不同的机器人被静默丢弃，并在可视化视图保存后永久删除的问题；平台身份现统一使用 AppID，备注名仅用于展示 (#65)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

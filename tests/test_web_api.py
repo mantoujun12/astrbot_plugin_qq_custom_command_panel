@@ -141,7 +141,7 @@ async def test_build_status_reports_scene_states() -> None:
         existing={"c2c": [owned_panel("c2c", "p1", [{"name": "help"}])]},
         failing_scopes={"channel"},
     )
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
 
     payload = await build_status(syncer, config)
 
@@ -153,7 +153,8 @@ async def test_build_status_reports_scene_states() -> None:
     assert payload["panels"] == {"total": 1, "max": PANEL_MAX_ITEMS, "partial": True}
 
     platform = payload["platforms"][0]
-    assert platform["pf_id"] == "pf1"
+    assert platform["pf_id"] == "102*****89"
+    assert platform["name"] == "pf1"
     assert platform["appid"] == "102*****89"
     assert platform["platform"] == "qq_official"
     # 插件只能读自己的配置，状态里不再有平台来源字段
@@ -178,7 +179,7 @@ async def test_build_status_marks_incomplete_total_on_platform_failure() -> None
         async def list_panels(self, scope: str) -> list[dict[str, Any]]:
             raise RuntimeError("boom")
 
-    stub_clients(syncer, {"pf1": BoomClient()})
+    stub_clients(syncer, {"1023456789": BoomClient()})
 
     payload = await build_status(syncer, config)
 
@@ -192,7 +193,7 @@ async def test_build_status_flags_duplicate_owned_panels() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
 
     payload = await build_status(syncer, config)
 
@@ -208,7 +209,7 @@ async def test_build_status_ignores_foreign_panels() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     foreign = {"panel_id": "x", "scope": "c2c", "panel": {"items": [], "remark": "other"}}
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={"c2c": [foreign]})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={"c2c": [foreign]})})
 
     payload = await build_status(syncer, config)
 
@@ -243,21 +244,49 @@ async def test_build_status_summarizes_multiple_platforms() -> None:
     stub_clients(
         syncer,
         {
-            "pf1": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1")]}),
-            "pf2": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p2")]}),
+            "1112223334": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1")]}),
+            "5556667778": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p2")]}),
         },
     )
 
     payload = await build_status(syncer, config)
 
-    assert {p["pf_id"] for p in payload["platforms"]} == {"pf1", "pf2"}
+    assert {p["pf_id"] for p in payload["platforms"]} == {"111*****34", "555*****78"}
+    assert {p["name"] for p in payload["platforms"]} == {"pf1", "pf2"}
     # 综合上限 = 平台数 20 × 2 台
     assert payload["panels"] == {"total": 2, "max": PANEL_MAX_ITEMS * 2, "partial": False}
 
 
 @pytest.mark.asyncio
-async def test_build_status_masks_pf_id_when_it_falls_back_to_appid() -> None:
-    """未配备注时 pf_id 会退化成 appid，展示值同样脱敏"""
+async def test_build_status_keeps_platforms_sharing_a_name() -> None:
+    config = schema_config(
+        scenes=["c2c"],
+        qq_platforms=[
+            {"name": "bot", "appid": "1112223334", "secret": "s1"},
+            {"name": "bot", "appid": "5556667778", "secret": "s2"},
+        ],
+    )
+    syncer = make_syncer(config)
+    stub_clients(
+        syncer,
+        {
+            "1112223334": FakeQQClient(existing={}),
+            "5556667778": FakeQQClient(existing={}),
+        },
+    )
+
+    payload = await build_status(syncer, config)
+
+    assert {platform["name"] for platform in payload["platforms"]} == {"bot"}
+    assert {platform["pf_id"] for platform in payload["platforms"]} == {
+        "111*****34",
+        "555*****78",
+    }
+
+
+@pytest.mark.asyncio
+async def test_build_status_masks_appid_identity() -> None:
+    """兼容配置用 appid 作为平台身份，响应里需要脱敏。"""
     config = schema_config(
         scenes=["c2c"],
         qq_platforms=[{"appid": "1112223334", "secret": "s"}],
@@ -289,14 +318,15 @@ async def test_build_status_uses_current_config_for_clients() -> None:
 
     def build_clients(config: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
         captured["config"] = config
-        return {"new": fake}
+        return {"9999999999": fake}
 
     syncer.build_clients = build_clients  # type: ignore[method-assign]
 
     payload = await build_status(syncer, current)
 
     assert captured["config"] is current
-    assert payload["platforms"][0]["pf_id"] == "new"
+    assert payload["platforms"][0]["pf_id"] == "999*****99"
+    assert payload["platforms"][0]["name"] == "new"
 
 
 # ---------------------------------------------------------------------------
@@ -421,14 +451,14 @@ async def test_page_status_returns_payload_and_uses_cache() -> None:
             return await super().list_panels(scope)
 
     client = CountingClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
     bundle = make_bundle(config, syncer)
 
     first = await bundle.page_status()
     second = await bundle.page_status()
 
     assert first["__json__"] is True
-    assert first["data"]["platforms"][0]["pf_id"] == "pf1"
+    assert first["data"]["platforms"][0]["pf_id"] == "102*****89"
     assert first["data"] == second["data"]
     # 每个状态查询按 SCENES 各查一次，第二次走缓存
     assert client.list_calls == len(SCENES)
@@ -557,6 +587,48 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
     assert response["data"]["scenes"] == ["group"]
     assert response["data"]["primary_color"] == "#aabbcc"
     assert response["data"]["secondary_color"] == "#123456"
+
+
+@pytest.mark.asyncio
+async def test_page_config_round_trip_preserves_platforms_sharing_a_name() -> None:
+    """GET 后原样 POST 不能删掉同名平台及其配置。"""
+    from astrbot.api.web import request
+
+    config = schema_config(
+        qq_platforms=[
+            {"name": "bot", "appid": "A", "secret": "s1"},
+            {"name": "bot", "appid": "B", "secret": "s2"},
+        ]
+    )
+    saved: dict[str, Any] = {}
+
+    async def save_config(values: dict[str, Any]) -> None:
+        saved.update(values)
+        config.clear()
+        config.update(values)
+
+    bundle = make_bundle(config, make_syncer(config), save_config)
+    response = await bundle.page_config_get()
+    request.payload = {
+        "qq_platforms": [
+            {
+                "name": platform["name"],
+                "appid": platform["appid"],
+                "platform": platform["platform"],
+                "secret": "",
+            }
+            for platform in response["data"]["qq_platforms"]
+        ]
+    }
+
+    saved_response = await bundle.page_config_save()
+
+    assert saved_response["__json__"] is True
+    assert [(platform["name"], platform["appid"]) for platform in saved["qq_platforms"]] == [
+        ("bot", "A"),
+        ("bot", "B"),
+    ]
+    assert [platform["secret"] for platform in saved["qq_platforms"]] == ["s1", "s2"]
 
 
 @pytest.mark.asyncio
@@ -923,7 +995,7 @@ async def test_page_sync_start_and_busy() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     client = FakeQQClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
     bundle = make_bundle(config, syncer)
 
     first = await bundle.page_sync_start()
@@ -962,7 +1034,7 @@ async def test_page_sync_start_streams_structured_events() -> None:
     """同步任务的进度事件：message + start/platform/finish 结构化事件"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
     bundle = make_bundle(config, syncer)
 
     await bundle.page_sync_start()
@@ -982,7 +1054,7 @@ async def test_page_sync_start_streams_structured_events() -> None:
     assert start["items"] == 1
 
     platform_event = next(event for event in events if event["type"] == "platform")
-    assert platform_event["pf_id"] == "pf1"
+    assert platform_event["pf_id"] == "1023456789"
     assert platform_event["status"] == "ok"
     assert platform_event["index"] == 1
     assert platform_event["total"] == 1

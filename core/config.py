@@ -187,8 +187,8 @@ def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
     if not appid or not secret:
         return None
 
-    # pf_id 优先取备注名，其次 appid，最后平台类型
-    pf_id = entry.get("id") or entry.get("name") or entry.get("platform_id") or str(appid)
+    # 平台身份只取 appid；备注名可重复，且只用于展示
+    pf_id = str(appid)
     name = entry.get("name")
     return {
         "pf_id": str(pf_id),
@@ -202,7 +202,7 @@ def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
 def get_platform_entries(config: dict[str, Any]) -> list[dict[str, str]]:
     """读取 schema 的 qq_platforms 条目（含备注名）
 
-    非法条目跳过，同一 pf_id 只保留第一条，避免重复同步
+    非法条目跳过，同一 appid 只保留第一条，避免重复同步
     """
     raw = config.get("qq_platforms", [])
     if not isinstance(raw, list):
@@ -212,9 +212,9 @@ def get_platform_entries(config: dict[str, Any]) -> list[dict[str, str]]:
     seen: set[str] = set()
     for item in raw:
         parsed = _parse_platform_entry(item)
-        if not parsed or parsed["pf_id"] in seen:
+        if not parsed or parsed["appid"] in seen:
             continue
-        seen.add(parsed["pf_id"])
+        seen.add(parsed["appid"])
         entries.append(parsed)
     return entries
 

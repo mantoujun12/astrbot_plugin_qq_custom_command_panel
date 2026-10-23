@@ -20,9 +20,9 @@ export interface ScenePanelStatus {
 }
 
 export interface PlatformStatus {
-  /** 平台标识：备注名；缺省时用 appid（已脱敏）*/
+  /** 平台标识：兼容配置使用脱敏后的 appid，新版配置使用机器人 id */
   pf_id: string
-  /** 新版机器人备注名；兼容配置或旧响应里可能省略 */
+  /** 机器人备注名，只用于展示 */
   name?: string
   /** v2=新版机器人配置，legacy=兼容性全局配置；旧响应里可能省略 */
   source?: 'v2' | 'legacy'
