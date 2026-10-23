@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复 `robot_config.json` 只校验顶层结构的问题：加载时完整校验机器人、场景与指令条目，并拒绝重复 AppID，避免损坏配置被静默接受或同 AppID 面板互相覆盖 (#66)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

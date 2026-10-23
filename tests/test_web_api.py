@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -713,6 +714,19 @@ async def test_page_robots_get_reports_corrupt_config(tmp_path: Path) -> None:
     assert response["__error__"] is True
     assert response["status_code"] == 500
     assert "JSON" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_get_reports_invalid_nested_config(tmp_path: Path) -> None:
+    payload = {"version": 1, "robots": [robot_payload(appid=123)]}  # type: ignore[arg-type]
+    (tmp_path / "robot_config.json").write_text(json.dumps(payload), encoding="utf-8")
+    bundle = make_robot_bundle({}, tmp_path)
+
+    response = await bundle.page_robots_get()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 500
+    assert "appid" in response["message"]
 
 
 @pytest.mark.asyncio

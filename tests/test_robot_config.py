@@ -136,6 +136,56 @@ def test_load_corrupt_json_does_not_silently_fallback(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8") == before
 
 
+@pytest.mark.parametrize(
+    "robots",
+    [
+        ["bad"],
+        [make_robot(appid=123)],  # type: ignore[arg-type]
+        [make_robot(scenes="bad")],  # type: ignore[arg-type]
+        [make_robot(scenes={**make_scenes(), "c2c": {"enabled": True, "items": "bad"}})],
+        [make_robot(scenes={**make_scenes(), "group": "bad"})],
+    ],
+)
+def test_load_rejects_invalid_nested_robot_config(
+    tmp_path: Path,
+    robots: list[Any],
+) -> None:
+    path = tmp_path / ROBOT_CONFIG_FILENAME
+    path.write_text(json.dumps({"version": 1, "robots": robots}), encoding="utf-8")
+
+    with pytest.raises(RobotConfigError):
+        load_robot_config(tmp_path)
+
+    assert path.is_file()
+
+
+def test_load_rejects_duplicate_appid(tmp_path: Path) -> None:
+    payload = {
+        "version": 1,
+        "robots": [
+            make_robot(appid="same-appid", robot_id="r1"),
+            make_robot(appid="same-appid", robot_id="r2"),
+        ],
+    }
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RobotConfigError, match="same-appid.*重复"):
+        load_robot_config(tmp_path)
+
+
+def test_load_preserves_existing_version(tmp_path: Path) -> None:
+    payload = {"version": 7, "robots": [make_robot()]}
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert load_robot_config(tmp_path) == payload
+
+
 # 校验
 
 
@@ -173,6 +223,16 @@ def test_validate_rejects_duplicate_appid() -> None:
     _normalized, errors = validate_robot_config(empty_robot_config(), payload)
 
     assert any("重复" in error for error in errors)
+
+
+def test_validate_rejects_non_string_appid() -> None:
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(appid=123)]},  # type: ignore[arg-type]
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("appid" in error for error in errors)
 
 
 def test_validate_rejects_duplicate_robot_id() -> None:
@@ -376,6 +436,18 @@ def test_build_runtime_rejects_duplicate_robot_ids() -> None:
     }
 
     with pytest.raises(RobotConfigError, match="id 重复"):
+        build_runtime_robots({}, robot_config)
+
+
+def test_build_runtime_rejects_duplicate_appids() -> None:
+    robot_config = {
+        "robots": [
+            make_robot(appid="same-appid", robot_id="r1"),
+            make_robot(appid="same-appid", robot_id="r2"),
+        ]
+    }
+
+    with pytest.raises(RobotConfigError, match="AppID 重复"):
         build_runtime_robots({}, robot_config)
 
 

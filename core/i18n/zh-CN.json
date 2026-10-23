@@ -99,6 +99,7 @@
   "robot.error.version_invalid": "机器人配置文件 version 必须是正整数",
   "robot.error.robots_type": "机器人配置文件 robots 必须是列表",
   "robot.error.save_failed": "无法保存机器人配置 {path}：{exc}",
+  "robot.error.runtime_appid_duplicate": "运行时 AppID 重复：{appid}",
   "robot.error.runtime_id_duplicate": "运行时机器人 id 重复：{robot_id}",
   "robot.error.payload_type": "payload：必须是对象",
   "robot.error.robots_list": "robots：必须是列表",

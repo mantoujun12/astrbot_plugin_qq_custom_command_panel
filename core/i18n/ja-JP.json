@@ -99,6 +99,7 @@
   "robot.error.version_invalid": "ロボット設定の version は正の整数である必要があります",
   "robot.error.robots_type": "ロボット設定の robots はリストである必要があります",
   "robot.error.save_failed": "ロボット設定 {path} を保存できませんでした：{exc}",
+  "robot.error.runtime_appid_duplicate": "実行時の AppID が重複しています：{appid}",
   "robot.error.runtime_id_duplicate": "実行時のロボット id が重複しています：{robot_id}",
   "robot.error.payload_type": "payload：オブジェクトである必要があります",
   "robot.error.robots_list": "robots：リストである必要があります",
