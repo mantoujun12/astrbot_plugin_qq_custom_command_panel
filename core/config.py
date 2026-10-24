@@ -148,14 +148,19 @@ def get_selected_commands(config: dict[str, Any]) -> list[dict[str, str]]:
     return cleaned
 
 
-def mask_secret(value: Any) -> str:
-    """secret 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
+def mask_appid(value: Any) -> str:
+    """AppID 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
     text = str(value or "")
     if not text:
         return ""
     if len(text) <= 6:
         return "*" * len(text)
     return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
+
+
+def mask_secret(value: Any) -> str:
+    """secret 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
+    return mask_appid(value)
 
 
 def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
@@ -466,6 +471,7 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "get_theme_colors",
+    "mask_appid",
     "mask_secret",
     "normalize_config_payload",
     "normalize_panel_items",

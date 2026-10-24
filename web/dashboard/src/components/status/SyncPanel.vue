@@ -8,6 +8,7 @@ import {
 } from '@mdi/js'
 import { useBridge } from '../../composables/useBridge'
 import { useSyncRun } from '../../composables/useSyncRun'
+import type { SyncPlatformState } from '../../types/dashboard'
 
 const emit = defineEmits<{ finished: [] }>()
 
@@ -32,6 +33,29 @@ const summaryText = computed(() =>
     .replace('{succeeded}', String(state.value.succeeded))
     .replace('{failed}', String(state.value.failed)),
 )
+
+const duplicatePlatformNames = computed(() => {
+  const counts = new Map<string, number>()
+  for (const platform of state.value.platformStates) {
+    if (platform.name) {
+      counts.set(platform.name, (counts.get(platform.name) ?? 0) + 1)
+    }
+  }
+  return new Set(
+    [...counts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name),
+  )
+})
+
+function platformLabel(platform: SyncPlatformState): string {
+  if (!platform.name) {
+    return platform.appid || platform.pf_id
+  }
+  return duplicatePlatformNames.value.has(platform.name) && platform.appid
+    ? `${platform.name} (${platform.appid})`
+    : platform.name
+}
 
 function onStart(): void {
   void start({ onFinish: () => emit('finished') }).catch((error: unknown) => {
@@ -144,7 +168,7 @@ onBeforeUnmount(() => {
             :color="platform.status === 'ok' ? 'success' : 'error'"
             :prepend-icon="platform.status === 'ok' ? mdiCheckCircleOutline : mdiAlertCircleOutline"
           >
-            {{ platform.pf_id }}
+            {{ platformLabel(platform) }}
           </v-chip>
         </div>
 

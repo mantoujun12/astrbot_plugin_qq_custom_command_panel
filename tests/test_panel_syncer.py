@@ -457,6 +457,8 @@ async def test_sync_all_emits_start_platform_and_finish() -> None:
     assert start["scenes"] == 1
     assert start["items"] == 1
     assert platform_event["pf_id"] == "app"
+    assert platform_event["name"] == "pf1"
+    assert platform_event["appid"] == "***"
     assert platform_event["index"] == 1
     assert platform_event["status"] == "ok"
     assert platform_event["saved"] == 1
@@ -466,6 +468,44 @@ async def test_sync_all_emits_start_platform_and_finish() -> None:
     assert result == {"app": {"c2c": "panel_new_1001"}}
     # 兼容配置里只存 name/desc，写面板时同样要补上 type
     assert client.created[0][1] == [{"name": "help", "type": "command", "desc": "帮助"}]
+
+
+@pytest.mark.asyncio
+async def test_sync_all_disambiguates_duplicate_names_with_masked_appids() -> None:
+    syncer = make_syncer(
+        config={
+            "scenes": ["c2c"],
+            "qq_platforms": [
+                {"name": "bot", "appid": "1112223334", "secret": "s1"},
+                {"name": "bot", "appid": "5556667778", "secret": "s2"},
+            ],
+            "selected_commands": [{"name": "help", "desc": "帮助"}],
+        }
+    )
+    stub_clients(
+        syncer,
+        {
+            "1112223334": FakeQQClient(existing={}),
+            "5556667778": FakeQQClient(existing={}),
+        },
+    )
+    events, on_event = await collect_events()
+    progress: list[str] = []
+
+    async def on_progress(message: str) -> None:
+        progress.append(message)
+
+    await syncer.sync_all(on_event=on_event, on_progress=on_progress)
+
+    platform_events = [event for event in events if event["type"] == "platform"]
+    assert [(event["name"], event["appid"]) for event in platform_events] == [
+        ("bot", "111*****34"),
+        ("bot", "555*****78"),
+    ]
+    assert any("bot (111*****34)" in message for message in progress)
+    assert any("bot (555*****78)" in message for message in progress)
+    assert all("1112223334" not in message for message in progress)
+    assert all("5556667778" not in message for message in progress)
 
 
 @pytest.mark.asyncio

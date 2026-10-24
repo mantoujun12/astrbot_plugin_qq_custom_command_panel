@@ -128,6 +128,10 @@ export interface SyncPlatformEvent {
   type: 'platform'
   seq: number
   pf_id: string
+  /** 机器人备注名，仅用于展示 */
+  name?: string
+  /** 脱敏后的 AppID，用于区分同名机器人 */
+  appid?: string
   index: number
   total: number
   status: 'ok' | 'error'
@@ -152,6 +156,8 @@ export type SyncEvent = SyncMessageEvent | SyncStartEvent | SyncPlatformEvent | 
 /** 单个平台的同步结果，用于渲染状态标签 */
 export interface SyncPlatformState {
   pf_id: string
+  name: string
+  appid: string
   index: number
   status: 'ok' | 'error'
   saved: number

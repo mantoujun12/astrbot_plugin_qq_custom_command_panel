@@ -15,6 +15,7 @@ from .config import (
     get_platform_entries,
     get_platforms_from_schema,
     get_selected_commands,
+    mask_appid,
     mask_secret,
     normalize_config_payload,
     normalize_panel_items,
@@ -54,7 +55,6 @@ from .web_api import (
     SYNC_ROUTE_SUFFIX,
     WebApiBundle,
     build_status,
-    mask_appid,
     panel_items_count,
     register_web_apis,
 )
