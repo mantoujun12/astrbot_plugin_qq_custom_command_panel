@@ -102,6 +102,7 @@
   "robot.error.runtime_appid_duplicate": "运行时 AppID 重复：{appid}",
   "robot.error.runtime_id_duplicate": "运行时机器人 id 重复：{robot_id}",
   "robot.error.payload_type": "payload：必须是对象",
+  "robot.error.robots_required": "robots：必须显式传入列表",
   "robot.error.robots_list": "robots：必须是列表",
   "robot.error.scenes_type": "{path}：必须是对象",
   "robot.error.scene_missing": "{path}：缺少场景配置",

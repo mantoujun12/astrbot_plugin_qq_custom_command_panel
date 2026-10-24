@@ -664,6 +664,20 @@ def test_validate_rejects_non_list_robots() -> None:
     assert errors == ["robots：必须是列表"]
 
 
+def test_validate_rejects_missing_robots() -> None:
+    normalized, errors = validate_robot_config(empty_robot_config(), {})
+
+    assert normalized == empty_robot_config()
+    assert errors == ["robots：必须显式传入列表"]
+
+
+def test_validate_accepts_explicit_empty_robots() -> None:
+    normalized, errors = validate_robot_config(empty_robot_config(), {"robots": []})
+
+    assert errors == []
+    assert normalized["robots"] == []
+
+
 def test_validate_rejects_non_dict_robot_entry() -> None:
     _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": ["bad"]})
 

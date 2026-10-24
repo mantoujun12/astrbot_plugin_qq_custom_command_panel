@@ -102,6 +102,7 @@
   "robot.error.runtime_appid_duplicate": "повторяющийся AppID во время выполнения: {appid}",
   "robot.error.runtime_id_duplicate": "повторяющийся id робота во время выполнения: {robot_id}",
   "robot.error.payload_type": "payload: должен быть объектом",
+  "robot.error.robots_required": "robots: необходимо явно передать в виде списка",
   "robot.error.robots_list": "robots: должен быть списком",
   "robot.error.scenes_type": "{path}: должен быть объектом",
   "robot.error.scene_missing": "{path}: отсутствует конфигурация сценария",

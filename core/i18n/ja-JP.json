@@ -102,6 +102,7 @@
   "robot.error.runtime_appid_duplicate": "実行時の AppID が重複しています：{appid}",
   "robot.error.runtime_id_duplicate": "実行時のロボット id が重複しています：{robot_id}",
   "robot.error.payload_type": "payload：オブジェクトである必要があります",
+  "robot.error.robots_required": "robots：リストを明示的に指定する必要があります",
   "robot.error.robots_list": "robots：リストである必要があります",
   "robot.error.scenes_type": "{path}：オブジェクトである必要があります",
   "robot.error.scene_missing": "{path}：シーン設定がありません",
