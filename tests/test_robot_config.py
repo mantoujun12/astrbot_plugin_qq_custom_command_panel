@@ -405,6 +405,53 @@ def test_legacy_to_robot_drafts_replicates_commands_and_secret() -> None:
     assert draft["scenes"]["dm"]["items"] == []
 
 
+@pytest.mark.parametrize("name", ["", "   "])
+def test_legacy_to_robot_drafts_falls_back_to_masked_appid(name: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(appid="1023456789", name=name))
+
+    assert drafts[0]["name"] == "102*****89"
+
+
+def test_legacy_to_robot_drafts_falls_back_when_name_is_omitted() -> None:
+    legacy = {
+        "qq_platforms": [{"appid": "1023456789", "secret": "legacy-secret"}],
+    }
+
+    drafts = legacy_to_robot_drafts(legacy)
+
+    assert drafts[0]["name"] == "102*****89"
+
+
+def test_legacy_to_robot_drafts_truncates_overlong_name() -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=f" {'名' * 15} "))
+
+    assert drafts[0]["name"] == "名" * PANEL_ITEM_NAME_MAX
+    assert len(drafts[0]["name"]) == PANEL_ITEM_NAME_MAX
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        (f"{'a' * (PANEL_ITEM_NAME_MAX - 1)}😀后缀", "a" * (PANEL_ITEM_NAME_MAX - 1)),
+        ("😀" * (PANEL_ITEM_NAME_MAX // 2), "😀" * (PANEL_ITEM_NAME_MAX // 2)),
+    ],
+)
+def test_legacy_to_robot_drafts_truncates_by_utf16_units(name: str, expected: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=name))
+
+    assert drafts[0]["name"] == expected
+    assert len(drafts[0]["name"].encode("utf-16-le")) // 2 <= PANEL_ITEM_NAME_MAX
+
+
+@pytest.mark.parametrize("name", ["", f"{'名' * PANEL_ITEM_NAME_MAX}超长"])
+def test_legacy_drafts_with_optional_names_can_be_validated_into_v2(name: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=name))
+
+    _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": drafts})
+
+    assert errors == []
+
+
 def test_legacy_drafts_can_be_validated_into_v2() -> None:
     drafts = legacy_to_robot_drafts(make_legacy_config())
 

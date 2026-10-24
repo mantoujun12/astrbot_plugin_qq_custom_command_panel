@@ -843,6 +843,37 @@ async def test_page_robots_import_legacy_copies_secret_without_response_leak(
     assert stored["robots"][0]["secret"] == "legacy-secret"
 
 
+@pytest.mark.parametrize(
+    ("legacy_name", "expected_name"),
+    [
+        ("", "102*****89"),
+        ("名" * 15, "名" * 14),
+        (f"{'a' * 13}😀后缀", "a" * 13),
+    ],
+)
+@pytest.mark.asyncio
+async def test_page_robots_import_legacy_normalizes_optional_name(
+    tmp_path: Path,
+    legacy_name: str,
+    expected_name: str,
+) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[
+            {"name": legacy_name, "appid": "1023456789", "secret": "legacy-secret"},
+        ],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    request.payload = {"appid": "1023456789", "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["__json__"] is True
+    stored = load_robot_config(tmp_path)
+    assert stored["robots"][0]["name"] == expected_name
+
+
 @pytest.mark.asyncio
 async def test_page_robots_import_invalidates_status_cache(tmp_path: Path) -> None:
     from astrbot.api.web import request
