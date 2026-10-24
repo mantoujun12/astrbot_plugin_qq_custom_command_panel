@@ -27,7 +27,7 @@
     "@vitest/coverage-v8": "^5.0.4",
     "@vue/test-utils": "^2.5.1",
     "@vue/tsconfig": "^0.9.1",
-    "happy-dom": "^21.0.1",
+    "happy-dom": "^21.0.4",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vite-plugin-vuetify": "^2.1.3",
