@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复兼容性页「平台类型」下拉选项在宿主切换界面语言后仍显示旧语言的问题，选项文案改为随语言变化重新求值 (#80)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

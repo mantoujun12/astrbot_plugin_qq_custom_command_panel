@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 import { VSelect } from 'vuetify/components'
+import type { PluginViewBridge, PluginViewContext } from '../bridge'
 import type { PluginConfigResponse } from '../types/dashboard'
 import { flush, installBridge, mountView, waitUntil } from '../test/helpers'
 
@@ -52,8 +53,11 @@ const DESC_INPUTS = 'input[maxlength="30"]'
 /**
  * 兼容性页同样依赖 useBridge / useSyncRun 的模块级单例，每个用例重置模块后再引。
  */
-async function loadCompatibilityView(options: { withBackend?: boolean } = {}) {
-  const bridge = options.withBackend === false ? null : installBridge()
+async function loadCompatibilityView(
+  options: { withBackend?: boolean; bridge?: Partial<PluginViewBridge> } = {},
+) {
+  const bridge =
+    options.withBackend === false ? null : installBridge(options.bridge ?? {})
   vi.resetModules()
   const api = await import('../api/dashboard')
   const { router } = await import('../router')
@@ -94,6 +98,47 @@ describe('CompatibilityView', () => {
     expect((secret.element as HTMLInputElement).value).toBe('')
     expect(secret.attributes('placeholder')).toBe('留空表示沿用原值')
     expect(wrapper.text()).toContain('当前：abc*****yz')
+  })
+
+  it('retranslates the platform type options when the host locale changes', async () => {
+    let current: PluginViewContext = { locale: 'zh-CN' }
+    let notify: (() => void) | undefined
+
+    const { api, mount } = await loadCompatibilityView({
+      bridge: {
+        getContext: vi.fn(() => current),
+        onContext: vi.fn((handler: () => void) => {
+          notify = handler
+          return () => {}
+        }),
+        t: vi.fn((key: string, fallback?: string) => {
+          if (key === 'pages.dashboard.compatibility.platformTypeName.qq_official') {
+            return current.locale === 'en-US' ? 'QQ Official Bot' : 'QQ 官方机器人'
+          }
+          if (
+            key === 'pages.dashboard.compatibility.platformTypeName.qq_official_webhook'
+          ) {
+            return current.locale === 'en-US'
+              ? 'QQ Official Bot Webhook'
+              : 'QQ 官方机器人 Webhook'
+          }
+          return fallback ?? key
+        }),
+      },
+    })
+    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+
+    const wrapper = await mount()
+    // 第 2 个 v-select 是平台类型，当前选中 qq_official
+    const platformSelect = wrapper.findAllComponents(VSelect)[1]
+    expect(platformSelect?.text()).toContain('QQ 官方机器人')
+
+    current = { locale: 'en-US' }
+    notify?.()
+    await flush()
+
+    expect(platformSelect?.text()).toContain('QQ Official Bot')
+    expect(platformSelect?.text()).not.toContain('QQ 官方机器人')
   })
 
   it('reports a failed load and keeps saving disabled', async () => {

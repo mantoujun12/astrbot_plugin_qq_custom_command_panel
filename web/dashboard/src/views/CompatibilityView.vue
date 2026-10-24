@@ -46,13 +46,15 @@ const sceneItems = computed(() =>
   })),
 )
 
-const platformTypeItems = PLATFORM_TYPES.map((value) => ({
-  title: t(
-    `pages.dashboard.compatibility.platformTypeName.${value}`,
-    value === 'qq_official' ? 'QQ 官方机器人' : 'QQ 官方机器人 Webhook',
-  ),
-  value,
-}))
+const platformTypeItems = computed(() =>
+  PLATFORM_TYPES.map((value) => ({
+    title: t(
+      `pages.dashboard.compatibility.platformTypeName.${value}`,
+      value === 'qq_official' ? 'QQ 官方机器人' : 'QQ 官方机器人 Webhook',
+    ),
+    value,
+  })),
+)
 
 const limits = computed(() => config.value?.limits ?? DEFAULT_LIMITS)
 
