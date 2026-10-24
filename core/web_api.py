@@ -230,13 +230,16 @@ async def build_status(
             for robot in runtime
         )
     ]
-    total_items = sum(
-        len(items)
+    item_lists = [
+        items
         for robot in runtime
         if isinstance(robot.get("scenes"), dict)
         for items in robot["scenes"].values()
-        if isinstance(items, list)
-    )
+        if isinstance(items, list) and items
+    ]
+    total_items = sum(len(items) for items in item_lists)
+    # 每个非空场景对应一个独立面板，累计条目数应与这些面板的总容量比较。
+    items_max = PANEL_MAX_ITEMS * len(item_lists)
     panels: dict[str, Any] = {
         "total": sum(count for _, count, _ in results),
         "partial": any(not complete for _, _, complete in results),
@@ -249,7 +252,7 @@ async def build_status(
         "plugin": {"name": PLUGIN_NAME, "version": version},
         "platforms": [payload for payload, _, _ in results],
         "scenes": active_scenes,
-        "items": {"count": total_items, "max": PANEL_MAX_ITEMS},
+        "items": {"count": total_items, "max": items_max},
         "panels": panels,
     }
 

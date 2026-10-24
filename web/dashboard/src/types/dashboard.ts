@@ -40,7 +40,7 @@ export interface StatusResponse {
   platforms: PlatformStatus[]
   /** 当前生效的场景 */
   scenes: Scene[]
-  /** max 为 QQ 面板上限，超出会被后台截断（见 core/config.py）*/
+  /** 所有生效场景的条目总数；max 为非空机器人–场景面板数 × 单面板上限，无生效面板时为 0 */
   items: { count: number; max: number }
   panels: {
     total: number
