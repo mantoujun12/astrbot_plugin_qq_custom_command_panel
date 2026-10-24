@@ -638,10 +638,37 @@ describe('RobotsView', () => {
     expect(api.saveRobots).not.toHaveBeenCalled()
     expect(dialogModel(wrapper, UNSAVED_DIALOG)).toBe(true)
     expect(dialogEl('.qc-robot-unsaved')?.textContent).toContain(
-      '保存失败，请先处理页面上的校验错误后再继续。',
+      '保存失败，请先取消弹窗并处理页面上的校验错误后再继续。',
     )
     expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
     expect(api.fetchRobots).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the real save error in the confirmation when saving before import fails', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+    vi.mocked(api.saveRobots).mockRejectedValue(new Error('版本已更新，请重新载入'))
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('本地未保存')
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+
+    clickInDialogPanel('.qc-robot-unsaved', '保存并继续')
+    await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
+    await flush()
+
+    expect(dialogModel(wrapper, UNSAVED_DIALOG)).toBe(true)
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).toContain('版本已更新，请重新载入')
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).not.toContain(
+      '请先取消弹窗并处理页面上的校验错误',
+    )
+    expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
   })
 
   it('asks before reloading over unsaved edits', async () => {

@@ -399,8 +399,14 @@ function secretHint(draft: RobotDraft): string | undefined {
   return undefined
 }
 
-async function save(options: { sync?: boolean } = {}): Promise<boolean> {
-  if (!hasBackend.value || mockMode.value) return false
+type SaveResult =
+  | { ok: true }
+  | { ok: false; reason: 'validation' | 'request'; message?: string }
+
+async function save(options: { sync?: boolean } = {}): Promise<SaveResult> {
+  if (!hasBackend.value || mockMode.value) {
+    return { ok: false, reason: 'request' }
+  }
 
   const robots: RobotConfigPayload[] = []
   const errors: Record<string, string> = {}
@@ -420,7 +426,7 @@ async function save(options: { sync?: boolean } = {}): Promise<boolean> {
     selectedKey.value = firstErrorKey
     error.value = ''
     notice.value = ''
-    return false
+    return { ok: false, reason: 'validation' }
   }
 
   const preferredAppid = selectedDraft.value?.form.appid.trim() ?? ''
@@ -432,8 +438,9 @@ async function save(options: { sync?: boolean } = {}): Promise<boolean> {
     applyResponse(next, preferredAppid)
     notice.value = t('pages.dashboard.robots.saved', '机器人配置已保存。')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-    return false
+    const message = err instanceof Error ? err.message : String(err)
+    error.value = message
+    return { ok: false, reason: 'request', message }
   } finally {
     saving.value = false
   }
@@ -446,7 +453,7 @@ async function save(options: { sync?: boolean } = {}): Promise<boolean> {
       error.value = err instanceof Error ? err.message : String(err)
     }
   }
-  return true
+  return { ok: true }
 }
 
 async function openImport(): Promise<void> {
@@ -551,12 +558,20 @@ async function continuePending(strategy: 'save' | 'discard'): Promise<void> {
 
   unsavedError.value = ''
   if (strategy === 'save') {
-    const saved = await save()
-    if (!saved) {
-      unsavedError.value = t(
-        'pages.dashboard.robots.unsavedSaveFailed',
-        '保存失败，请先处理页面上的校验错误后再继续。',
-      )
+    const result = await save()
+    if (!result.ok) {
+      // 校验失败时弹窗挡住了页面，需要提示用户先取消弹窗去改；
+      // 请求失败则直接展示真实原因（例如 409 版本冲突），不要伪装成校验错误
+      if (result.reason === 'validation') {
+        unsavedError.value = t(
+          'pages.dashboard.robots.unsavedSaveFailed',
+          '保存失败，请先取消弹窗并处理页面上的校验错误后再继续。',
+        )
+      } else {
+        unsavedError.value =
+          result.message ??
+          t('pages.dashboard.robots.unsavedSaveRequestFailed', '保存失败，请稍后重试。')
+      }
       return
     }
   }
