@@ -5,7 +5,7 @@ import type { PluginViewBridge } from '../bridge'
 import type { PluginConfigResponse } from '../types/dashboard'
 import type { RobotConfigResponse } from '../types/robotConfig'
 import { MOCK_ROBOTS } from '../api/robots'
-import { flush, installBridge, mountView, waitUntil } from '../test/helpers'
+import { flush, installBridge, mountView, waitUntil, deferred } from '../test/helpers'
 
 vi.mock('../api/dashboard', () => ({
   fetchConfig: vi.fn(),
@@ -610,5 +610,51 @@ describe('RobotsView', () => {
 
     expect(wrapper.text()).toContain('duplicate appid')
     expect(wrapper.text()).not.toContain('机器人配置已保存。')
+  })
+
+  it('keeps the latest reload when responses resolve out of order', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    const stale = deferred<RobotConfigResponse>()
+    const fresh = deferred<RobotConfigResponse>()
+    vi.mocked(api.fetchRobots)
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(fresh.promise)
+
+    await button(wrapper, '重新载入').trigger('click')
+    await button(wrapper, '重新载入').trigger('click')
+    await waitUntil(() => vi.mocked(api.fetchRobots).mock.calls.length === 3)
+
+    const latest = robotResponse()
+    latest.robots[0].name = '最新机器人'
+    fresh.resolve(latest)
+    await flush()
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('最新机器人')
+
+    // 更早发出的 GET 后返回，不能把草稿覆盖回旧快照
+    stale.resolve(robotResponse())
+    await flush()
+
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('最新机器人')
+  })
+
+  it('disables reload while a save is in flight', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const pendingSave = deferred<RobotConfigResponse>()
+    vi.mocked(api.saveRobots).mockReturnValueOnce(pendingSave.promise)
+
+    const wrapper = await mount()
+    await button(wrapper, '保存').trigger('click')
+    await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
+
+    expect(button(wrapper, '重新载入').attributes('disabled')).toBeDefined()
+
+    pendingSave.resolve(robotResponse())
+    await flush()
+
+    expect(button(wrapper, '重新载入').attributes('disabled')).toBeUndefined()
   })
 })

@@ -68,6 +68,10 @@ const deleteDialog = ref(false)
 
 let draftSeq = 0
 
+// 请求代次：load 与 save 都会写同一份机器人草稿，只允许最新一次请求写回状态，
+// 否则先发出的 GET 后返回时会覆盖刚保存的草稿，还会清掉校验错误与提示。
+let requestSeq = 0
+
 const selectedDraft = computed(
   () => drafts.value.find((draft) => draft.key === selectedKey.value) ?? null,
 )
@@ -158,21 +162,24 @@ function applyResponse(next: RobotConfigResponse, preferredAppid = ''): void {
 }
 
 async function load(): Promise<void> {
+  const seq = ++requestSeq
   loading.value = true
   error.value = ''
   notice.value = ''
   try {
     const preferredAppid = selectedDraft.value?.form.appid.trim() ?? ''
     const next = await fetchRobots()
+    if (seq !== requestSeq) return
     applyResponse(next, preferredAppid)
   } catch (err) {
+    if (seq !== requestSeq) return
     response.value = null
     drafts.value = []
     selectedKey.value = ''
     robotErrors.value = {}
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
@@ -359,14 +366,19 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
   }
 
   const preferredAppid = selectedDraft.value?.form.appid.trim() ?? ''
+  // 保存会写回服务端最新结果，先让仍在路上的 load 失效，避免它稍后覆盖草稿
+  const seq = ++requestSeq
+  loading.value = false
   saving.value = true
   error.value = ''
   notice.value = ''
   try {
     const next = await saveRobots({ version: response.value?.version ?? 1, robots })
+    if (seq !== requestSeq) return
     applyResponse(next, preferredAppid)
     notice.value = t('pages.dashboard.robots.saved', '机器人配置已保存。')
   } catch (err) {
+    if (seq !== requestSeq) return
     error.value = err instanceof Error ? err.message : String(err)
     return
   } finally {
@@ -478,7 +490,7 @@ async function importLegacy(): Promise<void> {
           variant="text"
           color="primary"
           :loading="loading"
-          :disabled="!hasBackend"
+          :disabled="!hasBackend || saving"
           @click="load"
         >
           {{ t('pages.dashboard.robots.reload', '重新载入') }}
