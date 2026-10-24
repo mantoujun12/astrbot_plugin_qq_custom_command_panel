@@ -174,7 +174,7 @@ def test_get_platform_entries_keeps_name_and_defaults() -> None:
         ]
     }
     entries = get_platform_entries(config)
-    # 没填 name/platform 时 pf_id 取 appid，platform 归一成 qq_official
+    # 平台身份始终取 appid，platform 归一成 qq_official
     assert entries == [
         {
             "pf_id": "222",
@@ -186,6 +186,22 @@ def test_get_platform_entries_keeps_name_and_defaults() -> None:
     ]
 
 
+def test_get_platform_entries_uses_appid_as_identity() -> None:
+    entries = get_platform_entries(
+        {
+            "qq_platforms": [
+                {"name": "bot", "appid": "A", "secret": "s1"},
+                {"name": "bot", "appid": "B", "secret": "s2"},
+            ]
+        }
+    )
+
+    assert [(entry["pf_id"], entry["name"]) for entry in entries] == [
+        ("A", "bot"),
+        ("B", "bot"),
+    ]
+
+
 def test_get_platforms_from_schema_basic() -> None:
     config = {
         "qq_platforms": [
@@ -193,11 +209,11 @@ def test_get_platforms_from_schema_basic() -> None:
         ]
     }
     assert get_platforms_from_schema(config) == {
-        "小号": {"appid": "111", "secret": "s1", "platform": "qq_official"},
+        "111": {"appid": "111", "secret": "s1", "platform": "qq_official"},
     }
 
 
-def test_get_platforms_from_schema_dedups_by_pf_id() -> None:
+def test_get_platforms_from_schema_keeps_same_name_with_different_appids() -> None:
     config = {
         "qq_platforms": [
             {"name": "dup", "appid": "1", "secret": "s1"},
@@ -205,9 +221,23 @@ def test_get_platforms_from_schema_dedups_by_pf_id() -> None:
         ]
     }
     platforms = get_platforms_from_schema(config)
-    # 同一 pf_id 只保留第一条
+    # 备注名可以重复，平台身份以 appid 为准
+    assert platforms == {
+        "1": {"appid": "1", "secret": "s1", "platform": "qq_official"},
+        "2": {"appid": "2", "secret": "s2", "platform": "qq_official"},
+    }
+
+
+def test_get_platforms_from_schema_dedups_by_appid() -> None:
+    config = {
+        "qq_platforms": [
+            {"name": "first", "appid": "same", "secret": "s1"},
+            {"name": "second", "appid": "same", "secret": "s2"},
+        ]
+    }
+    platforms = get_platforms_from_schema(config)
     assert len(platforms) == 1
-    assert platforms["dup"]["appid"] == "1"
+    assert platforms["same"]["secret"] == "s1"
 
 
 def test_get_platforms_from_schema_skips_incomplete() -> None:
@@ -229,8 +259,8 @@ def test_get_configured_platforms_reads_schema_only() -> None:
         ]
     }
     platforms = get_configured_platforms(config)
-    assert list(platforms) == ["schema_pf"]
-    assert platforms["schema_pf"]["appid"] == "s_app"
+    assert list(platforms) == ["s_app"]
+    assert platforms["s_app"]["appid"] == "s_app"
 
 
 def test_get_configured_platforms_empty_without_qq_platforms() -> None:
@@ -298,6 +328,35 @@ def test_export_config_normalizes_language_and_skips_invalid_commands() -> None:
     assert exported["language"] == "zh-CN"
     assert exported["selected_commands"] == [{"name": "ok", "desc": ""}]
     assert exported["qq_platforms"] == []
+
+
+def test_export_and_normalize_preserves_platforms_with_duplicate_names() -> None:
+    """GET /config 的结果原样保存回去时，不能丢掉同名平台及其 secret。"""
+    config = {
+        "qq_platforms": [
+            {"name": "bot", "appid": "A", "secret": "s1"},
+            {"name": "bot", "appid": "B", "secret": "s2"},
+        ]
+    }
+    exported = export_config(config)
+    submitted = [
+        {
+            "name": platform["name"],
+            "appid": platform["appid"],
+            "secret": "",
+            "platform": platform["platform"],
+        }
+        for platform in exported["qq_platforms"]
+    ]
+
+    values, errors = normalize_config_payload(config, {"qq_platforms": submitted})
+
+    assert errors == []
+    assert [(platform["name"], platform["appid"]) for platform in values["qq_platforms"]] == [
+        ("bot", "A"),
+        ("bot", "B"),
+    ]
+    assert [platform["secret"] for platform in values["qq_platforms"]] == ["s1", "s2"]
 
 
 # ---------------------------------------------------------------------------

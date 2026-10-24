@@ -35,7 +35,9 @@ from .config import (
     export_config,
     get_configured_platforms,
     get_enabled_scenes,
+    get_platform_entries,
     get_selected_commands,
+    mask_appid,
     normalize_config_payload,
 )
 from .i18n import LOG_TAG, t
@@ -74,14 +76,6 @@ def _web() -> Any:
     from astrbot.api import web
 
     return web
-
-
-def mask_appid(appid: Any) -> str:
-    """appid 脱敏：保留前 3 位与后 2 位，中间打码；过短整体打码"""
-    text = str(appid or "")
-    if len(text) <= 6:
-        return "*" * len(text)
-    return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
 
 
 def _robot_response(config: dict[str, Any]) -> dict[str, Any]:
@@ -132,11 +126,12 @@ async def _platform_status(
     missing=该场景无插件面板，failed=查询该场景失败。
     """
     raw_appid = info.get("appid")
-    # 未配备注时 pf_id 会退化成 appid，展示时同样需要脱敏
+    # 兼容配置以 appid 作为平台身份，响应里始终使用脱敏值
     display_pf_id = mask_appid(raw_appid) if raw_appid and str(raw_appid) == pf_id else pf_id
 
     payload: dict[str, Any] = {
         "pf_id": display_pf_id,
+        "name": info.get("name") or "",
         "appid": mask_appid(raw_appid),
         "platform": info.get("platform") or getattr(client, "platform_label", "qq"),
         "scenes": [],
@@ -271,13 +266,20 @@ async def _build_legacy_status(
 ) -> dict[str, Any]:
     """旧版全局配置的状态统计，保持既有行为不变。"""
     platforms = get_configured_platforms(config)
+    platform_names = {entry["appid"]: entry["name"] for entry in get_platform_entries(config)}
     scenes = get_enabled_scenes(config)
     items = get_selected_commands(config)
     clients = syncer.build_clients(config)
 
     results = await asyncio.gather(
         *(
-            _platform_status(syncer, pf_id, client, platforms.get(pf_id, {}), scenes)
+            _platform_status(
+                syncer,
+                pf_id,
+                client,
+                {**platforms.get(pf_id, {}), "name": platform_names.get(pf_id, "")},
+                scenes,
+            )
             for pf_id, client in clients.items()
         )
     )

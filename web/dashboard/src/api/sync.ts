@@ -77,6 +77,8 @@ export function reduceSyncEvent(state: SyncRunState, event: SyncEvent): SyncRunS
       ...next.platformStates.filter((item) => item.pf_id !== event.pf_id),
       {
         pf_id: event.pf_id,
+        name: event.name ?? '',
+        appid: event.appid ?? '',
         index: event.index,
         status: event.status,
         saved: event.saved,

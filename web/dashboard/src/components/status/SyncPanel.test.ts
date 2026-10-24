@@ -81,7 +81,9 @@ describe('SyncPanel', () => {
     panel.emit({
       type: 'platform',
       seq: 2,
-      pf_id: '主机器人',
+      pf_id: '1023456789',
+      name: '主机器人',
+      appid: '102*****89',
       index: 1,
       total: 2,
       status: 'ok',
@@ -106,6 +108,60 @@ describe('SyncPanel', () => {
     expect(panel.wrapper.text()).toContain('同步完成：成功 1 个平台，失败 1 个')
     // 状态页靠这个事件重新拉一次状态
     expect(panel.wrapper.emitted('finished')).toHaveLength(1)
+  })
+
+  it('disambiguates duplicate robot names with masked appids', async () => {
+    const panel = await setup()
+
+    panel.emit({ type: 'start', seq: 1, platforms: 2, scenes: 2, items: 2 })
+    panel.emit({
+      type: 'platform',
+      seq: 2,
+      pf_id: '1112223334',
+      name: 'bot',
+      appid: '111*****34',
+      index: 1,
+      total: 2,
+      status: 'ok',
+      saved: 1,
+    })
+    panel.emit({
+      type: 'platform',
+      seq: 3,
+      pf_id: '5556667778',
+      name: 'bot',
+      appid: '555*****78',
+      index: 2,
+      total: 2,
+      status: 'ok',
+      saved: 1,
+    })
+    await flush()
+
+    expect(panel.wrapper.text()).toContain('bot (111*****34)')
+    expect(panel.wrapper.text()).toContain('bot (555*****78)')
+    expect(panel.wrapper.text()).not.toContain('1112223334')
+    expect(panel.wrapper.text()).not.toContain('5556667778')
+  })
+
+  it('falls back to the masked appid when a robot has no name', async () => {
+    const panel = await setup()
+
+    panel.emit({ type: 'start', seq: 1, platforms: 1, scenes: 1, items: 1 })
+    panel.emit({
+      type: 'platform',
+      seq: 2,
+      pf_id: '1023456789',
+      appid: '102*****89',
+      index: 1,
+      total: 1,
+      status: 'ok',
+      saved: 1,
+    })
+    await flush()
+
+    expect(panel.wrapper.text()).toContain('102*****89')
+    expect(panel.wrapper.text()).not.toContain('1023456789')
   })
 
   it('keeps the progress bar indeterminate when the total is unknown', async () => {
