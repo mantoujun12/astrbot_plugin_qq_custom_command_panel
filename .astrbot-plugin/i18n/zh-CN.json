@@ -148,6 +148,7 @@
           "commands": "指令条目",
           "panels": "线上面板"
         },
+        "panelsPartial": "部分场景查询失败，该值为下限",
         "state": {
           "synced": "已同步",
           "duplicate": "重复面板",
