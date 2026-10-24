@@ -5,7 +5,7 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.6.2] - 2026-10-24
 
 ### 修复
 
@@ -212,6 +212,7 @@
 
 - 首次发布：QQ 官方机器人指令面板同步功能 (#1)
 
+[v0.6.2]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.6.1...v0.6.2
 [v0.6.1]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.6.0...v0.6.1
 [v0.6.0]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.2...v0.6.0
 [v0.5.2]: https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/compare/v0.5.1...v0.5.2
