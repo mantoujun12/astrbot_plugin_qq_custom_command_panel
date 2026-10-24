@@ -35,6 +35,10 @@ const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 
+// 请求代次：load 与 save 都会写同一份表单，只允许最新一次请求写回状态。
+// 否则先发出的 GET 后返回时会用保存前的快照覆盖刚保存的数据，且 finally 会误关状态。
+let requestSeq = 0
+
 /** 本地开发没有 bridge，页面只展示 mock 并禁用编辑，不允许假装保存成功 */
 const mockMode = computed(() => ready.value && !hasBackend.value)
 const editable = computed(() => form.value !== null && hasBackend.value && !saving.value)
@@ -64,18 +68,21 @@ function savedPlatform(appid: string) {
 }
 
 async function load(): Promise<void> {
+  const seq = ++requestSeq
   loading.value = true
   error.value = ''
   try {
     const next = await fetchConfig()
+    if (seq !== requestSeq) return
     config.value = next
     form.value = toForm(next)
   } catch (err) {
+    if (seq !== requestSeq) return
     config.value = null
     form.value = null
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
@@ -122,6 +129,9 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
   // 用规范化后的载荷提交，页面上的输入框同步显示 trim 后的值
   form.value = checked.payload
 
+  // 保存会写回服务端最新结果，先让仍在路上的 load 失效，避免它稍后覆盖表单
+  const seq = ++requestSeq
+  loading.value = false
   saving.value = true
   error.value = ''
   notice.value = ''
@@ -132,6 +142,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
       qq_platforms: checked.payload.qq_platforms,
       selected_commands: checked.payload.selected_commands,
     })
+    if (seq !== requestSeq) return
     config.value = next
     form.value = toForm(next)
     notice.value = t('pages.dashboard.compatibility.saved', '配置已保存并生效。')
@@ -141,6 +152,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
       await router.push({ name: 'status' })
     }
   } catch (err) {
+    if (seq !== requestSeq) return
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     saving.value = false
@@ -168,7 +180,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
           variant="text"
           color="primary"
           :loading="loading"
-          :disabled="!hasBackend"
+          :disabled="!hasBackend || saving"
           @click="load"
         >
           {{ t('pages.dashboard.compatibility.reload', '重新载入') }}

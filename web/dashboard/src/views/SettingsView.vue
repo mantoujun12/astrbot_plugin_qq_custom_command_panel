@@ -53,6 +53,10 @@ const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 
+// 请求代次：load 与 save 都会写同一份表单，只允许最新一次请求写回状态，
+// 否则先发出的 GET 后返回时会用保存前的快照覆盖刚保存的数据。
+let requestSeq = 0
+
 /** 本地开发没有 bridge，可以编辑预览，但不允许假装保存成功 */
 const mockMode = computed(() => ready.value && !hasBackend.value)
 const colorsValid = computed(
@@ -62,10 +66,12 @@ const editable = computed(() => config.value !== null && !saving.value)
 const canSave = computed(() => editable.value && hasBackend.value && colorsValid.value)
 
 async function load(): Promise<void> {
+  const seq = ++requestSeq
   loading.value = true
   error.value = ''
   try {
     const next = await fetchConfig()
+    if (seq !== requestSeq) return
     config.value = next
     language.value = next.language
     const colors = resolveThemeColors(next)
@@ -73,10 +79,11 @@ async function load(): Promise<void> {
     secondaryColor.value = colors.secondary
     applyThemeColors(theme, colors)
   } catch (err) {
+    if (seq !== requestSeq) return
     config.value = null
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
@@ -109,6 +116,9 @@ async function save(): Promise<void> {
   if (!hasBackend.value || !config.value || !colorsValid.value) {
     return
   }
+  // 保存会写回服务端最新结果，先让仍在路上的 load 失效，避免它稍后覆盖表单
+  const seq = ++requestSeq
+  loading.value = false
   saving.value = true
   error.value = ''
   notice.value = ''
@@ -118,6 +128,7 @@ async function save(): Promise<void> {
       primary_color: primaryColor.value.trim().toLowerCase(),
       secondary_color: secondaryColor.value.trim().toLowerCase(),
     })
+    if (seq !== requestSeq) return
     config.value = next
     language.value = next.language
     const colors = resolveThemeColors(next)
@@ -126,6 +137,7 @@ async function save(): Promise<void> {
     applyThemeColors(theme, colors)
     notice.value = t('pages.dashboard.settings.saved', '设置已保存并生效。')
   } catch (err) {
+    if (seq !== requestSeq) return
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     saving.value = false
@@ -149,7 +161,7 @@ async function save(): Promise<void> {
           variant="text"
           color="primary"
           :loading="loading"
-          :disabled="!ready || loading"
+          :disabled="!ready || loading || saving"
           @click="load"
         >
           {{ t('pages.dashboard.settings.reload', '重新载入') }}

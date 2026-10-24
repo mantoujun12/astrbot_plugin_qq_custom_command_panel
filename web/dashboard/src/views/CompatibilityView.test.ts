@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 import { VSelect } from 'vuetify/components'
 import type { PluginConfigResponse } from '../types/dashboard'
-import { flush, installBridge, mountView, waitUntil } from '../test/helpers'
+import { flush, installBridge, mountView, waitUntil, deferred } from '../test/helpers'
 
 vi.mock('../api/dashboard', () => ({
   fetchStatus: vi.fn(),
@@ -297,5 +297,53 @@ describe('CompatibilityView', () => {
     await waitUntil(() => vi.mocked(api.fetchConfig).mock.calls.length === 2)
 
     expect(api.fetchConfig).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a stale reload that resolves after the save', async () => {
+    const { api, mount } = await loadCompatibilityView()
+    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    vi.mocked(api.saveConfig).mockResolvedValue(
+      configFixture({ selected_commands: [{ name: 'saved', desc: '保存后的指令' }] }),
+    )
+
+    const wrapper = await mount()
+    const stale = deferred<PluginConfigResponse>()
+    vi.mocked(api.fetchConfig).mockReturnValueOnce(stale.promise)
+
+    await button(wrapper, '重新载入').trigger('click')
+    await waitUntil(() => vi.mocked(api.fetchConfig).mock.calls.length === 2)
+
+    await button(wrapper, '保存').trigger('click')
+    await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
+    await flush()
+    expect(wrapper.findAll(NAME_INPUTS)).toHaveLength(1)
+
+    // 先发出的 GET 在保存之后才返回，不能把表单覆盖回保存前的两条指令
+    stale.resolve(configFixture())
+    await flush()
+
+    expect(wrapper.findAll(NAME_INPUTS)).toHaveLength(1)
+    expect((wrapper.findAll(DESC_INPUTS)[0]?.element as HTMLInputElement).value).toBe(
+      '保存后的指令',
+    )
+    expect(wrapper.text()).toContain('配置已保存并生效。')
+  })
+
+  it('disables reload while a save is in flight', async () => {
+    const { api, mount } = await loadCompatibilityView()
+    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const pendingSave = deferred<PluginConfigResponse>()
+    vi.mocked(api.saveConfig).mockReturnValueOnce(pendingSave.promise)
+
+    const wrapper = await mount()
+    await button(wrapper, '保存').trigger('click')
+    await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
+
+    expect(button(wrapper, '重新载入').attributes('disabled')).toBeDefined()
+
+    pendingSave.resolve(configFixture())
+    await flush()
+
+    expect(button(wrapper, '重新载入').attributes('disabled')).toBeUndefined()
   })
 })
