@@ -220,6 +220,38 @@ describe('useSyncRun', () => {
     expect(run.state.value.error).toBe('sse down')
   })
 
+  it('returns to idle when the stream closes without a run', async () => {
+    const stream = streamBridge()
+    const run = await setup()
+
+    const onFinish = vi.fn()
+    run.attach(onFinish)
+    await flush()
+
+    stream.emit({ type: 'start', seq: 1, platforms: 1, scenes: 1, items: 1 })
+    await flush()
+    expect(run.state.value.status).toBe('running')
+
+    // 插件重启后缓冲为空：后端补发 reason=idle 的 finish
+    stream.emit({
+      type: 'finish',
+      seq: 1,
+      ok: false,
+      reason: 'idle',
+      platforms: 0,
+      succeeded: 0,
+      failed: 0,
+    })
+    await flush()
+
+    expect(run.state.value.status).toBe('idle')
+    expect(run.running.value).toBe(false)
+    expect(run.hasRun.value).toBe(false)
+    // 这不是一次真实运行结束，不触发状态页刷新
+    expect(onFinish).not.toHaveBeenCalled()
+    expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledWith('sub-1')
+  })
+
   it('surfaces a stream error', async () => {
     const stream = streamBridge()
     const run = await setup()

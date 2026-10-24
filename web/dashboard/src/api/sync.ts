@@ -94,6 +94,12 @@ export function reduceSyncEvent(state: SyncRunState, event: SyncEvent): SyncRunS
     }
   }
 
+  if (event.reason === 'idle') {
+    // 后端在缓冲为空 / 任务被取消时补发的终止事件：订阅流没有对应的一次运行，
+    // 清掉上一轮的残留状态（尤其是 running），让页面回到可重新同步的 idle
+    return initialSyncState()
+  }
+
   return {
     ...next,
     status: event.ok ? 'done' : 'failed',
