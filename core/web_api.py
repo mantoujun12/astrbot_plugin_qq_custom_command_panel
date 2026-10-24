@@ -373,6 +373,7 @@ class WebApiBundle:
         self._version = version
         self.cache = StatusCache(cache_ttl)
         self.runner = SyncRunner()
+        self._robot_config_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # 注册
@@ -558,38 +559,42 @@ class WebApiBundle:
         if not isinstance(payload, dict):
             return web.error_response(t("web.config_invalid_body"), status_code=400)
 
-        try:
-            existing = self._load_robots()
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+        async with self._robot_config_lock:
+            try:
+                existing = self._load_robots()
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        expected_version = payload.get("version")
-        current_version = existing.get("version", 1)
-        if type(expected_version) is not int or expected_version < 1:
-            return web.error_response(t("web.robot_version_invalid"), status_code=400)
-        if expected_version != current_version:
-            return web.error_response(t("web.robot_config_conflict"), status_code=409)
+            expected_version = payload.get("version")
+            current_version = existing.get("version", 1)
+            if type(expected_version) is not int or expected_version < 1:
+                return web.error_response(t("web.robot_version_invalid"), status_code=400)
+            if expected_version != current_version:
+                return web.error_response(t("web.robot_config_conflict"), status_code=409)
 
-        config, errors = validate_robot_config(existing, payload)
-        if errors:
-            return web.error_response(t("common.error_separator").join(errors), status_code=400)
+            config, errors = validate_robot_config(existing, payload)
+            if errors:
+                return web.error_response(
+                    t("common.error_separator").join(errors),
+                    status_code=400,
+                )
 
-        config["version"] = current_version + 1
-        try:
-            save_robot_config(self._robot_config_dir, config)
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_save_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+            config["version"] = current_version + 1
+            try:
+                save_robot_config(self._robot_config_dir, config)
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_save_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        self.cache.invalidate()
-        return web.json_response(_robot_response(config))
+            self.cache.invalidate()
+            return web.json_response(_robot_response(config))
 
     async def page_robots_import_legacy(self) -> Any:
         """把兼容配置里的机器人导入新版配置，重复 appid 拒绝导入。"""
@@ -621,73 +626,77 @@ class WebApiBundle:
         if len(set(appids)) != len(appids):
             return web.error_response(t("web.robot_appids_duplicate"), status_code=400)
 
-        try:
-            existing = self._load_robots()
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+        async with self._robot_config_lock:
+            try:
+                existing = self._load_robots()
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        expected_version = payload.get("version")
-        current_version = existing.get("version", 1)
-        if type(expected_version) is not int or expected_version < 1:
-            return web.error_response(t("web.robot_version_invalid"), status_code=400)
-        if expected_version != current_version:
-            return web.error_response(t("web.robot_config_conflict"), status_code=409)
+            expected_version = payload.get("version")
+            current_version = existing.get("version", 1)
+            if type(expected_version) is not int or expected_version < 1:
+                return web.error_response(t("web.robot_version_invalid"), status_code=400)
+            if expected_version != current_version:
+                return web.error_response(t("web.robot_config_conflict"), status_code=409)
 
-        existing_appids = _robot_appid_set(existing)
-        duplicates = [appid for appid in appids if appid in existing_appids]
-        if duplicates:
-            return web.error_response(
-                t(
-                    "web.robot_appids_existing",
-                    appids=t("common.list_separator").join(duplicates),
-                ),
-                status_code=400,
-            )
+            existing_appids = _robot_appid_set(existing)
+            duplicates = [appid for appid in appids if appid in existing_appids]
+            if duplicates:
+                return web.error_response(
+                    t(
+                        "web.robot_appids_existing",
+                        appids=t("common.list_separator").join(duplicates),
+                    ),
+                    status_code=400,
+                )
 
-        drafts = legacy_to_robot_drafts(self._get_legacy())
-        by_appid = {
-            str(draft.get("appid") or "").strip(): draft
-            for draft in drafts
-            if isinstance(draft, dict) and str(draft.get("appid") or "").strip()
-        }
-        missing = [appid for appid in appids if appid not in by_appid]
-        if missing:
-            return web.error_response(
-                t(
-                    "web.robot_appids_missing",
-                    appids=t("common.list_separator").join(missing),
-                ),
-                status_code=400,
-            )
+            drafts = legacy_to_robot_drafts(self._get_legacy())
+            by_appid = {
+                str(draft.get("appid") or "").strip(): draft
+                for draft in drafts
+                if isinstance(draft, dict) and str(draft.get("appid") or "").strip()
+            }
+            missing = [appid for appid in appids if appid not in by_appid]
+            if missing:
+                return web.error_response(
+                    t(
+                        "web.robot_appids_missing",
+                        appids=t("common.list_separator").join(missing),
+                    ),
+                    status_code=400,
+                )
 
-        robots = existing.get("robots")
-        merged = dict(existing)
-        merged["version"] = 1
-        merged["robots"] = [
-            *(robots if isinstance(robots, list) else []),
-            *(by_appid[appid] for appid in appids),
-        ]
+            robots = existing.get("robots")
+            merged = dict(existing)
+            merged["version"] = 1
+            merged["robots"] = [
+                *(robots if isinstance(robots, list) else []),
+                *(by_appid[appid] for appid in appids),
+            ]
 
-        config, errors = validate_robot_config({}, merged)
-        if errors:
-            return web.error_response(t("common.error_separator").join(errors), status_code=400)
+            config, errors = validate_robot_config({}, merged)
+            if errors:
+                return web.error_response(
+                    t("common.error_separator").join(errors),
+                    status_code=400,
+                )
 
-        config["version"] = current_version + 1
-        try:
-            save_robot_config(self._robot_config_dir, config)
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_import_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+            config["version"] = current_version + 1
+            try:
+                save_robot_config(self._robot_config_dir, config)
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_import_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        self.cache.invalidate()
-        return web.json_response(_robot_response(config))
+            self.cache.invalidate()
+            return web.json_response(_robot_response(config))
 
     # ------------------------------------------------------------------
     # 同步入口 + 进度流

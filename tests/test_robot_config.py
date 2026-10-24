@@ -136,6 +136,60 @@ def test_load_corrupt_json_does_not_silently_fallback(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8") == before
 
 
+@pytest.mark.parametrize(
+    "robots",
+    [
+        ["bad"],
+        [make_robot(appid=123)],  # type: ignore[arg-type]
+        [make_robot(scenes="bad")],  # type: ignore[arg-type]
+        [make_robot(scenes={**make_scenes(), "c2c": {"enabled": True, "items": "bad"}})],
+        [make_robot(scenes={**make_scenes(), "group": "bad"})],
+        [make_robot(scenes={**make_scenes(), "other": {"enabled": False, "items": []}})],
+    ],
+)
+def test_load_rejects_invalid_nested_robot_config(
+    tmp_path: Path,
+    robots: list[Any],
+) -> None:
+    path = tmp_path / ROBOT_CONFIG_FILENAME
+    path.write_text(json.dumps({"version": 1, "robots": robots}), encoding="utf-8")
+
+    with pytest.raises(RobotConfigError):
+        load_robot_config(tmp_path)
+
+    assert path.is_file()
+
+
+def test_load_rejects_duplicate_appid(tmp_path: Path) -> None:
+    payload = {
+        "version": 1,
+        "robots": [
+            make_robot(appid="same-appid", robot_id="r1"),
+            make_robot(appid="same-appid", robot_id="r2"),
+        ],
+    }
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RobotConfigError, match="same-appid.*重复"):
+        load_robot_config(tmp_path)
+
+
+def test_load_normalizes_secret_and_preserves_existing_version(tmp_path: Path) -> None:
+    payload = {"version": 7, "robots": [make_robot(secret="  plain-secret-value  ")]}
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    loaded = load_robot_config(tmp_path)
+
+    assert loaded["version"] == 7
+    assert loaded["robots"][0]["secret"] == "plain-secret-value"
+
+
 # 校验
 
 
@@ -173,6 +227,16 @@ def test_validate_rejects_duplicate_appid() -> None:
     _normalized, errors = validate_robot_config(empty_robot_config(), payload)
 
     assert any("重复" in error for error in errors)
+
+
+def test_validate_rejects_non_string_appid() -> None:
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(appid=123)]},  # type: ignore[arg-type]
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("appid" in error for error in errors)
 
 
 def test_validate_rejects_duplicate_robot_id() -> None:
@@ -287,6 +351,21 @@ def test_validate_rejects_non_list_items() -> None:
     assert any("items" in error and "列表" in error for error in errors)
 
 
+def test_validate_rejects_unknown_scene() -> None:
+    scenes = {
+        **make_scenes(),
+        "other": {"enabled": False, "items": []},
+    }
+
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("scenes.other" in error and "不支持" in error for error in errors)
+
+
 def test_validate_does_not_silently_truncate() -> None:
     items = [{"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)}]
 
@@ -336,6 +415,16 @@ def test_validate_requires_secret_for_new_robot() -> None:
     assert any("secret" in error for error in errors)
 
 
+def test_validate_rejects_non_string_secret() -> None:
+    normalized, errors = validate_robot_config(
+        {"version": 1, "robots": [make_robot()]},
+        {"robots": [make_robot(secret=123)]},  # type: ignore[arg-type]
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("secret" in error and "字符串" in error for error in errors)
+
+
 # 新旧合并 / legacy 转换
 
 
@@ -352,6 +441,17 @@ def test_build_runtime_v2_wins_on_same_appid() -> None:
     assert robot["source"] == "v2"
     assert robot["scenes"]["c2c"] == [{"name": "help", "desc": "查看帮助"}]
     assert robot["scenes"]["group"] == []
+
+
+def test_build_runtime_v2_wins_when_legacy_appid_has_whitespace() -> None:
+    legacy = make_legacy_config(appid="  shared-appid  ")
+    robot_config = {"robots": [make_robot(appid="shared-appid")]}
+
+    runtime = build_runtime_robots(legacy, robot_config)
+
+    assert len(runtime) == 1
+    assert runtime[0]["source"] == "v2"
+    assert runtime[0]["appid"] == "shared-appid"
 
 
 def test_build_runtime_keeps_unmatched_legacy_robot() -> None:
@@ -376,6 +476,18 @@ def test_build_runtime_rejects_duplicate_robot_ids() -> None:
     }
 
     with pytest.raises(RobotConfigError, match="id 重复"):
+        build_runtime_robots({}, robot_config)
+
+
+def test_build_runtime_rejects_duplicate_appids() -> None:
+    robot_config = {
+        "robots": [
+            make_robot(appid="same-appid", robot_id="r1"),
+            make_robot(appid="same-appid", robot_id="r2"),
+        ]
+    }
+
+    with pytest.raises(RobotConfigError, match="AppID 重复"):
         build_runtime_robots({}, robot_config)
 
 

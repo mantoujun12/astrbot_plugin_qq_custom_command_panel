@@ -31,7 +31,7 @@ ROBOT_CONFIG_FILENAME = "robot_config.json"
 
 
 class RobotConfigError(ValueError):
-    """读取、校验、保存新版配置失败，或运行时合并出现 id 冲突时抛出。"""
+    """读取、校验、保存新版配置失败，或运行时合并出现冲突时抛出。"""
 
 
 def empty_robot_config() -> dict[str, Any]:
@@ -73,7 +73,13 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     if not isinstance(payload.get("robots", []), list):
         raise RobotConfigError(t("robot.error.robots_type"))
 
-    return payload
+    # 复用写入路径的归一化结果，但保留原文件中的 revision，避免乐观并发检查被重置。
+    normalized, errors = validate_robot_config(empty_robot_config(), payload)
+    if errors:
+        raise RobotConfigError("\n".join(errors))
+    normalized["version"] = version
+
+    return normalized
 
 
 def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
@@ -125,6 +131,16 @@ def _validate_scenes(
     if not isinstance(scenes, dict):
         path = f"robots[{robot_index}].scenes"
         return normalized, [t("robot.error.scenes_type", path=path)]
+
+    for scene in scenes:
+        if scene not in SCENES:
+            errors.append(
+                t(
+                    "robot.error.scene_unknown",
+                    path=f"robots[{robot_index}].scenes.{scene}",
+                    scene=scene,
+                )
+            )
 
     for scene in SCENES:
         scene_path = f"robots[{robot_index}].scenes.{scene}"
@@ -235,7 +251,8 @@ def validate_robot_config(
             errors.append(t("robot.error.robot_entry_type", path=robot_path))
             continue
 
-        appid = str(raw_robot.get("appid") or "").strip()
+        raw_appid = raw_robot.get("appid")
+        appid = raw_appid.strip() if isinstance(raw_appid, str) else ""
         if not appid:
             errors.append(t("robot.error.appid_required", path=f"{robot_path}.appid"))
             continue
@@ -265,7 +282,8 @@ def validate_robot_config(
             )
             continue
 
-        platform = str(raw_robot.get("platform") or "").strip()
+        raw_platform = raw_robot.get("platform")
+        platform = raw_platform.strip() if isinstance(raw_platform, str) else ""
         if platform not in PLATFORM_TYPES:
             errors.append(
                 t(
@@ -276,7 +294,11 @@ def validate_robot_config(
             )
             continue
 
-        secret = str(raw_robot.get("secret") or "").strip()
+        raw_secret = raw_robot.get("secret")
+        if not isinstance(raw_secret, str):
+            errors.append(t("robot.error.secret_type", path=f"{robot_path}.secret"))
+            continue
+        secret = raw_secret.strip()
         if not secret:
             secret = secret_by_appid.get(appid, "")
         if not secret:
@@ -404,6 +426,9 @@ def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]
     selected_commands = get_selected_commands(legacy_config)
     runtime: list[dict[str, Any]] = []
     for entry in get_platform_entries(legacy_config):
+        appid = entry["appid"].strip()
+        if not appid:
+            continue
         scenes: dict[str, list[dict[str, str]]] = {scene: [] for scene in SCENES}
         for scene in enabled_scenes:
             scenes[scene] = [
@@ -413,7 +438,7 @@ def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]
             {
                 "id": entry["pf_id"],
                 "name": entry["name"],
-                "appid": entry["appid"],
+                "appid": appid,
                 "secret": entry["secret"],
                 "platform": entry["platform"],
                 "source": "legacy",
@@ -436,7 +461,13 @@ def build_runtime_robots(
     ]
     runtime = [*v2_robots, *legacy_robots]
     seen_ids: set[str] = set()
+    seen_appids: set[str] = set()
     for robot in runtime:
+        appid = str(robot.get("appid") or "").strip()
+        if appid and appid in seen_appids:
+            raise RobotConfigError(t("robot.error.runtime_appid_duplicate", appid=appid))
+        seen_appids.add(appid)
+
         robot_id = str(robot.get("id") or robot.get("appid") or "")
         if robot_id in seen_ids:
             raise RobotConfigError(t("robot.error.runtime_id_duplicate", robot_id=robot_id))
