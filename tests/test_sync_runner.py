@@ -94,6 +94,25 @@ async def test_stream_emits_idle_finish_for_stale_cursor_after_restart() -> None
 
 
 @pytest.mark.asyncio
+async def test_stream_emits_idle_finish_when_cursor_is_past_completed_buffer() -> None:
+    """新进程已有完整一轮缓冲时，超前的旧游标也不能静默返回"""
+
+    async def run(emit: Any) -> dict[str, Any]:
+        await emit({"type": "start"})
+        await emit({"type": "finish", "ok": True})
+        return {}
+
+    runner = SyncRunner()
+    runner.start(run)
+    await runner.join()
+
+    events = await collect(runner, since=runner.last_seq + 40)
+
+    assert [event["type"] for event in events] == ["finish"]
+    assert events[0]["reason"] == "idle"
+
+
+@pytest.mark.asyncio
 async def test_stream_waits_for_running_task() -> None:
     """运行中订阅要先等事件，任务结束后流自动收尾"""
     runner = SyncRunner()
