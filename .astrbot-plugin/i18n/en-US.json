@@ -284,6 +284,8 @@
         "secret": "ClientSecret",
         "secretKeep": "Leave empty to keep the current value",
         "secretRequired": "ClientSecret is required for a new robot.",
+        "secretRequiredForAppidChange": "ClientSecret is required after changing the AppID.",
+        "appidChangeWarning": "Changing the AppID changes which compatibility robots this configuration takes over: the old AppID falls back to the compatibility configuration, and the new AppID takes over the compatibility configuration with the same AppID.",
         "secretSaved": "Current: {masked}",
         "secretSetNoMask": "ClientSecret is saved. Leave empty to keep the current value.",
         "platformType": "Platform type",
