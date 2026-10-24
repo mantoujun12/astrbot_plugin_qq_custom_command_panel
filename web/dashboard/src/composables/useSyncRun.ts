@@ -22,12 +22,19 @@ const attaching = ref(false)
 let subscription: SyncSubscription | null = null
 let attachSeq = 0
 
-async function stopSubscription(): Promise<void> {
+/** 只释放已建立的订阅，不递增 attachSeq，供 subscribe 交接旧流时使用 */
+async function releaseSubscription(): Promise<void> {
   const current = subscription
   subscription = null
   if (current) {
     await current.stop()
   }
+}
+
+/** 停止订阅，并让所有尚未建立的订阅失效（它们拿到 id 后会自行退订） */
+async function stopSubscription(): Promise<void> {
+  attachSeq += 1
+  await releaseSubscription()
 }
 
 function setError(error: unknown): void {
@@ -46,7 +53,11 @@ function setError(error: unknown): void {
  */
 async function subscribe(since: number, onFinish?: () => void): Promise<void> {
   const seq = ++attachSeq
-  await stopSubscription()
+  await releaseSubscription()
+  if (seq !== attachSeq) {
+    // 退订旧流期间被停止或被新订阅接管，这一条不再建立
+    return
+  }
   const next = await subscribeSyncRun({
     since,
     onEvent: (event) => {
