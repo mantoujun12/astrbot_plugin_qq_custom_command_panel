@@ -537,7 +537,7 @@ async def test_page_status_refresh_param_bypasses_cache() -> None:
             return await super().list_panels(scope)
 
     client = CountingClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
     bundle = make_bundle(config, syncer)
 
     await bundle.page_status()
@@ -577,7 +577,7 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
         qq_platforms=[{"name": "pf1", "appid": "1023456789", "secret": "old-secret"}],
     )
     syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
 
     saved: dict[str, Any] = {}
 
@@ -1370,7 +1370,7 @@ async def test_page_sync_events_returns_stream_and_honours_since() -> None:
 
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
     bundle = make_bundle(config, syncer)
 
     await bundle.page_sync_start()
@@ -1950,7 +1950,7 @@ async def test_page_sync_events_invalid_since_defaults_to_zero(
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     bundle = make_bundle(config, syncer)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
     await bundle.page_sync_start()
     await bundle.runner.join()
     request.query.set_values({"since": "not-an-int"})
