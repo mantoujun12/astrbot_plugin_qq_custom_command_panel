@@ -58,6 +58,7 @@ from .web_api import (
     build_status,
     panel_items_count,
     register_web_apis,
+    startup_sync,
 )
 
 __all__ = [
@@ -118,6 +119,7 @@ __all__ = [
     "resolve_plugin_data_dir",
     "save_config_values",
     "save_robot_config",
+    "startup_sync",
     "t",
     "validate_robot_config",
 ]
