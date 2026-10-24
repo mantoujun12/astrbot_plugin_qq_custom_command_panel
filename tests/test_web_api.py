@@ -983,6 +983,8 @@ async def test_page_sync_start_streams_structured_events() -> None:
 
     platform_event = next(event for event in events if event["type"] == "platform")
     assert platform_event["pf_id"] == "pf1"
+    assert platform_event["name"] == "pf1"
+    assert platform_event["appid_masked"] == "102*****89"
     assert platform_event["status"] == "ok"
     assert platform_event["index"] == 1
     assert platform_event["total"] == 1

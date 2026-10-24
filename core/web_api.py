@@ -36,6 +36,7 @@ from .config import (
     get_configured_platforms,
     get_enabled_scenes,
     get_selected_commands,
+    mask_appid,
     normalize_config_payload,
 )
 from .i18n import LOG_TAG, t
@@ -74,14 +75,6 @@ def _web() -> Any:
     from astrbot.api import web
 
     return web
-
-
-def mask_appid(appid: Any) -> str:
-    """appid 脱敏：保留前 3 位与后 2 位，中间打码；过短整体打码"""
-    text = str(appid or "")
-    if len(text) <= 6:
-        return "*" * len(text)
-    return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
 
 
 def _robot_response(config: dict[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ from .config import (
     PANEL_MAX_ITEMS,
     SCENES,
     get_enabled_scenes,
+    mask_appid,
     normalize_panel_items,
 )
 from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
@@ -638,10 +639,20 @@ class PanelSyncer:
             return {}
 
         robot_scenes: dict[str, dict[str, list[dict[str, str]]]] = {}
+        robot_labels: dict[str, dict[str, str]] = {}
         for robot in robots:
             pf_id = str(robot.get("id") or robot.get("appid") or "")
             if not pf_id:
                 continue
+            name = str(robot.get("name") or "").strip()
+            appid_masked = mask_appid(robot.get("appid"))
+            # pf_id 是同步与状态去重的稳定键（新版机器人是内部 id），
+            # 展示与进度文案必须优先用可读名称，其次脱敏 appid。
+            robot_labels[pf_id] = {
+                "name": name,
+                "appid_masked": appid_masked,
+                "label": name or appid_masked or pf_id,
+            }
             raw_scenes = robot.get("scenes")
             scenes = (
                 {scope: normalize_panel_items(raw_scenes.get(scope, [])) for scope in SCENES}
@@ -706,6 +717,12 @@ class PanelSyncer:
         # 部分场景失败时同步仍写过的面板，配合 result 的 error 一起记录
         partial_saved: dict[str, dict[str, str]] = {}
         for idx, (pf_id, client) in enumerate(expected.items(), start=1):
+            label_meta = robot_labels.get(pf_id) or {
+                "name": "",
+                "appid_masked": "",
+                "label": pf_id,
+            }
+            label = label_meta["label"]
             try:
                 scene_map = robot_scenes.get(pf_id, {scope: [] for scope in SCENES})
                 saved = await self.sync_for_platform(pf_id, client, scene_map)
@@ -716,7 +733,7 @@ class PanelSyncer:
                     on_progress,
                     t(
                         "progress.platform_synced",
-                        pf_id=pf_id,
+                        platform=label,
                         index=idx,
                         total=total,
                         saved=len(saved),
@@ -727,6 +744,8 @@ class PanelSyncer:
                     {
                         "type": "platform",
                         "pf_id": pf_id,
+                        "name": label_meta["name"],
+                        "appid_masked": label_meta["appid_masked"],
                         "index": idx,
                         "total": total,
                         "status": "ok",
@@ -736,7 +755,7 @@ class PanelSyncer:
                 )
             except Exception as exc:
                 logger.error(
-                    f"{LOG_TAG} " + t("log.sync_platform_failed", pf_id=pf_id, exc=exc),
+                    f"{LOG_TAG} " + t("log.sync_platform_failed", pf_id=label, exc=exc),
                     exc_info=True,
                 )
                 result[pf_id] = {"error": str(exc)}
@@ -747,7 +766,7 @@ class PanelSyncer:
                     on_progress,
                     t(
                         "progress.platform_sync_failed",
-                        pf_id=pf_id,
+                        platform=label,
                         index=idx,
                         total=total,
                         exc=exc,
@@ -758,6 +777,8 @@ class PanelSyncer:
                     {
                         "type": "platform",
                         "pf_id": pf_id,
+                        "name": label_meta["name"],
+                        "appid_masked": label_meta["appid_masked"],
                         "index": idx,
                         "total": total,
                         "status": "error",

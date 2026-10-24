@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
             :color="platform.status === 'ok' ? 'success' : 'error'"
             :prepend-icon="platform.status === 'ok' ? mdiCheckCircleOutline : mdiAlertCircleOutline"
           >
-            {{ platform.pf_id }}
+            {{ platform.name || platform.appid_masked || platform.pf_id }}
           </v-chip>
         </div>
 

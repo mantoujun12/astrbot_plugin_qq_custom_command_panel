@@ -20,7 +20,10 @@ export interface ScenePanelStatus {
 }
 
 export interface PlatformStatus {
-  /** 平台标识：备注名；缺省时用 appid（已脱敏）*/
+  /**
+   * 平台稳定标识。新版机器人是内部 id（可能是 UUID），兼容配置是备注名；
+   * 仅用于去重 / key，展示请用 name，再回退到 appid。
+   */
   pf_id: string
   /** 新版机器人备注名；兼容配置或旧响应里可能省略 */
   name?: string
@@ -127,7 +130,12 @@ export interface SyncStartEvent {
 export interface SyncPlatformEvent {
   type: 'platform'
   seq: number
+  /** 稳定的平台键，用于进度去重，不保证可读 */
   pf_id: string
+  /** 机器人备注名，缺失时前端回退到 appid_masked */
+  name?: string
+  /** 脱敏 appid，name 缺失时的展示回退 */
+  appid_masked?: string
   index: number
   total: number
   status: 'ok' | 'error'
@@ -152,6 +160,8 @@ export type SyncEvent = SyncMessageEvent | SyncStartEvent | SyncPlatformEvent | 
 /** 单个平台的同步结果，用于渲染状态标签 */
 export interface SyncPlatformState {
   pf_id: string
+  name: string
+  appid_masked: string
   index: number
   status: 'ok' | 'error'
   saved: number

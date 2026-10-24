@@ -452,6 +452,84 @@ async def test_sync_all_emits_start_platform_and_finish() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sync_all_reports_robot_name_instead_of_internal_id(monkeypatch) -> None:
+    """新版机器人用 UUID 做稳定键，进度与事件必须展示备注名而不是 UUID"""
+    robot_id = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+    syncer = make_syncer(config={"scenes": ["c2c"]})
+    client = FakeQQClient(existing={})
+    stub_clients(syncer, {robot_id: client})
+    monkeypatch.setattr(
+        syncer,
+        "build_runtime_robots",
+        lambda *args, **kwargs: [
+            {
+                "id": robot_id,
+                "name": "主机器人",
+                "appid": "1023456789",
+                "secret": "sec",
+                "platform": "qq_official",
+                "source": "v2",
+                "scenes": {"c2c": [{"name": "help", "desc": "说明"}]},
+            }
+        ],
+    )
+    events, on_event = await collect_events()
+    progress: list[str] = []
+
+    async def on_progress(message: str) -> None:
+        progress.append(message)
+
+    result = await syncer.sync_all(on_progress=on_progress, on_event=on_event)
+
+    assert result == {robot_id: {"c2c": "panel_new_1001"}}
+    platform_event = next(event for event in events if event["type"] == "platform")
+    assert platform_event["pf_id"] == robot_id
+    assert platform_event["name"] == "主机器人"
+    assert platform_event["appid_masked"] == "102*****89"
+    synced_line = next(message for message in progress if "完成" in message)
+    assert "主机器人" in synced_line
+    assert robot_id not in synced_line
+
+
+@pytest.mark.asyncio
+async def test_sync_all_falls_back_to_masked_appid_without_robot_name(monkeypatch) -> None:
+    """没有备注名时，进度与事件回退到脱敏 appid，不暴露完整 appid"""
+    robot_id = "1112223334"
+    syncer = make_syncer(config={"scenes": ["c2c"]})
+    client = FakeQQClient(existing={})
+    stub_clients(syncer, {robot_id: client})
+    monkeypatch.setattr(
+        syncer,
+        "build_runtime_robots",
+        lambda *args, **kwargs: [
+            {
+                "id": robot_id,
+                "name": "",
+                "appid": robot_id,
+                "secret": "sec",
+                "platform": "qq_official",
+                "source": "legacy",
+                "scenes": {"c2c": [{"name": "help", "desc": "说明"}]},
+            }
+        ],
+    )
+    events, on_event = await collect_events()
+    progress: list[str] = []
+
+    async def on_progress(message: str) -> None:
+        progress.append(message)
+
+    await syncer.sync_all(on_progress=on_progress, on_event=on_event)
+
+    platform_event = next(event for event in events if event["type"] == "platform")
+    assert platform_event["name"] == ""
+    assert platform_event["appid_masked"] == "111*****34"
+    synced_line = next(message for message in progress if "完成" in message)
+    assert "111*****34" in synced_line
+    assert robot_id not in synced_line
+
+
+@pytest.mark.asyncio
 async def test_sync_all_reports_failed_platform_in_events() -> None:
     syncer = make_syncer(
         config={
@@ -469,6 +547,8 @@ async def test_sync_all_reports_failed_platform_in_events() -> None:
 
     platform_event = next(event for event in events if event["type"] == "platform")
     assert platform_event["status"] == "error"
+    assert platform_event["name"] == "pf1"
+    assert platform_event["appid_masked"] == "***"
     assert platform_event["saved"] == 0
     assert platform_event["error"]
     finish = events[-1]

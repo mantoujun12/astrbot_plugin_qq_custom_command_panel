@@ -55,6 +55,8 @@ describe('reduceSyncEvent', () => {
       type: 'platform',
       seq: 2,
       pf_id: 'pf1',
+      name: '主机器人',
+      appid_masked: '102*****89',
       index: 1,
       total: 2,
       status: 'ok',
@@ -75,6 +77,10 @@ describe('reduceSyncEvent', () => {
     expect(state.succeeded).toBe(1)
     expect(state.failed).toBe(1)
     expect(state.platformStates.map((item) => item.pf_id)).toEqual(['pf1', 'pf2'])
+    expect(state.platformStates[0]).toMatchObject({
+      name: '主机器人',
+      appid_masked: '102*****89',
+    })
     expect(state.platformStates[1].error).toBe('boom')
   })
 

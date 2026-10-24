@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复视图同步进度把新版机器人的内部 UUID 当作平台标识直接展示的问题：同步事件新增 `name` / `appid_masked`，前端优先显示机器人备注名，缺失时回退到脱敏 appid；进度日志也改用可读名称，不再暴露内部 id (#77)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

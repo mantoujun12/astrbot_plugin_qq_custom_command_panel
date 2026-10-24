@@ -108,6 +108,48 @@ describe('SyncPanel', () => {
     expect(panel.wrapper.emitted('finished')).toHaveLength(1)
   })
 
+  it('shows the robot name instead of the internal pf_id', async () => {
+    const panel = await setup()
+
+    panel.emit({ type: 'start', seq: 1, platforms: 1, scenes: 1, items: 3 })
+    panel.emit({
+      type: 'platform',
+      seq: 2,
+      pf_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      name: '主机器人',
+      appid_masked: '102*****89',
+      index: 1,
+      total: 1,
+      status: 'ok',
+      saved: 3,
+    })
+    await flush()
+
+    expect(panel.wrapper.text()).toContain('主机器人')
+    expect(panel.wrapper.text()).not.toContain('f47ac10b-58cc-4372-a567-0e02b2c3d479')
+  })
+
+  it('falls back to the masked appid when the robot has no name', async () => {
+    const panel = await setup()
+
+    panel.emit({ type: 'start', seq: 1, platforms: 1, scenes: 1, items: 1 })
+    panel.emit({
+      type: 'platform',
+      seq: 2,
+      pf_id: '1112223334',
+      name: '',
+      appid_masked: '111*****34',
+      index: 1,
+      total: 1,
+      status: 'ok',
+      saved: 1,
+    })
+    await flush()
+
+    expect(panel.wrapper.text()).toContain('111*****34')
+    expect(panel.wrapper.text()).not.toContain('1112223334')
+  })
+
   it('keeps the progress bar indeterminate when the total is unknown', async () => {
     const panel = await setup()
 

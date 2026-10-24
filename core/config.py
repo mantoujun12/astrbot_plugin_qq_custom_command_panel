@@ -158,6 +158,14 @@ def mask_secret(value: Any) -> str:
     return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
 
 
+def mask_appid(value: Any) -> str:
+    """appid 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
+    text = str(value or "")
+    if len(text) <= 6:
+        return "*" * len(text)
+    return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
+
+
 def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
     """解析一条 schema 的 qq_platforms 条目
 
@@ -466,6 +474,7 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "get_theme_colors",
+    "mask_appid",
     "mask_secret",
     "normalize_config_payload",
     "normalize_panel_items",
