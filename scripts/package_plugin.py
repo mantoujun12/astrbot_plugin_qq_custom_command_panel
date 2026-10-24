@@ -24,7 +24,7 @@
     python scripts/package_plugin.py                 # 输出到 dist/
     python scripts/package_plugin.py -o out          # 指定输出目录
     python scripts/package_plugin.py -o out/x.zip    # 指定输出文件
-    python scripts/package_plugin.py -v v0.5.0       # 覆盖版本号
+    python scripts/package_plugin.py -v v0.5.0       # 覆盖包内 metadata.yaml 的版本号（vX.Y.Z）
 """
 
 from __future__ import annotations
@@ -68,19 +68,54 @@ EXCLUDED_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
 # 固定 zip 内文件时间戳，保证同一份源码每次打出的包内容一致（可复现构建）
 ZIP_TIMESTAMP: tuple[int, int, int, int, int, int] = (1980, 1, 1, 0, 0, 0)
 
+# 与 release.yml 保持一致：只接受三段式版本号，避免把路径分隔符等写进 zip 名
+_VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
 
-def _read_scalar(metadata_path: Path, key: str) -> str:
-    """从 metadata.yaml 读取一个标量字段（不引入 PyYAML 依赖）"""
+
+def _scalar_pattern(key: str) -> re.Pattern[str]:
+    """匹配 metadata.yaml 顶层的标量字段，值两侧的引号必须成对"""
+    return re.compile(
+        rf"""^(?P<prefix>{re.escape(key)}:[ \t]*)(?P<quote>["']?)"""
+        r"""(?P<value>[^"'\s#]+)(?P=quote)""",
+        re.MULTILINE,
+    )
+
+
+def _read_metadata_text(metadata_path: Path) -> str:
+    """按 UTF-8 读取 metadata.yaml（保留原始换行），读取失败时以 SystemExit 终止"""
     try:
-        text = metadata_path.read_text(encoding="utf-8")
+        with metadata_path.open("r", encoding="utf-8", newline="") as handle:
+            return handle.read()
     except OSError as exc:
         raise SystemExit(f"无法读取 {metadata_path}：{exc}") from exc
 
-    pattern = rf"""^{re.escape(key)}:[ \t]*["']?([^"'\s#]+)["']?"""
-    match = re.search(pattern, text, re.MULTILINE)
-    if match is None:
-        raise SystemExit(f"{metadata_path} 中缺少 {key} 字段")
-    return match.group(1)
+
+def _find_scalar(text: str, key: str, source: Path | str) -> re.Match[str]:
+    """定位顶层标量字段；缺失或重复出现时直接报错，避免改错位置"""
+    matches = list(_scalar_pattern(key).finditer(text))
+    if not matches:
+        raise SystemExit(f"{source} 中缺少 {key} 字段")
+    if len(matches) > 1:
+        raise SystemExit(f"{source} 中 {key} 字段出现多次，无法确定该用哪一个")
+    return matches[0]
+
+
+def _read_scalar(metadata_path: Path, key: str) -> str:
+    """从 metadata.yaml 读取一个标量字段（不引入 PyYAML 依赖）"""
+    text = _read_metadata_text(metadata_path)
+    return _find_scalar(text, key, metadata_path)["value"]
+
+
+def _replace_scalar(text: str, key: str, value: str, source: Path | str) -> str:
+    """只替换标量值本身，保留其余内容（引号、注释、换行风格）"""
+    match = _find_scalar(text, key, source)
+    return f"{text[: match.start('value')]}{value}{text[match.end('value') :]}"
+
+
+def _validate_version(version: str) -> None:
+    """版本号必须是 vX.Y.Z / X.Y.Z，避免写坏元数据或让产物路径逃出输出目录"""
+    if _VERSION_RE.fullmatch(version) is None:
+        raise SystemExit(f"版本号格式不合法：{version!r}（应形如 v0.6.0）")
 
 
 def _iter_plugin_entries(root: Path) -> list[tuple[Path, str]]:
@@ -119,7 +154,8 @@ def build_package(
 
     Args:
         output: 输出目录，或以 ``.zip`` 结尾的输出文件路径。
-        version: 覆盖 metadata.yaml 里的版本号；省略时读取 metadata.yaml。
+        version: 覆盖包内 metadata.yaml 里的版本号（同时用于压缩包与顶层目录名）；
+            省略时读取 metadata.yaml。
         root: 插件仓库根目录，默认取本脚本所在仓库根。
 
     Returns:
@@ -131,9 +167,18 @@ def build_package(
     if not (root / "main.py").is_file():
         raise SystemExit(f"未找到插件入口模块：{root / 'main.py'}")
 
-    name = _read_scalar(metadata_path, "name")
-    version = version or _read_scalar(metadata_path, "version")
+    metadata_text = _read_metadata_text(metadata_path)
+    name = _find_scalar(metadata_text, "name", metadata_path)["value"]
+    if version is None:
+        version = _find_scalar(metadata_text, "version", metadata_path)["value"]
+    else:
+        # 显式传入的覆盖值即使为空也要报错，不能静默回退到 metadata.yaml
+        version = version.strip()
+    if not version:
+        raise SystemExit("版本号不能为空")
+    _validate_version(version)
     folder = f"{name}-{version}"
+    packaged_metadata = _replace_scalar(metadata_text, "version", version, metadata_path)
 
     zip_path = output if output.suffix == ".zip" else output / f"{folder}.zip"
     zip_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,8 +192,25 @@ def build_package(
             info = zipfile.ZipInfo(f"{folder}/{rel}", date_time=ZIP_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
+            if rel == "metadata.yaml":
+                archive.writestr(info, packaged_metadata.encode("utf-8"))
+                continue
             with src.open("rb") as source, archive.open(info, "w") as target:
                 shutil.copyfileobj(source, target)
+
+    # 产物自检：包内版本必须与压缩包 / 顶层目录名用的版本一致，
+    # 避免发出文件名是新版本、安装后却仍上报旧版本的包
+    with zipfile.ZipFile(zip_path) as archive:
+        packaged_text = archive.read(f"{folder}/metadata.yaml").decode("utf-8")
+    packaged_version = _find_scalar(
+        packaged_text, "version", f"{zip_path} 中的 {folder}/metadata.yaml"
+    )["value"]
+    if packaged_version != version:
+        zip_path.unlink(missing_ok=True)
+        raise SystemExit(
+            f"打包校验失败：包内 metadata.yaml 的 version 为 {packaged_version!r}，"
+            f"预期 {version!r}；已删除 {zip_path}"
+        )
 
     return zip_path
 
@@ -166,7 +228,7 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "-v",
         "--version",
         default=None,
-        help="覆盖 metadata.yaml 中的版本号",
+        help="覆盖包内 metadata.yaml 中的版本号（vX.Y.Z，同时用于压缩包与顶层目录名）",
     )
     return parser.parse_args(argv)
 

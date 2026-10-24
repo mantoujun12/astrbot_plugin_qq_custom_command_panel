@@ -38,11 +38,17 @@ def test_build_package_only_includes_astrbot_files(tmp_path: Path) -> None:
 
     with zipfile.ZipFile(zip_path) as archive:
         names = archive.namelist()
+        top_levels = {name.split("/", 1)[0] for name in names}
+        prefix = next(iter(top_levels)) + "/"
+        packaged_metadata = archive.read(f"{prefix}metadata.yaml").decode("utf-8")
 
-    top_levels = {name.split("/", 1)[0] for name in names}
     assert top_levels == {f"astrbot_plugin_qq_custom_command_panel-{_repo_version()}"}
+    packaged_version = package_plugin._find_scalar(
+        packaged_metadata, "version", f"{prefix}metadata.yaml"
+    )["value"]
+    # 未指定 -v 时包内版本仍取自 metadata.yaml
+    assert packaged_version == _repo_version()
 
-    prefix = top_levels.pop() + "/"
     assert f"{prefix}metadata.yaml" in names
     assert f"{prefix}main.py" in names
     assert f"{prefix}_conf_schema.json" in names
@@ -98,7 +104,7 @@ def test_build_package_version_override_and_file_output(tmp_path: Path) -> None:
     """版本号可覆盖，输出参数以 .zip 结尾时直接作为 zip 路径"""
     root = tmp_path / "plugin"
     root.mkdir()
-    (root / "metadata.yaml").write_text("name: demo_plugin\nversion: v1.2.3\n", encoding="utf-8")
+    (root / "metadata.yaml").write_bytes(b"name: demo_plugin\nversion: v1.2.3\n")
     (root / "main.py").write_text("", encoding="utf-8")
 
     zip_path = package_plugin.build_package(tmp_path / "custom.zip", version="v9.9.9", root=root)
@@ -109,6 +115,105 @@ def test_build_package_version_override_and_file_output(tmp_path: Path) -> None:
             "demo_plugin-v9.9.9/metadata.yaml",
             "demo_plugin-v9.9.9/main.py",
         }
+        packaged_metadata = archive.read("demo_plugin-v9.9.9/metadata.yaml").decode("utf-8")
+
+    # 覆盖版本号必须写进包内元数据，而不是只改压缩包 / 目录名
+    assert packaged_metadata == "name: demo_plugin\nversion: v9.9.9\n"
+    # 打包不会改动仓库里的源文件
+    assert (root / "metadata.yaml").read_text(encoding="utf-8") == (
+        "name: demo_plugin\nversion: v1.2.3\n"
+    )
+
+
+def test_build_package_version_override_preserves_metadata_format(tmp_path: Path) -> None:
+    """覆盖版本号只替换值本身，保留引号、行尾注释、CRLF 与其余字段"""
+    root = tmp_path / "plugin"
+    root.mkdir()
+    original = 'name: demo_plugin\r\nversion: "v1.2.3"  # 当前版本\r\n\r\nauthor: someone\r\n'
+    (root / "metadata.yaml").write_bytes(original.encode("utf-8"))
+    (root / "main.py").write_text("", encoding="utf-8")
+
+    zip_path = package_plugin.build_package(tmp_path / "out", version="v9.9.9", root=root)
+
+    with zipfile.ZipFile(zip_path) as archive:
+        packaged_metadata = archive.read("demo_plugin-v9.9.9/metadata.yaml").decode("utf-8")
+
+    assert packaged_metadata == (
+        'name: demo_plugin\r\nversion: "v9.9.9"  # 当前版本\r\n\r\nauthor: someone\r\n'
+    )
+
+
+def test_build_package_rejects_packaged_version_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """打包后校验包内版本；不一致时删除产物并报错"""
+    root = tmp_path / "plugin"
+    root.mkdir()
+    (root / "metadata.yaml").write_text("name: demo_plugin\nversion: v1.2.3\n", encoding="utf-8")
+    (root / "main.py").write_text("", encoding="utf-8")
+
+    # 模拟改写失效：压缩包名用新版本，但包内仍保留旧版本
+    monkeypatch.setattr(
+        package_plugin,
+        "_replace_scalar",
+        lambda text, key, value, source: text,
+    )
+
+    output = tmp_path / "custom.zip"
+    with pytest.raises(SystemExit, match="打包校验失败"):
+        package_plugin.build_package(output, version="v9.9.9", root=root)
+
+    assert not output.exists()
+
+
+def test_build_package_rejects_duplicate_version_field(tmp_path: Path) -> None:
+    """metadata.yaml 里版本号出现多次时拒绝打包，避免改错位置"""
+    root = tmp_path / "plugin"
+    root.mkdir()
+    (root / "metadata.yaml").write_text(
+        "name: demo_plugin\nversion: v1.2.3\nversion: v2.3.4\n",
+        encoding="utf-8",
+    )
+    (root / "main.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="version 字段出现多次"):
+        package_plugin.build_package(tmp_path / "out", root=root)
+
+
+def test_build_package_requires_version_field(tmp_path: Path) -> None:
+    """metadata.yaml 缺少版本号时直接报错"""
+    root = tmp_path / "plugin"
+    root.mkdir()
+    (root / "metadata.yaml").write_text("name: demo_plugin\n", encoding="utf-8")
+    (root / "main.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="缺少 version 字段"):
+        package_plugin.build_package(tmp_path / "out", root=root)
+
+
+@pytest.mark.parametrize("version", ["", "   "])
+def test_build_package_rejects_blank_version_override(tmp_path: Path, version: str) -> None:
+    """-v 给了空串或空白字符时按空版本号报错，不静默回退到 metadata.yaml"""
+    root = tmp_path / "plugin"
+    root.mkdir()
+    (root / "metadata.yaml").write_text("name: demo_plugin\nversion: v1.2.3\n", encoding="utf-8")
+    (root / "main.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="版本号不能为空"):
+        package_plugin.build_package(tmp_path / "out", version=version, root=root)
+
+
+@pytest.mark.parametrize("version", ["v1", "v1.2", "v1.2.3.4", "v1/2", "../v1.2.3"])
+def test_build_package_rejects_invalid_version_override(tmp_path: Path, version: str) -> None:
+    """版本号必须是 vX.Y.Z / X.Y.Z，防止写坏元数据或让产物路径逃出输出目录"""
+    root = tmp_path / "plugin"
+    root.mkdir()
+    (root / "metadata.yaml").write_text("name: demo_plugin\nversion: v1.2.3\n", encoding="utf-8")
+    (root / "main.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="版本号格式不合法"):
+        package_plugin.build_package(tmp_path / "out", version=version, root=root)
 
 
 def test_build_package_requires_metadata(tmp_path: Path) -> None:
@@ -143,12 +248,33 @@ def test_metadata_yml_is_not_supported(tmp_path: Path) -> None:
         }
 
 
-def test_main_prints_zip_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """CLI 入口：返回 0 并打印生成的 zip 路径"""
-    assert package_plugin.main(["-o", str(tmp_path)]) == 0
+@pytest.mark.parametrize("version", [None, "v9.9.9"])
+def test_main_prints_zip_path_and_packaged_version(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    version: str | None,
+) -> None:
+    """CLI 入口：返回 0、打印 zip 路径；-v 同时改写包内版本号，省略时沿用源版本"""
+    args = ["-o", str(tmp_path)]
+    if version is not None:
+        args.extend(["-v", version])
+    assert package_plugin.main(args) == 0
     printed = capsys.readouterr().out.strip()
     assert printed
-    assert Path(printed).is_file()
+
+    zip_path = Path(printed)
+    assert zip_path.is_file()
+    name = package_plugin._read_scalar(REPO_ROOT / "metadata.yaml", "name")
+    expected_version = version or _repo_version()
+    folder = f"{name}-{expected_version}"
+    assert zip_path == tmp_path / f"{folder}.zip"
+
+    with zipfile.ZipFile(zip_path) as archive:
+        metadata = archive.read(f"{folder}/metadata.yaml").decode("utf-8")
+    packaged_version = package_plugin._find_scalar(metadata, "version", f"{folder}/metadata.yaml")[
+        "value"
+    ]
+    assert packaged_version == expected_version
 
 
 def test_packaged_zip_is_importable_as_plugin(
