@@ -68,6 +68,9 @@ const createDialog = ref(false)
 const createForm = ref<RobotConfigForm>(emptyRobotDraft())
 const createError = ref('')
 const deleteDialog = ref(false)
+const unsavedDialog = ref(false)
+const unsavedError = ref('')
+const pendingAction = ref<'import' | 'reload' | null>(null)
 
 let draftSeq = 0
 
@@ -105,6 +108,27 @@ const canSave = computed(
     (drafts.value.length > 0 || (response.value?.robots.length ?? 0) > 0) &&
     !loading.value &&
     !saving.value,
+)
+
+/** 最近一次从服务端载入或保存后的草稿快照，用来判断本地是否有未保存改动 */
+const baseline = ref('[]')
+const hasUnsavedChanges = computed(() => snapshotDrafts(drafts.value) !== baseline.value)
+
+const unsavedTitle = computed(() =>
+  pendingAction.value === 'reload'
+    ? t('pages.dashboard.robots.unsavedReloadTitle', '重新载入会丢弃未保存的修改')
+    : t('pages.dashboard.robots.unsavedImportTitle', '导入会覆盖未保存的修改'),
+)
+const unsavedText = computed(() =>
+  pendingAction.value === 'reload'
+    ? t(
+        'pages.dashboard.robots.unsavedReloadText',
+        '当前有未保存的机器人编辑，重新载入会用服务端配置替换草稿。可以先保存，或放弃这些修改后再载入。',
+      )
+    : t(
+        'pages.dashboard.robots.unsavedImportText',
+        '当前有未保存的机器人编辑，导入会用服务端配置替换草稿，新增或修改但未保存的机器人会丢失。可以先保存，或放弃这些修改后再导入。',
+      ),
 )
 
 const sceneOptions = computed(() =>
@@ -170,10 +194,38 @@ function appidChanged(draft: RobotDraft): boolean {
   return robotAppidChanged(draft.form, draft.savedAppid)
 }
 
+/**
+ * 草稿的结构化快照：只保留会随保存提交的内容，并按固定顺序序列化，
+ * 这样新增 / 删除 / 修改任意字段（含未提交的 secret）都能被识别。
+ */
+function snapshotDrafts(list: RobotDraft[]): string {
+  return JSON.stringify(
+    list.map((draft) => ({
+      id: draft.form.id,
+      name: draft.form.name.trim(),
+      appid: draft.form.appid.trim(),
+      platform: draft.form.platform,
+      secret: draft.form.secret.trim(),
+      scenes: SCENES.map((scene) => {
+        const config = draft.form.scenes[scene]
+        return {
+          scene,
+          enabled: config?.enabled ?? false,
+          items: (config?.items ?? []).map((item) => ({
+            name: item.name.trim(),
+            desc: item.desc.trim(),
+          })),
+        }
+      }),
+    })),
+  )
+}
+
 function applyResponse(next: RobotConfigResponse, preferredAppid = ''): void {
   response.value = next
   const previousAppid = preferredAppid || selectedDraft.value?.form.appid.trim() || ''
   drafts.value = next.robots.map(createDraft)
+  baseline.value = snapshotDrafts(drafts.value)
   robotErrors.value = {}
   const matched = previousAppid
     ? drafts.value.find((draft) => draft.form.appid.trim() === previousAppid)
@@ -195,12 +247,25 @@ async function load(): Promise<void> {
     if (seq !== requestSeq) return
     response.value = null
     drafts.value = []
+    baseline.value = snapshotDrafts(drafts.value)
     selectedKey.value = ''
     robotErrors.value = {}
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     if (seq === requestSeq) loading.value = false
   }
+}
+
+/** 「重新载入」和导入一样会整体替换草稿，有未保存改动时先让用户确认 */
+function requestReload(): void {
+  if (!hasBackend.value) return
+  if (hasUnsavedChanges.value) {
+    pendingAction.value = 'reload'
+    unsavedError.value = ''
+    unsavedDialog.value = true
+    return
+  }
+  void load()
 }
 
 watch(
@@ -371,8 +436,14 @@ function secretHint(draft: RobotDraft): string | undefined {
   return undefined
 }
 
-async function save(options: { sync?: boolean } = {}): Promise<void> {
-  if (!hasBackend.value || mockMode.value) return
+type SaveResult =
+  | { ok: true }
+  | { ok: false; reason: 'validation' | 'request'; message?: string }
+
+async function save(options: { sync?: boolean } = {}): Promise<SaveResult> {
+  if (!hasBackend.value || mockMode.value) {
+    return { ok: false, reason: 'request' }
+  }
 
   const robots: RobotConfigPayload[] = []
   const errors: Record<string, string> = {}
@@ -394,7 +465,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
     selectedKey.value = firstErrorKey
     error.value = ''
     notice.value = ''
-    return
+    return { ok: false, reason: 'validation' }
   }
 
   const preferredAppid = selectedDraft.value?.form.appid.trim() ?? ''
@@ -406,13 +477,14 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
   notice.value = ''
   try {
     const next = await saveRobots({ version: response.value?.version ?? 1, robots })
-    if (seq !== requestSeq) return
+    if (seq !== requestSeq) return { ok: false, reason: 'request' }
     applyResponse(next, preferredAppid)
     notice.value = t('pages.dashboard.robots.saved', '机器人配置已保存。')
   } catch (err) {
-    if (seq !== requestSeq) return
-    error.value = err instanceof Error ? err.message : String(err)
-    return
+    if (seq !== requestSeq) return { ok: false, reason: 'request' }
+    const message = err instanceof Error ? err.message : String(err)
+    error.value = message
+    return { ok: false, reason: 'request', message }
   } finally {
     saving.value = false
   }
@@ -425,6 +497,7 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
       error.value = err instanceof Error ? err.message : String(err)
     }
   }
+  return { ok: true }
 }
 
 async function openImport(): Promise<void> {
@@ -469,12 +542,22 @@ function closeImport(): void {
   importError.value = ''
 }
 
-async function importLegacy(): Promise<void> {
+async function importLegacy(
+  options: { confirmed?: boolean; discarded?: boolean } = {},
+): Promise<void> {
   const currentBridge = bridge.value
   if (!hasBackend.value || !currentBridge) return
   const appids = parseAppids(legacyAppidsText.value)
   if (!appids.length) {
     importError.value = t('pages.dashboard.robots.importNoAppids', '至少填写一个 AppID。')
+    return
+  }
+
+  // 导入会整体替换本地草稿：先让用户决定保存、放弃还是取消，避免静默丢改动
+  if (hasUnsavedChanges.value && !options.confirmed) {
+    pendingAction.value = 'import'
+    unsavedError.value = ''
+    unsavedDialog.value = true
     return
   }
 
@@ -490,14 +573,59 @@ async function importLegacy(): Promise<void> {
     applyResponse(next, preferredAppid)
     importPanel.value = false
     legacyAppidsText.value = ''
-    notice.value = t(
-      'pages.dashboard.robots.imported',
-      '已从兼容配置导入并保存机器人配置，请检查后再同步。',
-    )
+    notice.value = options.discarded
+      ? t(
+          'pages.dashboard.robots.importedDiscarded',
+          '已从兼容配置导入并保存机器人配置，未保存的本地修改已丢弃。',
+        )
+      : t(
+          'pages.dashboard.robots.imported',
+          '已从兼容配置导入并保存机器人配置，请检查后再同步。',
+        )
   } catch (err) {
     importError.value = err instanceof Error ? err.message : String(err)
   } finally {
     importing.value = false
+  }
+}
+
+function cancelUnsaved(): void {
+  pendingAction.value = null
+  unsavedError.value = ''
+  unsavedDialog.value = false
+}
+
+/** 未保存改动的三个出口：先保存、放弃本地改动，或取消当前操作 */
+async function continuePending(strategy: 'save' | 'discard'): Promise<void> {
+  const target = pendingAction.value
+  if (!target) return
+
+  unsavedError.value = ''
+  if (strategy === 'save') {
+    const result = await save()
+    if (!result.ok) {
+      // 校验失败时弹窗挡住了页面，需要提示用户先取消弹窗去改；
+      // 请求失败则直接展示真实原因（例如 409 版本冲突），不要伪装成校验错误
+      if (result.reason === 'validation') {
+        unsavedError.value = t(
+          'pages.dashboard.robots.unsavedSaveFailed',
+          '保存失败，请先取消弹窗并处理页面上的校验错误后再继续。',
+        )
+      } else {
+        unsavedError.value =
+          result.message ??
+          t('pages.dashboard.robots.unsavedSaveRequestFailed', '保存失败，请稍后重试。')
+      }
+      return
+    }
+  }
+
+  pendingAction.value = null
+  unsavedDialog.value = false
+  if (target === 'import') {
+    await importLegacy({ confirmed: true, discarded: strategy === 'discard' })
+  } else {
+    await load()
   }
 }
 </script>
@@ -523,7 +651,7 @@ async function importLegacy(): Promise<void> {
           color="primary"
           :loading="loading"
           :disabled="!hasBackend || saving"
-          @click="load"
+          @click="requestReload"
         >
           {{ t('pages.dashboard.robots.reload', '重新载入') }}
         </v-btn>
@@ -634,7 +762,7 @@ async function importLegacy(): Promise<void> {
             variant="tonal"
             :loading="importing"
             :disabled="!hasBackend || importLoading"
-            @click="importLegacy"
+            @click="importLegacy()"
           >
             {{ t('pages.dashboard.robots.importConfirm', '导入') }}
           </v-btn>
@@ -741,6 +869,49 @@ async function importLegacy(): Promise<void> {
           </v-btn>
           <v-btn color="error" variant="tonal" @click="confirmDelete">
             {{ t('pages.dashboard.robots.deleteConfirm', '确认删除') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="unsavedDialog" max-width="520">
+      <v-card class="qc-robot-unsaved" variant="flat" rounded="lg">
+        <v-card-item class="px-5 pt-5">
+          <v-card-title class="text-body-large">{{ unsavedTitle }}</v-card-title>
+        </v-card-item>
+        <v-card-text class="px-5 pt-2">
+          <div>{{ unsavedText }}</div>
+          <v-alert
+            v-if="unsavedError"
+            class="mt-3"
+            type="error"
+            variant="tonal"
+            density="compact"
+          >
+            {{ unsavedError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="saving || importing" @click="cancelUnsaved">
+            {{ t('pages.dashboard.robots.cancel', '取消') }}
+          </v-btn>
+          <v-btn
+            variant="text"
+            color="error"
+            :disabled="saving || importing"
+            @click="continuePending('discard')"
+          >
+            {{ t('pages.dashboard.robots.unsavedDiscard', '放弃修改并继续') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="saving"
+            :disabled="importing"
+            @click="continuePending('save')"
+          >
+            {{ t('pages.dashboard.robots.unsavedSave', '保存并继续') }}
           </v-btn>
         </v-card-actions>
       </v-card>

@@ -145,6 +145,7 @@ async function typeInDialog(selector: string, value: string): Promise<void> {
 const IMPORT_DIALOG = 0
 const CREATE_DIALOG = 1
 const DELETE_DIALOG = 2
+const UNSAVED_DIALOG = 3
 
 /**
  * 弹窗是否打开看 v-model，而不是等 DOM 消失。
@@ -561,6 +562,172 @@ describe('RobotsView', () => {
       appids: ['1023456789'],
       version: 1,
     })
+  })
+
+  it('asks before importing over unsaved edits and keeps them on cancel', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('本地未保存')
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).toContain('导入会覆盖未保存的修改')
+    expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
+
+    clickInDialogPanel('.qc-robot-unsaved', '取消')
+    await flush()
+
+    expect(dialogModel(wrapper, UNSAVED_DIALOG)).toBe(false)
+    expect(api.fetchRobots).toHaveBeenCalledTimes(1)
+    expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('本地未保存')
+    expect(wrapper.text()).not.toContain('未保存的本地修改已丢弃。')
+  })
+
+  it('imports after the user discards unsaved edits and says they were discarded', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('本地未保存')
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+
+    clickInDialogPanel('.qc-robot-unsaved', '放弃修改并继续')
+    await waitUntil(() => vi.mocked(api.fetchRobots).mock.calls.length === 2)
+    await flush()
+
+    expect(window.AstrBotPluginView?.apiPost).toHaveBeenCalledWith('robots/import-legacy', {
+      appids: ['1023456789'],
+      version: 1,
+    })
+    expect(wrapper.text()).toContain(
+      '已从兼容配置导入并保存机器人配置，未保存的本地修改已丢弃。',
+    )
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('主机器人')
+  })
+
+  it('saves unsaved edits before importing when the user chooses to save', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+    vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('本地未保存')
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+
+    clickInDialogPanel('.qc-robot-unsaved', '保存并继续')
+    await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
+    expect(vi.mocked(api.saveRobots).mock.calls[0]?.[0].robots[0]?.name).toBe('本地未保存')
+
+    await waitUntil(() => vi.mocked(api.fetchRobots).mock.calls.length === 2)
+    await flush()
+
+    expect(window.AstrBotPluginView?.apiPost).toHaveBeenCalledWith('robots/import-legacy', {
+      appids: ['1023456789'],
+      version: 1,
+    })
+    expect(wrapper.text()).toContain('已从兼容配置导入并保存机器人配置，请检查后再同步。')
+  })
+
+  it('keeps the confirmation open when saving before import is invalid', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('')
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+
+    clickInDialogPanel('.qc-robot-unsaved', '保存并继续')
+    await flush()
+
+    expect(api.saveRobots).not.toHaveBeenCalled()
+    expect(dialogModel(wrapper, UNSAVED_DIALOG)).toBe(true)
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).toContain(
+      '保存失败，请先取消弹窗并处理页面上的校验错误后再继续。',
+    )
+    expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
+    expect(api.fetchRobots).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the real save error in the confirmation when saving before import fails', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+    vi.mocked(api.saveRobots).mockRejectedValue(new Error('版本已更新，请重新载入'))
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('本地未保存')
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+
+    clickInDialogPanel('.qc-robot-unsaved', '保存并继续')
+    await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
+    await flush()
+
+    expect(dialogModel(wrapper, UNSAVED_DIALOG)).toBe(true)
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).toContain('版本已更新，请重新载入')
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).not.toContain(
+      '请先取消弹窗并处理页面上的校验错误',
+    )
+    expect(window.AstrBotPluginView?.apiPost).not.toHaveBeenCalled()
+  })
+
+  it('asks before reloading over unsaved edits', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    await field(wrapper, 'name').setValue('本地未保存')
+
+    await button(wrapper, '重新载入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+    expect(dialogEl('.qc-robot-unsaved')?.textContent).toContain(
+      '重新载入会丢弃未保存的修改',
+    )
+    expect(api.fetchRobots).toHaveBeenCalledTimes(1)
+
+    clickInDialogPanel('.qc-robot-unsaved', '取消')
+    await flush()
+    expect(api.fetchRobots).toHaveBeenCalledTimes(1)
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('本地未保存')
+
+    await button(wrapper, '重新载入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-robot-unsaved') !== null)
+    clickInDialogPanel('.qc-robot-unsaved', '放弃修改并继续')
+    await waitUntil(() => vi.mocked(api.fetchRobots).mock.calls.length === 2)
+    await flush()
+
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('主机器人')
+    expect(wrapper.text()).not.toContain('机器人配置已保存。')
   })
 
   it('saves before starting sync and jumps to the status page', async () => {
