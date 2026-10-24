@@ -190,6 +190,23 @@ def test_load_normalizes_secret_and_preserves_existing_version(tmp_path: Path) -
     assert loaded["robots"][0]["secret"] == "plain-secret-value"
 
 
+def test_load_wraps_directory_check_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """检查配置是否存在时也可能因权限不足抛 OSError，同样要包装成 RobotConfigError。"""
+
+    def fail(_path: Path) -> bool:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(Path, "exists", fail)
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        load_robot_config(tmp_path)
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+
+
 # 校验
 
 
@@ -656,6 +673,38 @@ def test_save_failure_raises_robot_config_error(tmp_path: Path) -> None:
 
     with pytest.raises(RobotConfigError):
         save_robot_config(tmp_path, empty_robot_config())
+
+
+def test_save_wraps_directory_creation_failure(tmp_path: Path) -> None:
+    """数据目录本身无法创建时也要包装成 RobotConfigError，不能漏出原始 OSError。"""
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(data_dir, empty_robot_config())
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+
+
+def test_save_wraps_serialization_failure(tmp_path: Path) -> None:
+    """载荷无法 JSON 序列化时同样返回 RobotConfigError，而不是 TypeError。"""
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(tmp_path, {"version": 1, "robots": [object()]})
+
+    assert isinstance(excinfo.value.__cause__, TypeError)
+
+
+def test_save_wraps_encoding_failure(tmp_path: Path) -> None:
+    """孤立代理字符无法按 UTF-8 写入，保存失败也要包装成 RobotConfigError。"""
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(
+            tmp_path,
+            {"version": 1, "robots": [{"name": "\ud800"}]},
+        )
+
+    assert isinstance(excinfo.value.__cause__, UnicodeEncodeError)
 
 
 def test_validate_rejects_non_list_robots() -> None:

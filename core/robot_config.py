@@ -52,7 +52,11 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     文件不存在时返回空结构；读取或解析失败抛 :class:`RobotConfigError`，不静默回退空配置。
     """
     path = _config_path(data_dir)
-    if not path.exists():
+    try:
+        exists = path.exists()
+    except OSError as exc:
+        raise RobotConfigError(t("robot.error.read_failed", path=path, exc=exc)) from exc
+    if not exists:
         return empty_robot_config()
 
     try:
@@ -83,25 +87,30 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
 
 
 def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
-    """原子写入新版机器人配置并返回落盘路径，避免进程中断留下半截配置。"""
+    """原子写入新版机器人配置并返回落盘路径，避免进程中断留下半截配置。
+
+    序列化、创建目录、写入临时文件或替换目标文件失败时都会转换为
+    :class:`RobotConfigError`，由 Web API 返回本地化错误，而不是把原始异常抛给宿主。
+    """
     target = _config_path(data_dir)
-    target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
 
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         temp.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         temp.replace(target)
-    except OSError as exc:
+    except (OSError, TypeError, ValueError) as exc:
         raise RobotConfigError(t("robot.error.save_failed", path=target, exc=exc)) from exc
     finally:
-        if temp.exists():
-            try:
-                temp.unlink()
-            except OSError:
-                pass
+        # 目录创建失败时 unlink 也可能抛 NotADirectoryError / PermissionError，
+        # 不能让清理阶段的异常覆盖上面的 RobotConfigError。
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     return target
 
