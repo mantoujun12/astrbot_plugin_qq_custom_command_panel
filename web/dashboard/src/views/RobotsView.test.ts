@@ -837,6 +837,36 @@ describe('RobotsView', () => {
     expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('最新机器人')
   })
 
+  it('keeps imported robots when an older load resolves later', async () => {
+    const { api, legacyApi, mount } = await loadView()
+    const initial = deferred<RobotConfigResponse>()
+    const imported = robotResponse()
+    imported.robots[0].name = '导入后的机器人'
+    vi.mocked(api.fetchRobots)
+      .mockReturnValueOnce(initial.promise)
+      .mockResolvedValueOnce(imported)
+    vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
+
+    const wrapper = await mount()
+    expect(api.fetchRobots).toHaveBeenCalledTimes(1)
+
+    await button(wrapper, '从兼容配置导入').trigger('click')
+    await waitUntil(() => dialogEl('.qc-import-panel') !== null)
+    await waitUntil(() => vi.mocked(legacyApi.fetchConfig).mock.calls.length > 0)
+    clickInDialogPanel('.qc-import-panel', '导入')
+    await waitUntil(() => vi.mocked(api.fetchRobots).mock.calls.length === 2)
+    await flush()
+
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('导入后的机器人')
+
+    // 导入前发出的 GET 此时才返回，不能把导入结果覆盖回导入前的快照
+    initial.resolve(robotResponse())
+    await flush()
+
+    expect((field(wrapper, 'name').element as HTMLInputElement).value).toBe('导入后的机器人')
+    expect(wrapper.text()).toContain('已从兼容配置导入并保存机器人配置，请检查后再同步。')
+  })
+
   it('disables reload while a save is in flight', async () => {
     const { api, mount } = await loadView()
     vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())

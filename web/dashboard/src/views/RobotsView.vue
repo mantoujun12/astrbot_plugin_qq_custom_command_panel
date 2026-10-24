@@ -561,6 +561,10 @@ async function importLegacy(
     return
   }
 
+  // 导入会写回服务端并重载草稿：先领取代次，让仍在路上的 load 失效，
+  // 否则旧 GET 稍后返回时会把刚导入的结果覆盖回导入前的快照。
+  const seq = ++requestSeq
+  loading.value = false
   importing.value = true
   importError.value = ''
   try {
@@ -568,8 +572,10 @@ async function importLegacy(
       appids,
       version: response.value?.version ?? 1,
     })
+    if (seq !== requestSeq) return
     const preferredAppid = selectedDraft.value?.form.appid.trim() ?? ''
     const next = await fetchRobots()
+    if (seq !== requestSeq) return
     applyResponse(next, preferredAppid)
     importPanel.value = false
     legacyAppidsText.value = ''
@@ -583,9 +589,10 @@ async function importLegacy(
           '已从兼容配置导入并保存机器人配置，请检查后再同步。',
         )
   } catch (err) {
+    if (seq !== requestSeq) return
     importError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    importing.value = false
+    if (seq === requestSeq) importing.value = false
   }
 }
 
@@ -650,7 +657,7 @@ async function continuePending(strategy: 'save' | 'discard'): Promise<void> {
           variant="text"
           color="primary"
           :loading="loading"
-          :disabled="!hasBackend || saving"
+          :disabled="!hasBackend || saving || importing"
           @click="requestReload"
         >
           {{ t('pages.dashboard.robots.reload', '重新载入') }}
