@@ -1,9 +1,11 @@
-"""插件配置读取、导出与写回校验。
+"""插件配置读取、归一、导出与写回 helper。
 
-本模块只做纯数据变换，不接触 Web API 与运行时对象，方便离线单测：
+除 ``save_config_values`` 会调用宿主注入的落盘回调外，其余函数只做纯数据变换，
+不接触 Web API 与运行时对象，方便离线单测：
 - 读取：把 ``_conf_schema.json`` 里的用户配置整理成 PanelSyncer 可直接使用的结构
 - 导出：把当前配置转成 dashboard 可渲染的安全结构（secret 只回掩码）
 - 归一：校验 dashboard 提交的完整配置，非法输入返回错误而不是静默截断
+- 保存：更新内存并调用宿主落盘接口，失败时回滚内存
 
 平台凭证只能来自本插件的 ``qq_platforms``：AstrBot 没有把平台适配器的机器人信息
 暴露给插件，所以这里不再保留"从 context 回退读取"的路径。
@@ -11,7 +13,9 @@
 
 from __future__ import annotations
 
+import inspect
 import re
+from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
 from .i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, t
@@ -148,14 +152,19 @@ def get_selected_commands(config: dict[str, Any]) -> list[dict[str, str]]:
     return cleaned
 
 
-def mask_secret(value: Any) -> str:
-    """secret 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
+def mask_appid(value: Any) -> str:
+    """AppID 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
     text = str(value or "")
     if not text:
         return ""
     if len(text) <= 6:
         return "*" * len(text)
     return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
+
+
+def mask_secret(value: Any) -> str:
+    """secret 展示掩码：保留前 3 位与后 2 位，过短则整体打码"""
+    return mask_appid(value)
 
 
 def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
@@ -187,8 +196,8 @@ def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
     if not appid or not secret:
         return None
 
-    # pf_id 优先取备注名，其次 appid，最后平台类型
-    pf_id = entry.get("id") or entry.get("name") or entry.get("platform_id") or str(appid)
+    # 平台身份只取 appid；备注名可重复，且只用于展示
+    pf_id = str(appid)
     name = entry.get("name")
     return {
         "pf_id": str(pf_id),
@@ -202,7 +211,7 @@ def _parse_platform_entry(entry: Any) -> dict[str, str] | None:
 def get_platform_entries(config: dict[str, Any]) -> list[dict[str, str]]:
     """读取 schema 的 qq_platforms 条目（含备注名）
 
-    非法条目跳过，同一 pf_id 只保留第一条，避免重复同步
+    非法条目跳过，同一 appid 只保留第一条，避免重复同步
     """
     raw = config.get("qq_platforms", [])
     if not isinstance(raw, list):
@@ -212,9 +221,9 @@ def get_platform_entries(config: dict[str, Any]) -> list[dict[str, str]]:
     seen: set[str] = set()
     for item in raw:
         parsed = _parse_platform_entry(item)
-        if not parsed or parsed["pf_id"] in seen:
+        if not parsed or parsed["appid"] in seen:
             continue
-        seen.add(parsed["pf_id"])
+        seen.add(parsed["appid"])
         entries.append(parsed)
     return entries
 
@@ -446,6 +455,39 @@ def normalize_config_payload(
     return values, errors
 
 
+async def save_config_values(
+    config: MutableMapping[str, Any],
+    values: dict[str, Any],
+    *,
+    save_async: Callable[[], Awaitable[Any]] | None = None,
+    save_sync: Callable[[], Any] | None = None,
+) -> None:
+    """把归一后的配置合并进内存并落盘，落盘失败时回滚内存
+
+    宿主通过 AstrBotConfig 自身完成持久化，因此只能先更新内存再调用
+    ``save_config_async()`` / ``save_config()``。落盘失败（磁盘写满、权限不足、
+    宿主内部异常）时必须把内存恢复到调用前的快照，避免运行时配置与磁盘配置
+    分叉；两个持久化接口都不存在时直接报错，不改动内存。
+
+    任务取消不按落盘失败处理：宿主的异步保存可能已经在线程里提交完成，
+    此时回滚内存反而会与磁盘配置分叉。
+    """
+    persist = save_async if callable(save_async) else save_sync
+    if not callable(persist):
+        raise RuntimeError(t("web.config_unavailable"))
+
+    snapshot = dict(config)
+    config.update(values)
+    try:
+        result = persist()
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        config.clear()
+        config.update(snapshot)
+        raise
+
+
 __all__ = [
     "COMMAND_TEMPLATE_KEY",
     "DEFAULT_PRIMARY_COLOR",
@@ -466,7 +508,9 @@ __all__ = [
     "get_platforms_from_schema",
     "get_selected_commands",
     "get_theme_colors",
+    "mask_appid",
     "mask_secret",
     "normalize_config_payload",
     "normalize_panel_items",
+    "save_config_values",
 ]

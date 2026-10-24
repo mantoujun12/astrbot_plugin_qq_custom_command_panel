@@ -242,9 +242,26 @@ def test_build_clients_from_schema_config() -> None:
         }
     )
     clients = syncer.build_clients()
-    assert set(clients) == {"pf1"}
-    assert clients["pf1"].appid == "a1"
-    assert clients["pf1"].platform_label == "qq_official"
+    assert set(clients) == {"a1"}
+    assert clients["a1"].appid == "a1"
+    assert clients["a1"].platform_label == "qq_official"
+
+
+def test_build_clients_keeps_platforms_sharing_a_name() -> None:
+    syncer = make_syncer(
+        config={
+            "qq_platforms": [
+                {"name": "bot", "appid": "a1", "secret": "s1"},
+                {"name": "bot", "appid": "a2", "secret": "s2"},
+            ]
+        }
+    )
+
+    clients = syncer.build_clients()
+
+    assert set(clients) == {"a1", "a2"}
+    assert clients["a1"].appid == "a1"
+    assert clients["a2"].appid == "a2"
 
 
 def test_build_clients_ignores_context_platform_settings() -> None:
@@ -314,8 +331,8 @@ def test_build_clients_accepts_explicit_config() -> None:
     clients = syncer.build_clients(
         {"qq_platforms": [{"name": "new", "appid": "a2", "secret": "s"}]}
     )
-    assert set(clients) == {"new"}
-    assert clients["new"].appid == "a2"
+    assert set(clients) == {"a2"}
+    assert clients["a2"].appid == "a2"
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +446,7 @@ async def test_sync_all_emits_start_platform_and_finish() -> None:
         }
     )
     client = FakeQQClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"app": client})
     events, on_event = await collect_events()
 
     result = await syncer.sync_all(on_event=on_event)
@@ -439,16 +456,56 @@ async def test_sync_all_emits_start_platform_and_finish() -> None:
     assert start["platforms"] == 1
     assert start["scenes"] == 1
     assert start["items"] == 1
-    assert platform_event["pf_id"] == "pf1"
+    assert platform_event["pf_id"] == "app"
+    assert platform_event["name"] == "pf1"
+    assert platform_event["appid"] == "***"
     assert platform_event["index"] == 1
     assert platform_event["status"] == "ok"
     assert platform_event["saved"] == 1
     assert finish["ok"] is True
     assert finish["succeeded"] == 1
     assert finish["failed"] == 0
-    assert result == {"pf1": {"c2c": "panel_new_1001"}}
+    assert result == {"app": {"c2c": "panel_new_1001"}}
     # 兼容配置里只存 name/desc，写面板时同样要补上 type
     assert client.created[0][1] == [{"name": "help", "type": "command", "desc": "帮助"}]
+
+
+@pytest.mark.asyncio
+async def test_sync_all_disambiguates_duplicate_names_with_masked_appids() -> None:
+    syncer = make_syncer(
+        config={
+            "scenes": ["c2c"],
+            "qq_platforms": [
+                {"name": "bot", "appid": "1112223334", "secret": "s1"},
+                {"name": "bot", "appid": "5556667778", "secret": "s2"},
+            ],
+            "selected_commands": [{"name": "help", "desc": "帮助"}],
+        }
+    )
+    stub_clients(
+        syncer,
+        {
+            "1112223334": FakeQQClient(existing={}),
+            "5556667778": FakeQQClient(existing={}),
+        },
+    )
+    events, on_event = await collect_events()
+    progress: list[str] = []
+
+    async def on_progress(message: str) -> None:
+        progress.append(message)
+
+    await syncer.sync_all(on_event=on_event, on_progress=on_progress)
+
+    platform_events = [event for event in events if event["type"] == "platform"]
+    assert [(event["name"], event["appid"]) for event in platform_events] == [
+        ("bot", "111*****34"),
+        ("bot", "555*****78"),
+    ]
+    assert any("bot (111*****34)" in message for message in progress)
+    assert any("bot (555*****78)" in message for message in progress)
+    assert all("1112223334" not in message for message in progress)
+    assert all("5556667778" not in message for message in progress)
 
 
 @pytest.mark.asyncio
@@ -462,7 +519,7 @@ async def test_sync_all_reports_failed_platform_in_events() -> None:
     )
     # 场景列表查询失败 => sync_for_platform 抛错 => 平台标记失败
     client = FakeQQClient(existing={}, failing_scopes={"c2c"})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"app": client})
     events, on_event = await collect_events()
 
     result = await syncer.sync_all(on_event=on_event)
@@ -475,7 +532,7 @@ async def test_sync_all_reports_failed_platform_in_events() -> None:
     assert finish["type"] == "finish"
     assert finish["ok"] is False
     assert finish["failed"] == 1
-    assert "error" in result["pf1"]
+    assert "error" in result["app"]
 
 
 @pytest.mark.asyncio
@@ -489,13 +546,13 @@ async def test_sync_all_clearing_branch_emits_structured_events() -> None:
         }
     )
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p_old")]})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"app": client})
     events, on_event = await collect_events()
 
     result = await syncer.sync_all(on_event=on_event)
 
     # 纯清理的一轮也要记录处理过的机器人，否则 finish 会报成 platforms=0
-    assert result == {"pf1": {}}
+    assert result == {"app": {}}
     assert [event["type"] for event in events] == ["start", "platform", "finish"]
     assert events[0]["mode"] == "clear"
     assert events[0]["items"] == 0

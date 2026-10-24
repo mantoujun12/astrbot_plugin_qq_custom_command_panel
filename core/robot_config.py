@@ -31,7 +31,7 @@ ROBOT_CONFIG_FILENAME = "robot_config.json"
 
 
 class RobotConfigError(ValueError):
-    """读取、校验、保存新版配置失败，或运行时合并出现 id 冲突时抛出。"""
+    """读取、校验、保存新版配置失败，或运行时合并出现冲突时抛出。"""
 
 
 def empty_robot_config() -> dict[str, Any]:
@@ -52,7 +52,11 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     文件不存在时返回空结构；读取或解析失败抛 :class:`RobotConfigError`，不静默回退空配置。
     """
     path = _config_path(data_dir)
-    if not path.exists():
+    try:
+        exists = path.exists()
+    except OSError as exc:
+        raise RobotConfigError(t("robot.error.read_failed", path=path, exc=exc)) from exc
+    if not exists:
         return empty_robot_config()
 
     try:
@@ -73,29 +77,40 @@ def load_robot_config(data_dir: str | Path) -> dict[str, Any]:
     if not isinstance(payload.get("robots", []), list):
         raise RobotConfigError(t("robot.error.robots_type"))
 
-    return payload
+    # 复用写入路径的归一化结果，但保留原文件中的 revision，避免乐观并发检查被重置。
+    normalized, errors = validate_robot_config(empty_robot_config(), payload)
+    if errors:
+        raise RobotConfigError("\n".join(errors))
+    normalized["version"] = version
+
+    return normalized
 
 
 def save_robot_config(data_dir: str | Path, payload: dict[str, Any]) -> Path:
-    """原子写入新版机器人配置并返回落盘路径，避免进程中断留下半截配置。"""
+    """原子写入新版机器人配置并返回落盘路径，避免进程中断留下半截配置。
+
+    序列化、创建目录、写入临时文件或替换目标文件失败时都会转换为
+    :class:`RobotConfigError`，由 Web API 返回本地化错误，而不是把原始异常抛给宿主。
+    """
     target = _config_path(data_dir)
-    target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
 
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         temp.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         temp.replace(target)
-    except OSError as exc:
+    except (OSError, TypeError, ValueError) as exc:
         raise RobotConfigError(t("robot.error.save_failed", path=target, exc=exc)) from exc
     finally:
-        if temp.exists():
-            try:
-                temp.unlink()
-            except OSError:
-                pass
+        # 目录创建失败时 unlink 也可能抛 NotADirectoryError / PermissionError，
+        # 不能让清理阶段的异常覆盖上面的 RobotConfigError。
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     return target
 
@@ -125,6 +140,16 @@ def _validate_scenes(
     if not isinstance(scenes, dict):
         path = f"robots[{robot_index}].scenes"
         return normalized, [t("robot.error.scenes_type", path=path)]
+
+    for scene in scenes:
+        if scene not in SCENES:
+            errors.append(
+                t(
+                    "robot.error.scene_unknown",
+                    path=f"robots[{robot_index}].scenes.{scene}",
+                    scene=scene,
+                )
+            )
 
     for scene in SCENES:
         scene_path = f"robots[{robot_index}].scenes.{scene}"
@@ -220,7 +245,10 @@ def validate_robot_config(
     if not isinstance(payload, dict):
         return empty_robot_config(), [t("robot.error.payload_type")]
 
-    raw_robots = payload.get("robots", [])
+    if "robots" not in payload:
+        return empty_robot_config(), [t("robot.error.robots_required")]
+
+    raw_robots = payload.get("robots")
     if not isinstance(raw_robots, list):
         return empty_robot_config(), [t("robot.error.robots_list")]
 
@@ -235,7 +263,8 @@ def validate_robot_config(
             errors.append(t("robot.error.robot_entry_type", path=robot_path))
             continue
 
-        appid = str(raw_robot.get("appid") or "").strip()
+        raw_appid = raw_robot.get("appid")
+        appid = raw_appid.strip() if isinstance(raw_appid, str) else ""
         if not appid:
             errors.append(t("robot.error.appid_required", path=f"{robot_path}.appid"))
             continue
@@ -265,7 +294,8 @@ def validate_robot_config(
             )
             continue
 
-        platform = str(raw_robot.get("platform") or "").strip()
+        raw_platform = raw_robot.get("platform")
+        platform = raw_platform.strip() if isinstance(raw_platform, str) else ""
         if platform not in PLATFORM_TYPES:
             errors.append(
                 t(
@@ -276,7 +306,11 @@ def validate_robot_config(
             )
             continue
 
-        secret = str(raw_robot.get("secret") or "").strip()
+        raw_secret = raw_robot.get("secret")
+        if not isinstance(raw_secret, str):
+            errors.append(t("robot.error.secret_type", path=f"{robot_path}.secret"))
+            continue
+        secret = raw_secret.strip()
         if not secret:
             secret = secret_by_appid.get(appid, "")
         if not secret:
@@ -404,6 +438,9 @@ def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]
     selected_commands = get_selected_commands(legacy_config)
     runtime: list[dict[str, Any]] = []
     for entry in get_platform_entries(legacy_config):
+        appid = entry["appid"].strip()
+        if not appid:
+            continue
         scenes: dict[str, list[dict[str, str]]] = {scene: [] for scene in SCENES}
         for scene in enabled_scenes:
             scenes[scene] = [
@@ -413,7 +450,7 @@ def _legacy_runtime_robots(legacy_config: dict[str, Any]) -> list[dict[str, Any]
             {
                 "id": entry["pf_id"],
                 "name": entry["name"],
-                "appid": entry["appid"],
+                "appid": appid,
                 "secret": entry["secret"],
                 "platform": entry["platform"],
                 "source": "legacy",
@@ -436,7 +473,13 @@ def build_runtime_robots(
     ]
     runtime = [*v2_robots, *legacy_robots]
     seen_ids: set[str] = set()
+    seen_appids: set[str] = set()
     for robot in runtime:
+        appid = str(robot.get("appid") or "").strip()
+        if appid and appid in seen_appids:
+            raise RobotConfigError(t("robot.error.runtime_appid_duplicate", appid=appid))
+        seen_appids.add(appid)
+
         robot_id = str(robot.get("id") or robot.get("appid") or "")
         if robot_id in seen_ids:
             raise RobotConfigError(t("robot.error.runtime_id_duplicate", robot_id=robot_id))
@@ -444,10 +487,39 @@ def build_runtime_robots(
     return runtime
 
 
+def _truncate_utf16_units(value: str, max_units: int) -> str:
+    """按 JavaScript ``String.length`` 口径截断，避免拆开非 BMP 字符。"""
+    units = 0
+    for index, char in enumerate(value):
+        char_units = 2 if ord(char) > 0xFFFF else 1
+        if units + char_units > max_units:
+            return value[:index]
+        units += char_units
+    return value
+
+
+def _legacy_robot_draft_name(name: str, appid: str) -> str:
+    """生成符合新版配置与前端长度限制的导入名称。
+
+    空备注回退到脱敏 AppID；非空备注按前端使用的 UTF-16 代码单元截断。
+    """
+    normalized = name.strip()
+    if normalized:
+        return _truncate_utf16_units(normalized, PANEL_ITEM_NAME_MAX)
+
+    appid_text = appid.strip()
+    if len(appid_text) <= 6:
+        return "*" * len(appid_text)
+
+    masked_length = min(len(appid_text), PANEL_ITEM_NAME_MAX)
+    return f"{appid_text[:3]}{'*' * (masked_length - 5)}{appid_text[-2:]}"
+
+
 def legacy_to_robot_drafts(legacy_config: dict[str, Any]) -> list[dict[str, Any]]:
     """把旧 schema 机器人转换成新版配置草稿，可直接作为导入时的初始值。
 
     为每个启用场景准备同样的 ``selected_commands`` 条目并保留 secret，不含稳定 id。
+    可选备注名留空时使用脱敏 AppID，超长时截断到新版配置允许的长度。
     """
     enabled_scenes = get_enabled_scenes(legacy_config)
     selected_commands = get_selected_commands(legacy_config)
@@ -466,7 +538,7 @@ def legacy_to_robot_drafts(legacy_config: dict[str, Any]) -> list[dict[str, Any]
             }
         drafts.append(
             {
-                "name": entry["name"],
+                "name": _legacy_robot_draft_name(entry["name"], entry["appid"]),
                 "appid": entry["appid"],
                 "secret": entry["secret"],
                 "platform": entry["platform"],

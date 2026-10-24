@@ -35,7 +35,9 @@ from .config import (
     export_config,
     get_configured_platforms,
     get_enabled_scenes,
+    get_platform_entries,
     get_selected_commands,
+    mask_appid,
     normalize_config_payload,
 )
 from .i18n import LOG_TAG, t
@@ -74,14 +76,6 @@ def _web() -> Any:
     from astrbot.api import web
 
     return web
-
-
-def mask_appid(appid: Any) -> str:
-    """appid 脱敏：保留前 3 位与后 2 位，中间打码；过短整体打码"""
-    text = str(appid or "")
-    if len(text) <= 6:
-        return "*" * len(text)
-    return f"{text[:3]}{'*' * (len(text) - 5)}{text[-2:]}"
 
 
 def _robot_response(config: dict[str, Any]) -> dict[str, Any]:
@@ -132,11 +126,12 @@ async def _platform_status(
     missing=该场景无插件面板，failed=查询该场景失败。
     """
     raw_appid = info.get("appid")
-    # 未配备注时 pf_id 会退化成 appid，展示时同样需要脱敏
+    # 兼容配置以 appid 作为平台身份，响应里始终使用脱敏值
     display_pf_id = mask_appid(raw_appid) if raw_appid and str(raw_appid) == pf_id else pf_id
 
     payload: dict[str, Any] = {
         "pf_id": display_pf_id,
+        "name": info.get("name") or "",
         "appid": mask_appid(raw_appid),
         "platform": info.get("platform") or getattr(client, "platform_label", "qq"),
         "scenes": [],
@@ -230,13 +225,16 @@ async def build_status(
             for robot in runtime
         )
     ]
-    total_items = sum(
-        len(items)
+    item_lists = [
+        items
         for robot in runtime
         if isinstance(robot.get("scenes"), dict)
         for items in robot["scenes"].values()
-        if isinstance(items, list)
-    )
+        if isinstance(items, list) and items
+    ]
+    total_items = sum(len(items) for items in item_lists)
+    # 每个非空场景对应一个独立面板，累计条目数应与这些面板的总容量比较。
+    items_max = PANEL_MAX_ITEMS * len(item_lists)
     panels: dict[str, Any] = {
         "total": sum(count for _, count, _ in results),
         "partial": any(not complete for _, _, complete in results),
@@ -249,7 +247,7 @@ async def build_status(
         "plugin": {"name": PLUGIN_NAME, "version": version},
         "platforms": [payload for payload, _, _ in results],
         "scenes": active_scenes,
-        "items": {"count": total_items, "max": PANEL_MAX_ITEMS},
+        "items": {"count": total_items, "max": items_max},
         "panels": panels,
     }
 
@@ -268,13 +266,20 @@ async def _build_legacy_status(
 ) -> dict[str, Any]:
     """旧版全局配置的状态统计，保持既有行为不变。"""
     platforms = get_configured_platforms(config)
+    platform_names = {entry["appid"]: entry["name"] for entry in get_platform_entries(config)}
     scenes = get_enabled_scenes(config)
     items = get_selected_commands(config)
     clients = syncer.build_clients(config)
 
     results = await asyncio.gather(
         *(
-            _platform_status(syncer, pf_id, client, platforms.get(pf_id, {}), scenes)
+            _platform_status(
+                syncer,
+                pf_id,
+                client,
+                {**platforms.get(pf_id, {}), "name": platform_names.get(pf_id, "")},
+                scenes,
+            )
             for pf_id, client in clients.items()
         )
     )
@@ -300,12 +305,13 @@ class StatusCache:
     """状态结果的单飞 (single-flight) 内存缓存
 
     并发请求只计算一次，TTL 内复用，避免重复打 QQ API；
-    force=True（视图手动刷新）时绕过缓存，invalidate() 在配置写回后主动失效。
+    force=True（视图手动刷新）时绕过缓存，配置写回或同步结束后通过 invalidate() 主动失效。
     """
 
     def __init__(self, ttl: float = STATUS_CACHE_TTL) -> None:
         self._ttl = ttl
         self._lock = asyncio.Lock()
+        self._generation = 0
         self._expires_at = 0.0
         self._value: dict[str, Any] | None = None
 
@@ -324,13 +330,18 @@ class StatusCache:
             cached = self._peek(force)
             if cached is not None:
                 return cached
+            generation = self._generation
             value = await compute()
+            # 计算期间被失效时，结果已经过期，不能重新写回缓存
+            if generation != self._generation:
+                return value
             self._value = value
             self._expires_at = time.monotonic() + self._ttl
             return value
 
     def invalidate(self) -> None:
-        """主动失效缓存（配置变更后调用）"""
+        """主动失效缓存，并阻止正在进行的旧计算回写"""
+        self._generation += 1
         self._value = None
         self._expires_at = 0.0
 
@@ -373,6 +384,9 @@ class WebApiBundle:
         self._version = version
         self.cache = StatusCache(cache_ttl)
         self.runner = SyncRunner()
+        self._robot_config_lock = asyncio.Lock()
+        # 校验、落盘与失败回滚必须整体串行，否则并发保存可能互相覆盖或回滚
+        self._config_save_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # 注册
@@ -501,19 +515,21 @@ class WebApiBundle:
         if not isinstance(payload, dict):
             return web.error_response(t("web.config_invalid_body"), status_code=400)
 
-        values, errors = normalize_config_payload(self._get_config(), payload)
-        if errors:
-            return web.error_response("；".join(errors), status_code=400)
+        async with self._config_save_lock:
+            values, errors = normalize_config_payload(self._get_config(), payload)
+            if errors:
+                return web.error_response("；".join(errors), status_code=400)
 
-        try:
-            await self._save_config(values)
-        except Exception as exc:
-            logger.error(f"{LOG_TAG} " + t("log.config_save_failed", exc=exc), exc_info=True)
-            return web.error_response(t("web.config_save_failed", exc=exc), status_code=500)
+            try:
+                await self._save_config(values)
+            except Exception as exc:
+                logger.error(f"{LOG_TAG} " + t("log.config_save_failed", exc=exc), exc_info=True)
+                return web.error_response(t("web.config_save_failed", exc=exc), status_code=500)
+            finally:
+                # 保存回调可能先改内存再落盘失败，失败路径同样需要失效缓存
+                self.cache.invalidate()
 
-        # 配置变了，状态缓存里的平台/场景信息随即过期
-        self.cache.invalidate()
-        return web.json_response(export_config(self._get_config()))
+            return web.json_response(export_config(self._get_config()))
 
     # ------------------------------------------------------------------
     # 新版机器人配置
@@ -558,38 +574,42 @@ class WebApiBundle:
         if not isinstance(payload, dict):
             return web.error_response(t("web.config_invalid_body"), status_code=400)
 
-        try:
-            existing = self._load_robots()
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+        async with self._robot_config_lock:
+            try:
+                existing = self._load_robots()
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        expected_version = payload.get("version")
-        current_version = existing.get("version", 1)
-        if type(expected_version) is not int or expected_version < 1:
-            return web.error_response(t("web.robot_version_invalid"), status_code=400)
-        if expected_version != current_version:
-            return web.error_response(t("web.robot_config_conflict"), status_code=409)
+            expected_version = payload.get("version")
+            current_version = existing.get("version", 1)
+            if type(expected_version) is not int or expected_version < 1:
+                return web.error_response(t("web.robot_version_invalid"), status_code=400)
+            if expected_version != current_version:
+                return web.error_response(t("web.robot_config_conflict"), status_code=409)
 
-        config, errors = validate_robot_config(existing, payload)
-        if errors:
-            return web.error_response(t("common.error_separator").join(errors), status_code=400)
+            config, errors = validate_robot_config(existing, payload)
+            if errors:
+                return web.error_response(
+                    t("common.error_separator").join(errors),
+                    status_code=400,
+                )
 
-        config["version"] = current_version + 1
-        try:
-            save_robot_config(self._robot_config_dir, config)
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_save_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+            config["version"] = current_version + 1
+            try:
+                save_robot_config(self._robot_config_dir, config)
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_save_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        self.cache.invalidate()
-        return web.json_response(_robot_response(config))
+            self.cache.invalidate()
+            return web.json_response(_robot_response(config))
 
     async def page_robots_import_legacy(self) -> Any:
         """把兼容配置里的机器人导入新版配置，重复 appid 拒绝导入。"""
@@ -621,77 +641,101 @@ class WebApiBundle:
         if len(set(appids)) != len(appids):
             return web.error_response(t("web.robot_appids_duplicate"), status_code=400)
 
-        try:
-            existing = self._load_robots()
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+        async with self._robot_config_lock:
+            try:
+                existing = self._load_robots()
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_read_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        expected_version = payload.get("version")
-        current_version = existing.get("version", 1)
-        if type(expected_version) is not int or expected_version < 1:
-            return web.error_response(t("web.robot_version_invalid"), status_code=400)
-        if expected_version != current_version:
-            return web.error_response(t("web.robot_config_conflict"), status_code=409)
+            expected_version = payload.get("version")
+            current_version = existing.get("version", 1)
+            if type(expected_version) is not int or expected_version < 1:
+                return web.error_response(t("web.robot_version_invalid"), status_code=400)
+            if expected_version != current_version:
+                return web.error_response(t("web.robot_config_conflict"), status_code=409)
 
-        existing_appids = _robot_appid_set(existing)
-        duplicates = [appid for appid in appids if appid in existing_appids]
-        if duplicates:
-            return web.error_response(
-                t(
-                    "web.robot_appids_existing",
-                    appids=t("common.list_separator").join(duplicates),
-                ),
-                status_code=400,
-            )
+            existing_appids = _robot_appid_set(existing)
+            duplicates = [appid for appid in appids if appid in existing_appids]
+            if duplicates:
+                return web.error_response(
+                    t(
+                        "web.robot_appids_existing",
+                        appids=t("common.list_separator").join(duplicates),
+                    ),
+                    status_code=400,
+                )
 
-        drafts = legacy_to_robot_drafts(self._get_legacy())
-        by_appid = {
-            str(draft.get("appid") or "").strip(): draft
-            for draft in drafts
-            if isinstance(draft, dict) and str(draft.get("appid") or "").strip()
-        }
-        missing = [appid for appid in appids if appid not in by_appid]
-        if missing:
-            return web.error_response(
-                t(
-                    "web.robot_appids_missing",
-                    appids=t("common.list_separator").join(missing),
-                ),
-                status_code=400,
-            )
+            drafts = legacy_to_robot_drafts(self._get_legacy())
+            by_appid = {
+                str(draft.get("appid") or "").strip(): draft
+                for draft in drafts
+                if isinstance(draft, dict) and str(draft.get("appid") or "").strip()
+            }
+            missing = [appid for appid in appids if appid not in by_appid]
+            if missing:
+                return web.error_response(
+                    t(
+                        "web.robot_appids_missing",
+                        appids=t("common.list_separator").join(missing),
+                    ),
+                    status_code=400,
+                )
 
-        robots = existing.get("robots")
-        merged = dict(existing)
-        merged["version"] = 1
-        merged["robots"] = [
-            *(robots if isinstance(robots, list) else []),
-            *(by_appid[appid] for appid in appids),
-        ]
+            robots = existing.get("robots")
+            merged = dict(existing)
+            merged["version"] = 1
+            merged["robots"] = [
+                *(robots if isinstance(robots, list) else []),
+                *(by_appid[appid] for appid in appids),
+            ]
 
-        config, errors = validate_robot_config({}, merged)
-        if errors:
-            return web.error_response(t("common.error_separator").join(errors), status_code=400)
+            config, errors = validate_robot_config({}, merged)
+            if errors:
+                return web.error_response(
+                    t("common.error_separator").join(errors),
+                    status_code=400,
+                )
 
-        config["version"] = current_version + 1
-        try:
-            save_robot_config(self._robot_config_dir, config)
-        except RobotConfigError as exc:
-            logger.error(
-                f"{LOG_TAG} " + t("log.robot_config_import_failed", exc=exc),
-                exc_info=True,
-            )
-            return web.error_response(str(exc), status_code=500)
+            config["version"] = current_version + 1
+            try:
+                save_robot_config(self._robot_config_dir, config)
+            except RobotConfigError as exc:
+                logger.error(
+                    f"{LOG_TAG} " + t("log.robot_config_import_failed", exc=exc),
+                    exc_info=True,
+                )
+                return web.error_response(str(exc), status_code=500)
 
-        self.cache.invalidate()
-        return web.json_response(_robot_response(config))
+            self.cache.invalidate()
+            return web.json_response(_robot_response(config))
 
     # ------------------------------------------------------------------
     # 同步入口 + 进度流
     # ------------------------------------------------------------------
+
+    def start_sync(self, syncer: PanelSyncer | None = None) -> bool:
+        """启动一次后台同步；已有任务在跑时返回 False
+
+        dashboard 的同步入口与插件启动同步共用同一个 runner，
+        确保任一时刻只有一个 sync_all 在访问 QQ API。
+        """
+        target = syncer if syncer is not None else self._get_syncer()
+        if target is None:
+            return False
+        return self.runner.start(self._make_run(target))
+
+    async def run_startup_sync(self, syncer: PanelSyncer) -> bool:
+        """插件启动时同步一次，与视图入口共用单飞任务
+
+        已有任务在跑时不再启动第二轮，而是等它结束；返回是否由本次调用发起。
+        """
+        started = self.start_sync(syncer)
+        await self.runner.join()
+        return started
 
     async def page_sync_start(self) -> Any:
         """触发一次同步；已有任务在跑时返回 busy，不排队"""
@@ -699,7 +743,7 @@ class WebApiBundle:
         syncer = self._get_syncer()
         if syncer is None:
             return web.error_response(t("web.not_ready"), status_code=503)
-        started = self.runner.start(self._make_run(syncer))
+        started = self.start_sync(syncer)
         return web.json_response({"started": started, "busy": not started})
 
     async def page_sync_events(self) -> Any:
@@ -764,14 +808,33 @@ class WebApiBundle:
         """构造同步任务执行体：先刷新配置，再同时推送文本与结构化事件"""
 
         async def run(emit: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
-            syncer.set_config(self._get_config())
+            try:
+                syncer.set_config(self._get_config())
 
-            async def push_text(message: str) -> None:
-                await emit({"type": "message", "text": message})
+                async def push_text(message: str) -> None:
+                    await emit({"type": "message", "text": message})
 
-            return await syncer.sync_all(on_progress=push_text, on_event=emit)
+                return await syncer.sync_all(on_progress=push_text, on_event=emit)
+            finally:
+                # 同步会改变线上状态，结束后必须让下一次状态查询重新计算
+                self.cache.invalidate()
 
         return run
+
+
+async def startup_sync(
+    syncer: PanelSyncer,
+    web_api: WebApiBundle | None,
+) -> bool:
+    """插件启动时同步一次面板
+
+    Web API 可用时复用其单飞 runner；不可用时没有视图入口，直接同步即可。
+    返回是否通过 runner 发起，调用方负责按启动语境记录异常。
+    """
+    if web_api is None:
+        await syncer.sync_all()
+        return False
+    return await web_api.run_startup_sync(syncer)
 
 
 def register_web_apis(
@@ -817,4 +880,5 @@ __all__ = [
     "mask_appid",
     "panel_items_count",
     "register_web_apis",
+    "startup_sync",
 ]

@@ -27,6 +27,8 @@ from .core import (
     WebApiBundle,
     register_web_apis,
     resolve_plugin_data_dir,
+    save_config_values,
+    startup_sync,
 )
 from .core.i18n import DEFAULT_LANGUAGE, LOG_TAG, initialize, t
 
@@ -76,19 +78,15 @@ class QQCommandPanelPlugin(Star):
         """把 dashboard 提交的配置写回 AstrBotConfig 并立即生效
 
         AstrBot 的插件配置是 AstrBotConfig（dict 子类）并负责落盘，
-        这里先确认宿主提供了持久化接口，再更新内存并写回，
-        避免出现"只改内存、没落盘"的假成功。
+        这里先确认宿主提供了持久化接口，再更新内存并写回；落盘失败时由
+        ``save_config_values`` 回滚内存，避免运行时配置与磁盘配置分叉。
         """
-        save_async = getattr(self.config, "save_config_async", None)
-        save_sync = getattr(self.config, "save_config", None)
-        if not callable(save_async) and not callable(save_sync):
-            raise RuntimeError(t("web.config_unavailable"))
-
-        self.config.update(values)
-        if callable(save_async):
-            await save_async()
-        else:
-            save_sync()
+        await save_config_values(
+            self.config,
+            values,
+            save_async=getattr(self.config, "save_config_async", None),
+            save_sync=getattr(self.config, "save_config", None),
+        )
 
         if self._syncer is not None:
             self._syncer.set_config(dict(self.config))
@@ -103,12 +101,18 @@ class QQCommandPanelPlugin(Star):
             config=dict(self.config),
         )
         try:
-            await self._syncer.sync_all()
+            # Web API 可用时复用视图同步的 runner，避免重载 / 重启期间
+            # 仪表盘再触发一轮同步，两边并发创建重复面板。
+            await startup_sync(self._syncer, self._web_api)
         except Exception as exc:
             logger.error(
                 f"{LOG_TAG} {t('log.startup_sync_failed', exc=exc)}",
                 exc_info=True,
             )
+        finally:
+            # 启动同步也可能与状态查询并发，结束后同样要让缓存失效
+            if self._web_api is not None:
+                self._web_api.cache.invalidate()
 
     async def terminate(self) -> None:
         """插件销毁：关闭 HTTP 会话"""

@@ -15,9 +15,11 @@ from .config import (
     get_platform_entries,
     get_platforms_from_schema,
     get_selected_commands,
+    mask_appid,
     mask_secret,
     normalize_config_payload,
     normalize_panel_items,
+    save_config_values,
 )
 from .i18n import (
     DEFAULT_LANGUAGE,
@@ -54,9 +56,9 @@ from .web_api import (
     SYNC_ROUTE_SUFFIX,
     WebApiBundle,
     build_status,
-    mask_appid,
     panel_items_count,
     register_web_apis,
+    startup_sync,
 )
 
 __all__ = [
@@ -115,7 +117,9 @@ __all__ = [
     "panel_items_count",
     "register_web_apis",
     "resolve_plugin_data_dir",
+    "save_config_values",
     "save_robot_config",
+    "startup_sync",
     "t",
     "validate_robot_config",
 ]

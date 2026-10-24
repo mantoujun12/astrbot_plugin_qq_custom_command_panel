@@ -81,3 +81,18 @@ export async function waitUntil(
   }
   await flush()
 }
+
+/** 手动控制 resolve / reject 的 Promise，用来构造响应乱序返回的竞态用例 */
+export function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason?: unknown) => void
+} {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}

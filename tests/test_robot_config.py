@@ -136,6 +136,77 @@ def test_load_corrupt_json_does_not_silently_fallback(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8") == before
 
 
+@pytest.mark.parametrize(
+    "robots",
+    [
+        ["bad"],
+        [make_robot(appid=123)],  # type: ignore[arg-type]
+        [make_robot(scenes="bad")],  # type: ignore[arg-type]
+        [make_robot(scenes={**make_scenes(), "c2c": {"enabled": True, "items": "bad"}})],
+        [make_robot(scenes={**make_scenes(), "group": "bad"})],
+        [make_robot(scenes={**make_scenes(), "other": {"enabled": False, "items": []}})],
+    ],
+)
+def test_load_rejects_invalid_nested_robot_config(
+    tmp_path: Path,
+    robots: list[Any],
+) -> None:
+    path = tmp_path / ROBOT_CONFIG_FILENAME
+    path.write_text(json.dumps({"version": 1, "robots": robots}), encoding="utf-8")
+
+    with pytest.raises(RobotConfigError):
+        load_robot_config(tmp_path)
+
+    assert path.is_file()
+
+
+def test_load_rejects_duplicate_appid(tmp_path: Path) -> None:
+    payload = {
+        "version": 1,
+        "robots": [
+            make_robot(appid="same-appid", robot_id="r1"),
+            make_robot(appid="same-appid", robot_id="r2"),
+        ],
+    }
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RobotConfigError, match="same-appid.*重复"):
+        load_robot_config(tmp_path)
+
+
+def test_load_normalizes_secret_and_preserves_existing_version(tmp_path: Path) -> None:
+    payload = {"version": 7, "robots": [make_robot(secret="  plain-secret-value  ")]}
+    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    loaded = load_robot_config(tmp_path)
+
+    assert loaded["version"] == 7
+    assert loaded["robots"][0]["secret"] == "plain-secret-value"
+
+
+def test_load_wraps_directory_check_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """检查配置是否存在时也可能因权限不足抛 OSError，同样要包装成 RobotConfigError。"""
+
+    def fail(_path: Path) -> bool:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(Path, "exists", fail)
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        load_robot_config(tmp_path)
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+
+
 # 校验
 
 
@@ -173,6 +244,16 @@ def test_validate_rejects_duplicate_appid() -> None:
     _normalized, errors = validate_robot_config(empty_robot_config(), payload)
 
     assert any("重复" in error for error in errors)
+
+
+def test_validate_rejects_non_string_appid() -> None:
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(appid=123)]},  # type: ignore[arg-type]
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("appid" in error for error in errors)
 
 
 def test_validate_rejects_duplicate_robot_id() -> None:
@@ -287,6 +368,21 @@ def test_validate_rejects_non_list_items() -> None:
     assert any("items" in error and "列表" in error for error in errors)
 
 
+def test_validate_rejects_unknown_scene() -> None:
+    scenes = {
+        **make_scenes(),
+        "other": {"enabled": False, "items": []},
+    }
+
+    normalized, errors = validate_robot_config(
+        empty_robot_config(),
+        {"robots": [make_robot(scenes=scenes)]},
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("scenes.other" in error and "不支持" in error for error in errors)
+
+
 def test_validate_does_not_silently_truncate() -> None:
     items = [{"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)}]
 
@@ -336,6 +432,16 @@ def test_validate_requires_secret_for_new_robot() -> None:
     assert any("secret" in error for error in errors)
 
 
+def test_validate_rejects_non_string_secret() -> None:
+    normalized, errors = validate_robot_config(
+        {"version": 1, "robots": [make_robot()]},
+        {"robots": [make_robot(secret=123)]},  # type: ignore[arg-type]
+    )
+
+    assert normalized == empty_robot_config()
+    assert any("secret" in error and "字符串" in error for error in errors)
+
+
 # 新旧合并 / legacy 转换
 
 
@@ -354,6 +460,17 @@ def test_build_runtime_v2_wins_on_same_appid() -> None:
     assert robot["scenes"]["group"] == []
 
 
+def test_build_runtime_v2_wins_when_legacy_appid_has_whitespace() -> None:
+    legacy = make_legacy_config(appid="  shared-appid  ")
+    robot_config = {"robots": [make_robot(appid="shared-appid")]}
+
+    runtime = build_runtime_robots(legacy, robot_config)
+
+    assert len(runtime) == 1
+    assert runtime[0]["source"] == "v2"
+    assert runtime[0]["appid"] == "shared-appid"
+
+
 def test_build_runtime_keeps_unmatched_legacy_robot() -> None:
     legacy = make_legacy_config(appid="legacy-only")
     robot_config = {"robots": [make_robot(appid="v2-only")]}
@@ -367,6 +484,20 @@ def test_build_runtime_keeps_unmatched_legacy_robot() -> None:
     assert legacy_robot["scenes"]["channel"] == []
 
 
+def test_build_runtime_keeps_legacy_robots_sharing_a_name() -> None:
+    legacy = make_legacy_config(appid="legacy-a", name="bot")
+    legacy["qq_platforms"].append(
+        {"name": "bot", "appid": "legacy-b", "secret": "secret-b", "platform": "qq_official"}
+    )
+
+    runtime = build_runtime_robots(legacy, {"robots": []})
+
+    assert [(robot["id"], robot["appid"], robot["name"]) for robot in runtime] == [
+        ("legacy-a", "legacy-a", "bot"),
+        ("legacy-b", "legacy-b", "bot"),
+    ]
+
+
 def test_build_runtime_rejects_duplicate_robot_ids() -> None:
     robot_config = {
         "robots": [
@@ -376,6 +507,18 @@ def test_build_runtime_rejects_duplicate_robot_ids() -> None:
     }
 
     with pytest.raises(RobotConfigError, match="id 重复"):
+        build_runtime_robots({}, robot_config)
+
+
+def test_build_runtime_rejects_duplicate_appids() -> None:
+    robot_config = {
+        "robots": [
+            make_robot(appid="same-appid", robot_id="r1"),
+            make_robot(appid="same-appid", robot_id="r2"),
+        ]
+    }
+
+    with pytest.raises(RobotConfigError, match="AppID 重复"):
         build_runtime_robots({}, robot_config)
 
 
@@ -403,6 +546,53 @@ def test_legacy_to_robot_drafts_replicates_commands_and_secret() -> None:
     assert draft["scenes"]["group"]["enabled"] is False
     assert draft["scenes"]["channel"]["items"] == [{"name": "help", "desc": "帮助"}]
     assert draft["scenes"]["dm"]["items"] == []
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_legacy_to_robot_drafts_falls_back_to_masked_appid(name: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(appid="1023456789", name=name))
+
+    assert drafts[0]["name"] == "102*****89"
+
+
+def test_legacy_to_robot_drafts_falls_back_when_name_is_omitted() -> None:
+    legacy = {
+        "qq_platforms": [{"appid": "1023456789", "secret": "legacy-secret"}],
+    }
+
+    drafts = legacy_to_robot_drafts(legacy)
+
+    assert drafts[0]["name"] == "102*****89"
+
+
+def test_legacy_to_robot_drafts_truncates_overlong_name() -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=f" {'名' * 15} "))
+
+    assert drafts[0]["name"] == "名" * PANEL_ITEM_NAME_MAX
+    assert len(drafts[0]["name"]) == PANEL_ITEM_NAME_MAX
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        (f"{'a' * (PANEL_ITEM_NAME_MAX - 1)}😀后缀", "a" * (PANEL_ITEM_NAME_MAX - 1)),
+        ("😀" * (PANEL_ITEM_NAME_MAX // 2), "😀" * (PANEL_ITEM_NAME_MAX // 2)),
+    ],
+)
+def test_legacy_to_robot_drafts_truncates_by_utf16_units(name: str, expected: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=name))
+
+    assert drafts[0]["name"] == expected
+    assert len(drafts[0]["name"].encode("utf-16-le")) // 2 <= PANEL_ITEM_NAME_MAX
+
+
+@pytest.mark.parametrize("name", ["", f"{'名' * PANEL_ITEM_NAME_MAX}超长"])
+def test_legacy_drafts_with_optional_names_can_be_validated_into_v2(name: str) -> None:
+    drafts = legacy_to_robot_drafts(make_legacy_config(name=name))
+
+    _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": drafts})
+
+    assert errors == []
 
 
 def test_legacy_drafts_can_be_validated_into_v2() -> None:
@@ -499,10 +689,56 @@ def test_save_failure_raises_robot_config_error(tmp_path: Path) -> None:
         save_robot_config(tmp_path, empty_robot_config())
 
 
+def test_save_wraps_directory_creation_failure(tmp_path: Path) -> None:
+    """数据目录本身无法创建时也要包装成 RobotConfigError，不能漏出原始 OSError。"""
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(data_dir, empty_robot_config())
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+
+
+def test_save_wraps_serialization_failure(tmp_path: Path) -> None:
+    """载荷无法 JSON 序列化时同样返回 RobotConfigError，而不是 TypeError。"""
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(tmp_path, {"version": 1, "robots": [object()]})
+
+    assert isinstance(excinfo.value.__cause__, TypeError)
+
+
+def test_save_wraps_encoding_failure(tmp_path: Path) -> None:
+    """孤立代理字符无法按 UTF-8 写入，保存失败也要包装成 RobotConfigError。"""
+
+    with pytest.raises(RobotConfigError) as excinfo:
+        save_robot_config(
+            tmp_path,
+            {"version": 1, "robots": [{"name": "\ud800"}]},
+        )
+
+    assert isinstance(excinfo.value.__cause__, UnicodeEncodeError)
+
+
 def test_validate_rejects_non_list_robots() -> None:
     _normalized, errors = validate_robot_config(empty_robot_config(), {"robots": "bad"})
 
     assert errors == ["robots：必须是列表"]
+
+
+def test_validate_rejects_missing_robots() -> None:
+    normalized, errors = validate_robot_config(empty_robot_config(), {})
+
+    assert normalized == empty_robot_config()
+    assert errors == ["robots：必须显式传入列表"]
+
+
+def test_validate_accepts_explicit_empty_robots() -> None:
+    normalized, errors = validate_robot_config(empty_robot_config(), {"robots": []})
+
+    assert errors == []
+    assert normalized["robots"] == []
 
 
 def test_validate_rejects_non_dict_robot_entry() -> None:

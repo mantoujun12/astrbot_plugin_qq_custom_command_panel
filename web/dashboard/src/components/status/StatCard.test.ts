@@ -40,4 +40,34 @@ describe('StatCard', () => {
     expect(atLimit.get('.qc-metric-value').classes()).toContain('text-error')
     expect(belowLimit.get('.qc-metric-value').classes()).not.toContain('text-error')
   })
+
+  it('keeps the value neutral when no capacity exists', () => {
+    const card = mountView(StatCard, {
+      props: { title: '指令条目', value: 0, max: 0, emphasizeAtLimit: true },
+    })
+
+    expect(card.get('.qc-metric-value').classes()).not.toContain('text-error')
+  })
+
+  it('appends a plus suffix and renders the note for a lower-bound value', () => {
+    const card = mountView(StatCard, {
+      props: {
+        title: '线上面板',
+        value: 5,
+        partial: true,
+        note: '部分场景查询失败，该值为下限',
+      },
+    })
+
+    expect(card.get('.qc-metric-value').text()).toBe('5+')
+    expect(card.get('.qc-metric-note').text()).toBe('部分场景查询失败，该值为下限')
+  })
+
+  it('never highlights a lower-bound value even when a max is passed', () => {
+    const card = mountView(StatCard, {
+      props: { title: '线上面板', value: 40, max: 40, partial: true, emphasizeAtLimit: true },
+    })
+
+    expect(card.get('.qc-metric-value').classes()).not.toContain('text-error')
+  })
 })

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from core.config import (
     mask_secret,
     normalize_config_payload,
     normalize_panel_items,
+    save_config_values,
 )
 from core.i18n import SUPPORTED_LANGUAGES
 
@@ -174,7 +176,7 @@ def test_get_platform_entries_keeps_name_and_defaults() -> None:
         ]
     }
     entries = get_platform_entries(config)
-    # 没填 name/platform 时 pf_id 取 appid，platform 归一成 qq_official
+    # 平台身份始终取 appid，platform 归一成 qq_official
     assert entries == [
         {
             "pf_id": "222",
@@ -186,6 +188,22 @@ def test_get_platform_entries_keeps_name_and_defaults() -> None:
     ]
 
 
+def test_get_platform_entries_uses_appid_as_identity() -> None:
+    entries = get_platform_entries(
+        {
+            "qq_platforms": [
+                {"name": "bot", "appid": "A", "secret": "s1"},
+                {"name": "bot", "appid": "B", "secret": "s2"},
+            ]
+        }
+    )
+
+    assert [(entry["pf_id"], entry["name"]) for entry in entries] == [
+        ("A", "bot"),
+        ("B", "bot"),
+    ]
+
+
 def test_get_platforms_from_schema_basic() -> None:
     config = {
         "qq_platforms": [
@@ -193,11 +211,11 @@ def test_get_platforms_from_schema_basic() -> None:
         ]
     }
     assert get_platforms_from_schema(config) == {
-        "小号": {"appid": "111", "secret": "s1", "platform": "qq_official"},
+        "111": {"appid": "111", "secret": "s1", "platform": "qq_official"},
     }
 
 
-def test_get_platforms_from_schema_dedups_by_pf_id() -> None:
+def test_get_platforms_from_schema_keeps_same_name_with_different_appids() -> None:
     config = {
         "qq_platforms": [
             {"name": "dup", "appid": "1", "secret": "s1"},
@@ -205,9 +223,23 @@ def test_get_platforms_from_schema_dedups_by_pf_id() -> None:
         ]
     }
     platforms = get_platforms_from_schema(config)
-    # 同一 pf_id 只保留第一条
+    # 备注名可以重复，平台身份以 appid 为准
+    assert platforms == {
+        "1": {"appid": "1", "secret": "s1", "platform": "qq_official"},
+        "2": {"appid": "2", "secret": "s2", "platform": "qq_official"},
+    }
+
+
+def test_get_platforms_from_schema_dedups_by_appid() -> None:
+    config = {
+        "qq_platforms": [
+            {"name": "first", "appid": "same", "secret": "s1"},
+            {"name": "second", "appid": "same", "secret": "s2"},
+        ]
+    }
+    platforms = get_platforms_from_schema(config)
     assert len(platforms) == 1
-    assert platforms["dup"]["appid"] == "1"
+    assert platforms["same"]["secret"] == "s1"
 
 
 def test_get_platforms_from_schema_skips_incomplete() -> None:
@@ -229,8 +261,8 @@ def test_get_configured_platforms_reads_schema_only() -> None:
         ]
     }
     platforms = get_configured_platforms(config)
-    assert list(platforms) == ["schema_pf"]
-    assert platforms["schema_pf"]["appid"] == "s_app"
+    assert list(platforms) == ["s_app"]
+    assert platforms["s_app"]["appid"] == "s_app"
 
 
 def test_get_configured_platforms_empty_without_qq_platforms() -> None:
@@ -298,6 +330,35 @@ def test_export_config_normalizes_language_and_skips_invalid_commands() -> None:
     assert exported["language"] == "zh-CN"
     assert exported["selected_commands"] == [{"name": "ok", "desc": ""}]
     assert exported["qq_platforms"] == []
+
+
+def test_export_and_normalize_preserves_platforms_with_duplicate_names() -> None:
+    """GET /config 的结果原样保存回去时，不能丢掉同名平台及其 secret。"""
+    config = {
+        "qq_platforms": [
+            {"name": "bot", "appid": "A", "secret": "s1"},
+            {"name": "bot", "appid": "B", "secret": "s2"},
+        ]
+    }
+    exported = export_config(config)
+    submitted = [
+        {
+            "name": platform["name"],
+            "appid": platform["appid"],
+            "secret": "",
+            "platform": platform["platform"],
+        }
+        for platform in exported["qq_platforms"]
+    ]
+
+    values, errors = normalize_config_payload(config, {"qq_platforms": submitted})
+
+    assert errors == []
+    assert [(platform["name"], platform["appid"]) for platform in values["qq_platforms"]] == [
+        ("bot", "A"),
+        ("bot", "B"),
+    ]
+    assert [platform["secret"] for platform in values["qq_platforms"]] == ["s1", "s2"]
 
 
 # ---------------------------------------------------------------------------
@@ -603,6 +664,94 @@ def test_normalize_config_payload_rejects_too_many_commands() -> None:
     )
     assert len(errors) == 1
     assert str(PANEL_MAX_ITEMS) in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# save_config_values：落盘失败必须回滚内存
+# ---------------------------------------------------------------------------
+
+
+async def test_save_config_values_prefers_async_and_updates_memory() -> None:
+    config: dict[str, Any] = {"language": "zh-CN", "scenes": ["c2c"]}
+    saved: list[dict[str, Any]] = []
+
+    async def save_async() -> None:
+        saved.append(dict(config))
+
+    def save_sync() -> None:  # pragma: no cover - 有异步接口时不应调用
+        raise AssertionError("sync persistence must not be used when async is available")
+
+    await save_config_values(
+        config,
+        {"language": "en-US"},
+        save_async=save_async,
+        save_sync=save_sync,
+    )
+
+    assert config == {"language": "en-US", "scenes": ["c2c"]}
+    assert saved == [{"language": "en-US", "scenes": ["c2c"]}]
+
+
+async def test_save_config_values_falls_back_to_sync_persistence() -> None:
+    config: dict[str, Any] = {"language": "zh-CN"}
+    calls = 0
+
+    def save_sync() -> None:
+        nonlocal calls
+        calls += 1
+
+    await save_config_values(config, {"language": "en-US"}, save_sync=save_sync)
+
+    assert config == {"language": "en-US"}
+    assert calls == 1
+
+
+async def test_save_config_values_rolls_back_when_async_save_fails() -> None:
+    config = make_existing()
+    original = dict(config)
+
+    async def save_async() -> None:
+        raise OSError("disk full")
+
+    with pytest.raises(OSError, match="disk full"):
+        await save_config_values(config, {"language": "en-US"}, save_async=save_async)
+
+    assert config == original
+
+
+async def test_save_config_values_rolls_back_when_sync_save_fails() -> None:
+    config = make_existing()
+    original = dict(config)
+
+    def save_sync() -> None:
+        raise PermissionError("read-only data dir")
+
+    with pytest.raises(PermissionError, match="read-only"):
+        await save_config_values(config, {"language": "en-US"}, save_sync=save_sync)
+
+    assert config == original
+
+
+async def test_save_config_values_keeps_memory_when_save_is_cancelled() -> None:
+    config: dict[str, Any] = {"language": "zh-CN"}
+
+    async def save_async() -> None:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await save_config_values(config, {"language": "en-US"}, save_async=save_async)
+
+    # 宿主的异步保存可能已在线程里提交完成，取消时回滚内存会与磁盘分叉
+    assert config == {"language": "en-US"}
+
+
+async def test_save_config_values_requires_persistence_without_touching_memory() -> None:
+    config: dict[str, Any] = {"language": "zh-CN"}
+
+    with pytest.raises(RuntimeError):
+        await save_config_values(config, {"language": "en-US"})
+
+    assert config == {"language": "zh-CN"}
 
 
 # ---------------------------------------------------------------------------

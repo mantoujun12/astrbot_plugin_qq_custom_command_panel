@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -36,6 +37,7 @@ from core.web_api import (
     mask_appid,
     panel_items_count,
     register_web_apis,
+    startup_sync,
 )
 from tests.fakes import FakeQQClient
 
@@ -141,7 +143,7 @@ async def test_build_status_reports_scene_states() -> None:
         existing={"c2c": [owned_panel("c2c", "p1", [{"name": "help"}])]},
         failing_scopes={"channel"},
     )
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
 
     payload = await build_status(syncer, config)
 
@@ -153,7 +155,8 @@ async def test_build_status_reports_scene_states() -> None:
     assert payload["panels"] == {"total": 1, "max": PANEL_MAX_ITEMS, "partial": True}
 
     platform = payload["platforms"][0]
-    assert platform["pf_id"] == "pf1"
+    assert platform["pf_id"] == "102*****89"
+    assert platform["name"] == "pf1"
     assert platform["appid"] == "102*****89"
     assert platform["platform"] == "qq_official"
     # 插件只能读自己的配置，状态里不再有平台来源字段
@@ -178,7 +181,7 @@ async def test_build_status_marks_incomplete_total_on_platform_failure() -> None
         async def list_panels(self, scope: str) -> list[dict[str, Any]]:
             raise RuntimeError("boom")
 
-    stub_clients(syncer, {"pf1": BoomClient()})
+    stub_clients(syncer, {"1023456789": BoomClient()})
 
     payload = await build_status(syncer, config)
 
@@ -192,7 +195,7 @@ async def test_build_status_flags_duplicate_owned_panels() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     client = FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1"), owned_panel("c2c", "p2")]})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
 
     payload = await build_status(syncer, config)
 
@@ -208,7 +211,7 @@ async def test_build_status_ignores_foreign_panels() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     foreign = {"panel_id": "x", "scope": "c2c", "panel": {"items": [], "remark": "other"}}
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={"c2c": [foreign]})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={"c2c": [foreign]})})
 
     payload = await build_status(syncer, config)
 
@@ -243,21 +246,49 @@ async def test_build_status_summarizes_multiple_platforms() -> None:
     stub_clients(
         syncer,
         {
-            "pf1": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1")]}),
-            "pf2": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p2")]}),
+            "1112223334": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p1")]}),
+            "5556667778": FakeQQClient(existing={"c2c": [owned_panel("c2c", "p2")]}),
         },
     )
 
     payload = await build_status(syncer, config)
 
-    assert {p["pf_id"] for p in payload["platforms"]} == {"pf1", "pf2"}
+    assert {p["pf_id"] for p in payload["platforms"]} == {"111*****34", "555*****78"}
+    assert {p["name"] for p in payload["platforms"]} == {"pf1", "pf2"}
     # 综合上限 = 平台数 20 × 2 台
     assert payload["panels"] == {"total": 2, "max": PANEL_MAX_ITEMS * 2, "partial": False}
 
 
 @pytest.mark.asyncio
-async def test_build_status_masks_pf_id_when_it_falls_back_to_appid() -> None:
-    """未配备注时 pf_id 会退化成 appid，展示值同样脱敏"""
+async def test_build_status_keeps_platforms_sharing_a_name() -> None:
+    config = schema_config(
+        scenes=["c2c"],
+        qq_platforms=[
+            {"name": "bot", "appid": "1112223334", "secret": "s1"},
+            {"name": "bot", "appid": "5556667778", "secret": "s2"},
+        ],
+    )
+    syncer = make_syncer(config)
+    stub_clients(
+        syncer,
+        {
+            "1112223334": FakeQQClient(existing={}),
+            "5556667778": FakeQQClient(existing={}),
+        },
+    )
+
+    payload = await build_status(syncer, config)
+
+    assert {platform["name"] for platform in payload["platforms"]} == {"bot"}
+    assert {platform["pf_id"] for platform in payload["platforms"]} == {
+        "111*****34",
+        "555*****78",
+    }
+
+
+@pytest.mark.asyncio
+async def test_build_status_masks_appid_identity() -> None:
+    """兼容配置用 appid 作为平台身份，响应里需要脱敏。"""
     config = schema_config(
         scenes=["c2c"],
         qq_platforms=[{"appid": "1112223334", "secret": "s"}],
@@ -289,14 +320,15 @@ async def test_build_status_uses_current_config_for_clients() -> None:
 
     def build_clients(config: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
         captured["config"] = config
-        return {"new": fake}
+        return {"9999999999": fake}
 
     syncer.build_clients = build_clients  # type: ignore[method-assign]
 
     payload = await build_status(syncer, current)
 
     assert captured["config"] is current
-    assert payload["platforms"][0]["pf_id"] == "new"
+    assert payload["platforms"][0]["pf_id"] == "999*****99"
+    assert payload["platforms"][0]["name"] == "new"
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +385,33 @@ async def test_status_cache_invalidate_drops_value() -> None:
     again = await cache.get(compute)
 
     assert again == {"n": 2}
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_status_cache_invalidate_discards_in_flight_result() -> None:
+    """失效发生在计算期间时，旧结果不能写回缓存"""
+    cache = StatusCache(ttl=60)
+    calls = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def compute() -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await release.wait()
+        return {"n": calls}
+
+    pending = asyncio.create_task(cache.get(compute))
+    await started.wait()
+    cache.invalidate()
+    release.set()
+
+    assert await pending == {"n": 1}
+    assert not cache._is_fresh()
+    assert await cache.get(compute) == {"n": 2}
     assert calls == 2
 
 
@@ -421,14 +480,14 @@ async def test_page_status_returns_payload_and_uses_cache() -> None:
             return await super().list_panels(scope)
 
     client = CountingClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
     bundle = make_bundle(config, syncer)
 
     first = await bundle.page_status()
     second = await bundle.page_status()
 
     assert first["__json__"] is True
-    assert first["data"]["platforms"][0]["pf_id"] == "pf1"
+    assert first["data"]["platforms"][0]["pf_id"] == "102*****89"
     assert first["data"] == second["data"]
     # 每个状态查询按 SCENES 各查一次，第二次走缓存
     assert client.list_calls == len(SCENES)
@@ -478,7 +537,7 @@ async def test_page_status_refresh_param_bypasses_cache() -> None:
             return await super().list_panels(scope)
 
     client = CountingClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
     bundle = make_bundle(config, syncer)
 
     await bundle.page_status()
@@ -518,7 +577,7 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
         qq_platforms=[{"name": "pf1", "appid": "1023456789", "secret": "old-secret"}],
     )
     syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
 
     saved: dict[str, Any] = {}
 
@@ -557,6 +616,89 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
     assert response["data"]["scenes"] == ["group"]
     assert response["data"]["primary_color"] == "#aabbcc"
     assert response["data"]["secondary_color"] == "#123456"
+
+
+@pytest.mark.asyncio
+async def test_page_config_round_trip_preserves_platforms_sharing_a_name() -> None:
+    """GET 后原样 POST 不能删掉同名平台及其配置。"""
+    from astrbot.api.web import request
+
+    config = schema_config(
+        qq_platforms=[
+            {"name": "bot", "appid": "A", "secret": "s1"},
+            {"name": "bot", "appid": "B", "secret": "s2"},
+        ]
+    )
+    saved: dict[str, Any] = {}
+
+    async def save_config(values: dict[str, Any]) -> None:
+        saved.update(values)
+        config.clear()
+        config.update(values)
+
+    bundle = make_bundle(config, make_syncer(config), save_config)
+    response = await bundle.page_config_get()
+    request.payload = {
+        "qq_platforms": [
+            {
+                "name": platform["name"],
+                "appid": platform["appid"],
+                "platform": platform["platform"],
+                "secret": "",
+            }
+            for platform in response["data"]["qq_platforms"]
+        ]
+    }
+
+    saved_response = await bundle.page_config_save()
+
+    assert saved_response["__json__"] is True
+    assert [(platform["name"], platform["appid"]) for platform in saved["qq_platforms"]] == [
+        ("bot", "A"),
+        ("bot", "B"),
+    ]
+    assert [platform["secret"] for platform in saved["qq_platforms"]] == ["s1", "s2"]
+
+
+async def test_page_config_save_serializes_concurrent_saves() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config()
+    syncer = make_syncer(config)
+    release = asyncio.Event()
+    entered = asyncio.Event()
+    active = 0
+    max_active = 0
+
+    async def save_config(values: dict[str, Any]) -> None:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        entered.set()
+        try:
+            await release.wait()
+        finally:
+            active -= 1
+        config.clear()
+        config.update(values)
+
+    bundle = make_bundle(config, syncer, save_config)
+    request.payload = {"scenes": ["c2c"]}
+
+    first = asyncio.create_task(bundle.page_config_save())
+    await entered.wait()
+    second = asyncio.create_task(bundle.page_config_save())
+    # 给第二个请求足够的调度机会跑到加锁位置
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert max_active == 1
+
+    release.set()
+    first_response, second_response = await asyncio.gather(first, second)
+
+    assert max_active == 1
+    assert first_response["__json__"] is True
+    assert second_response["__json__"] is True
 
 
 @pytest.mark.asyncio
@@ -613,8 +755,11 @@ async def test_page_config_save_reports_save_failure() -> None:
 
     config = schema_config()
     bundle = make_bundle(config, make_syncer(config))
+    await bundle.cache.get(_async_status_payload)
+    assert bundle.cache._is_fresh()
 
-    async def boom(_values: dict[str, Any]) -> None:
+    async def boom(values: dict[str, Any]) -> None:
+        config.update(values)
         raise RuntimeError("disk full")
 
     bundle._save_config = boom  # type: ignore[attr-defined]
@@ -625,6 +770,7 @@ async def test_page_config_save_reports_save_failure() -> None:
     assert response["__error__"] is True
     assert response["status_code"] == 500
     assert "disk full" in response["message"]
+    assert not bundle.cache._is_fresh()
 
 
 # ---------------------------------------------------------------------------
@@ -716,6 +862,19 @@ async def test_page_robots_get_reports_corrupt_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_page_robots_get_reports_invalid_nested_config(tmp_path: Path) -> None:
+    payload = {"version": 1, "robots": [robot_payload(appid=123)]}  # type: ignore[arg-type]
+    (tmp_path / "robot_config.json").write_text(json.dumps(payload), encoding="utf-8")
+    bundle = make_robot_bundle({}, tmp_path)
+
+    response = await bundle.page_robots_get()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 500
+    assert "appid" in response["message"]
+
+
+@pytest.mark.asyncio
 async def test_page_robots_save_creates_robot_with_masked_secret(tmp_path: Path) -> None:
     from astrbot.api.web import request
 
@@ -736,6 +895,52 @@ async def test_page_robots_save_creates_robot_with_masked_secret(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_page_robots_save_rejects_missing_robots_without_overwriting(
+    tmp_path: Path,
+) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+    initial = await bundle.page_robots_save()
+    assert initial["__json__"] is True
+    assert initial["data"]["version"] == 2
+    before = load_robot_config(tmp_path)
+    assert len(before["robots"]) == 1
+    assert before["robots"][0]["appid"] == "1023456789"
+
+    request.payload = {"version": 2}
+    response = await bundle.page_robots_save()
+
+    assert response["__error__"] is True
+    assert response["status_code"] == 400
+    assert "必须显式传入列表" in response["message"]
+    assert load_robot_config(tmp_path) == before
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_accepts_explicit_empty_robots(tmp_path: Path) -> None:
+    from astrbot.api.web import request
+
+    bundle = make_robot_bundle({}, tmp_path)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+    initial = await bundle.page_robots_save()
+    assert initial["__json__"] is True
+    assert initial["data"]["version"] == 2
+    before = load_robot_config(tmp_path)
+    assert len(before["robots"]) == 1
+    assert before["robots"][0]["appid"] == "1023456789"
+
+    request.payload = {"version": 2, "robots": []}
+    response = await bundle.page_robots_save()
+
+    assert response["__json__"] is True
+    assert response["data"]["version"] == 3
+    assert response["data"]["robots"] == []
+    assert load_robot_config(tmp_path)["robots"] == []
+
+
+@pytest.mark.asyncio
 async def test_page_robots_save_invalidates_status_cache(tmp_path: Path) -> None:
     from astrbot.api.web import request
 
@@ -751,7 +956,7 @@ async def test_page_robots_save_invalidates_status_cache(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_kind", ["scene", "duplicate"])
+@pytest.mark.parametrize("invalid_kind", ["scene", "duplicate", "secret"])
 async def test_page_robots_save_rejects_invalid_payload(
     tmp_path: Path,
     invalid_kind: str,
@@ -770,12 +975,18 @@ async def test_page_robots_save_rejects_invalid_payload(
         )
         payload = {"version": 1, "robots": [first]}
         expected = "至少需要 1 条"
-    else:
+    elif invalid_kind == "duplicate":
         payload = {
             "version": 1,
             "robots": [robot_payload(), robot_payload(name="重复")],
         }
         expected = "重复"
+    else:
+        payload = {
+            "version": 1,
+            "robots": [robot_payload(secret=123)],  # type: ignore[arg-type]
+        }
+        expected = "secret"
     request.payload = payload
 
     response = await bundle.page_robots_save()
@@ -823,6 +1034,37 @@ async def test_page_robots_save_rejects_stale_version(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["save", "import"])
+async def test_page_robots_mutations_hold_config_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    lock_states: list[bool] = []
+
+    def capture_save(_data_dir: Path, _payload: dict[str, Any]) -> Path:
+        lock_states.append(bundle._robot_config_lock.locked())
+        return tmp_path / "robot_config.json"
+
+    monkeypatch.setattr("core.web_api.save_robot_config", capture_save)
+    if operation == "save":
+        request.payload = {"version": 1, "robots": [robot_payload()]}
+        response = await bundle.page_robots_save()
+    else:
+        request.payload = {"appid": "1023456789", "version": 1}
+        response = await bundle.page_robots_import_legacy()
+
+    assert response["__json__"] is True
+    assert lock_states == [True]
+
+
+@pytest.mark.asyncio
 async def test_page_robots_import_legacy_copies_secret_without_response_leak(
     tmp_path: Path,
 ) -> None:
@@ -841,6 +1083,37 @@ async def test_page_robots_import_legacy_copies_secret_without_response_leak(
     assert "legacy-secret" not in str(response["data"])
     stored = load_robot_config(tmp_path)
     assert stored["robots"][0]["secret"] == "legacy-secret"
+
+
+@pytest.mark.parametrize(
+    ("legacy_name", "expected_name"),
+    [
+        ("", "102*****89"),
+        ("名" * 15, "名" * 14),
+        (f"{'a' * 13}😀后缀", "a" * 13),
+    ],
+)
+@pytest.mark.asyncio
+async def test_page_robots_import_legacy_normalizes_optional_name(
+    tmp_path: Path,
+    legacy_name: str,
+    expected_name: str,
+) -> None:
+    from astrbot.api.web import request
+
+    legacy = schema_config(
+        qq_platforms=[
+            {"name": legacy_name, "appid": "1023456789", "secret": "legacy-secret"},
+        ],
+    )
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
+    request.payload = {"appid": "1023456789", "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["__json__"] is True
+    stored = load_robot_config(tmp_path)
+    assert stored["robots"][0]["name"] == expected_name
 
 
 @pytest.mark.asyncio
@@ -923,7 +1196,7 @@ async def test_page_sync_start_and_busy() -> None:
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     client = FakeQQClient(existing={})
-    stub_clients(syncer, {"pf1": client})
+    stub_clients(syncer, {"1023456789": client})
     bundle = make_bundle(config, syncer)
 
     first = await bundle.page_sync_start()
@@ -948,6 +1221,102 @@ async def test_page_sync_start_and_busy() -> None:
 
 
 @pytest.mark.asyncio
+async def test_page_sync_finish_invalidates_status_cache() -> None:
+    config = schema_config(scenes=[])
+    bundle = make_bundle(config, make_syncer(config))
+    await bundle.cache.get(_async_status_payload)
+    assert bundle.cache._is_fresh()
+
+    await bundle.page_sync_start()
+    await bundle.runner.join()
+
+    assert not bundle.cache._is_fresh()
+
+
+async def test_startup_sync_blocks_dashboard_sync() -> None:
+    """启动同步占用 runner 时，视图触发同步必须返回 busy 而不是再跑一轮"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    bundle = make_bundle(config, syncer)
+    release = asyncio.Event()
+    entered = asyncio.Event()
+    calls = 0
+
+    async def slow_sync(**_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await release.wait()
+        return {}
+
+    syncer.sync_all = slow_sync  # type: ignore[method-assign]
+
+    startup = asyncio.create_task(startup_sync(syncer, bundle))
+    await entered.wait()
+
+    response = await bundle.page_sync_start()
+
+    assert response["__json__"] is True
+    assert response["data"] == {"started": False, "busy": True}
+    assert calls == 1
+
+    release.set()
+    assert await startup is True
+    assert calls == 1
+    assert bundle.runner.running is False
+
+
+@pytest.mark.asyncio
+async def test_run_startup_sync_waits_for_existing_task() -> None:
+    """启动同步发现已有任务时只等待，不再启动第二轮"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    bundle = make_bundle(config, syncer)
+    release = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def slow_run(_emit: Any) -> dict[str, Any]:
+        entered.set()
+        await release.wait()
+        return {}
+
+    assert bundle.runner.start(slow_run) is True
+    await entered.wait()
+
+    startup = asyncio.create_task(bundle.run_startup_sync(syncer))
+    await asyncio.sleep(0)
+    assert startup.done() is False
+
+    release.set()
+    assert await startup is False
+
+
+@pytest.mark.asyncio
+async def test_startup_sync_without_web_api_runs_directly() -> None:
+    """Web API 不可用时没有视图入口，启动同步直接执行"""
+    config = schema_config(scenes=["c2c"])
+    syncer = make_syncer(config)
+    calls = 0
+
+    async def direct_sync(**_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {}
+
+    syncer.sync_all = direct_sync  # type: ignore[method-assign]
+
+    assert await startup_sync(syncer, None) is False
+    assert calls == 1
+
+
+def test_start_sync_without_syncer_returns_false() -> None:
+    """syncer 尚未创建（插件未初始化）时启动同步直接返回 False"""
+    bundle = WebApiBundle(lambda: None, lambda: {})
+
+    assert bundle.start_sync() is False
+
+
+@pytest.mark.asyncio
 async def test_page_sync_start_not_ready() -> None:
     bundle = WebApiBundle(lambda: None, lambda: {})
 
@@ -962,7 +1331,7 @@ async def test_page_sync_start_streams_structured_events() -> None:
     """同步任务的进度事件：message + start/platform/finish 结构化事件"""
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
     bundle = make_bundle(config, syncer)
 
     await bundle.page_sync_start()
@@ -982,7 +1351,9 @@ async def test_page_sync_start_streams_structured_events() -> None:
     assert start["items"] == 1
 
     platform_event = next(event for event in events if event["type"] == "platform")
-    assert platform_event["pf_id"] == "pf1"
+    assert platform_event["pf_id"] == "1023456789"
+    assert platform_event["name"] == "pf1"
+    assert platform_event["appid"] == "102*****89"
     assert platform_event["status"] == "ok"
     assert platform_event["index"] == 1
     assert platform_event["total"] == 1
@@ -999,7 +1370,7 @@ async def test_page_sync_events_returns_stream_and_honours_since() -> None:
 
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
     bundle = make_bundle(config, syncer)
 
     await bundle.page_sync_start()
@@ -1252,6 +1623,78 @@ async def test_build_status_reports_v2_source_and_name() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_status_reports_zero_v2_item_capacity_without_active_panels() -> None:
+    """没有生效场景时，面板容量应为零而不是一个面板的上限。"""
+    robot_config = {
+        "version": 1,
+        "robots": [
+            {
+                "id": "robot-1",
+                "name": "主机器人",
+                "appid": "app-1",
+                "secret": "sec",
+                "platform": "qq_official",
+                "scenes": {scope: scene_config() for scope in SCENES},
+            }
+        ],
+    }
+    syncer = make_syncer(config={"scenes": [], "qq_platforms": []})
+    syncer.build_clients = lambda config=None, **kwargs: {  # type: ignore[method-assign]
+        "robot-1": FakeQQClient(existing={}),
+    }
+
+    payload = await build_status(
+        syncer,
+        {"scenes": []},
+        robot_config=robot_config,
+    )
+
+    assert payload["items"] == {"count": 0, "max": 0}
+
+
+@pytest.mark.asyncio
+async def test_build_status_scales_v2_item_limit_by_active_scene_panels() -> None:
+    """多机器人、多场景的条目总数应与全部场景的面板容量比较。"""
+    items = [{"name": f"cmd-{index}", "desc": ""} for index in range(PANEL_MAX_ITEMS)]
+
+    def robot(robot_id: str, group_count: int = PANEL_MAX_ITEMS) -> dict[str, Any]:
+        return {
+            "id": robot_id,
+            "name": robot_id,
+            "appid": f"app-{robot_id}",
+            "secret": "sec",
+            "platform": "qq_official",
+            "scenes": {
+                "c2c": scene_config(enabled=True, items=items),
+                "group": scene_config(enabled=True, items=items[:group_count]),
+                "channel": scene_config(),
+                "dm": scene_config(),
+            },
+        }
+
+    robot_config = {
+        "version": 1,
+        "robots": [robot("robot-1"), robot("robot-2", group_count=5)],
+    }
+    syncer = make_syncer(config={"scenes": [], "qq_platforms": []})
+    syncer.build_clients = lambda config=None, **kwargs: {  # type: ignore[method-assign]
+        "robot-1": FakeQQClient(existing={}),
+        "robot-2": FakeQQClient(existing={}),
+    }
+
+    payload = await build_status(
+        syncer,
+        {"scenes": []},
+        robot_config=robot_config,
+    )
+
+    assert payload["items"] == {
+        "count": PANEL_MAX_ITEMS * 3 + 5,
+        "max": PANEL_MAX_ITEMS * 4,
+    }
+
+
+@pytest.mark.asyncio
 async def test_page_robots_errors_follow_selected_language(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1325,6 +1768,38 @@ async def test_page_robots_save_reports_write_failure(
 
     assert response["status_code"] == 500
     assert "disk full" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_save_reports_directory_creation_failure(tmp_path: Path) -> None:
+    """数据目录创建失败应返回本地化 500，而不是把原始 OSError 抛给宿主。"""
+    from astrbot.api.web import request
+
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+    bundle = make_robot_bundle({}, data_dir)
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+
+    response = await bundle.page_robots_save()
+
+    assert response["status_code"] == 500
+    assert "无法保存机器人配置" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_page_robots_import_reports_directory_creation_failure(tmp_path: Path) -> None:
+    """导入同样要经过真实保存路径，目录创建失败应返回本地化 500。"""
+    from astrbot.api.web import request
+
+    data_dir = tmp_path / "data"
+    data_dir.write_text("not a directory", encoding="utf-8")
+    bundle = make_robot_bundle({}, data_dir, legacy_config=schema_config())
+    request.payload = {"appids": ["1023456789"], "version": 1}
+
+    response = await bundle.page_robots_import_legacy()
+
+    assert response["status_code"] == 500
+    assert "无法保存机器人配置" in response["message"]
 
 
 @pytest.mark.asyncio
@@ -1475,7 +1950,7 @@ async def test_page_sync_events_invalid_since_defaults_to_zero(
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     bundle = make_bundle(config, syncer)
-    stub_clients(syncer, {"pf1": FakeQQClient(existing={})})
+    stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
     await bundle.page_sync_start()
     await bundle.runner.join()
     request.query.set_values({"since": "not-an-int"})

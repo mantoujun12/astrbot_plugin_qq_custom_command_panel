@@ -27,15 +27,23 @@ interface Stream {
   failStream(): void
   /** 放行被 holdFirst 挡住的第一条流 */
   release(): void
+  /** 放行被 holdUnsubscribe 挡住的退订 */
+  releaseUnsubscribe(): void
 }
 
 /** 一个能把 SSE 握在手里的 bridge 替身 */
-function streamBridge(options: { holdFirst?: boolean } = {}): Stream {
+function streamBridge(
+  options: { holdFirst?: boolean; holdUnsubscribe?: boolean } = {},
+): Stream {
   const handlers: PluginViewSSEHandlers[] = []
   const subscribes: { since: number }[] = []
   let release = (): void => {}
   const gate = new Promise<void>((resolve) => {
     release = resolve
+  })
+  let openUnsubscribeGate = (): void => {}
+  const unsubscribeGate = new Promise<void>((resolve) => {
+    openUnsubscribeGate = resolve
   })
   let opened = 0
 
@@ -58,7 +66,12 @@ function streamBridge(options: { holdFirst?: boolean } = {}): Stream {
         return id
       },
     ),
-    unsubscribeSSE: vi.fn(async (id: string) => ({ subscriptionId: id })),
+    unsubscribeSSE: vi.fn(async (id: string) => {
+      if (options.holdUnsubscribe === true) {
+        await unsubscribeGate
+      }
+      return { subscriptionId: id }
+    }),
   })
 
   return {
@@ -76,6 +89,9 @@ function streamBridge(options: { holdFirst?: boolean } = {}): Stream {
     },
     release(): void {
       release()
+    },
+    releaseUnsubscribe(): void {
+      openUnsubscribeGate()
     },
   }
 }
@@ -204,6 +220,38 @@ describe('useSyncRun', () => {
     expect(run.state.value.error).toBe('sse down')
   })
 
+  it('returns to idle when the stream closes without a run', async () => {
+    const stream = streamBridge()
+    const run = await setup()
+
+    const onFinish = vi.fn()
+    run.attach(onFinish)
+    await flush()
+
+    stream.emit({ type: 'start', seq: 1, platforms: 1, scenes: 1, items: 1 })
+    await flush()
+    expect(run.state.value.status).toBe('running')
+
+    // 插件重启后缓冲为空：后端补发 reason=idle 的 finish
+    stream.emit({
+      type: 'finish',
+      seq: 1,
+      ok: false,
+      reason: 'idle',
+      platforms: 0,
+      succeeded: 0,
+      failed: 0,
+    })
+    await flush()
+
+    expect(run.state.value.status).toBe('idle')
+    expect(run.running.value).toBe(false)
+    expect(run.hasRun.value).toBe(false)
+    // 这不是一次真实运行结束，不触发状态页刷新
+    expect(onFinish).not.toHaveBeenCalled()
+    expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledWith('sub-1')
+  })
+
   it('surfaces a stream error', async () => {
     const stream = streamBridge()
     const run = await setup()
@@ -248,6 +296,49 @@ describe('useSyncRun', () => {
     expect(stream.subscribes).toHaveLength(2)
     // 只保留第二条，第一条拿到 id 后立刻退订
     expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledWith('sub-1')
+    expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a subscription that is still being established when stopped', async () => {
+    const stream = streamBridge({ holdFirst: true })
+    const run = await setup()
+
+    // 宿主还没把订阅 id 交回来时页面卸载
+    run.attach()
+    await flush()
+    expect(stream.subscribes).toHaveLength(1)
+
+    await run.stop()
+    stream.emit({ type: 'start', seq: 1, platforms: 2, scenes: 2, items: 3 })
+    await flush()
+    // 停止后的事件不允许再写入全局状态
+    expect(run.state.value.status).toBe('idle')
+
+    stream.release()
+    await flush()
+
+    // Promise 解析后立刻退订，而不是挂到 subscription 上
+    expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledWith('sub-1')
+    expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reconnect when stopped while the previous stream is closing', async () => {
+    const stream = streamBridge({ holdUnsubscribe: true })
+    const run = await setup()
+
+    run.attach()
+    await flush()
+    expect(stream.subscribes).toHaveLength(1)
+
+    // retry 正在等待旧流退订完成，用户此时离开页面
+    run.retry()
+    await flush()
+    await run.stop()
+    stream.releaseUnsubscribe()
+    await flush()
+
+    // stop 之后的续订请求不应该再建立新流
+    expect(stream.subscribes).toHaveLength(1)
     expect(stream.bridge.unsubscribeSSE).toHaveBeenCalledTimes(1)
   })
 

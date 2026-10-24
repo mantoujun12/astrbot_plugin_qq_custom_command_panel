@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ from .config import (
     PANEL_MAX_ITEMS,
     SCENES,
     get_enabled_scenes,
+    mask_appid,
     normalize_panel_items,
 )
 from .i18n import DEFAULT_LANGUAGE, LOG_TAG, Translator, initialize, t
@@ -638,10 +640,15 @@ class PanelSyncer:
             return {}
 
         robot_scenes: dict[str, dict[str, list[dict[str, str]]]] = {}
+        robot_meta: dict[str, dict[str, str]] = {}
         for robot in robots:
             pf_id = str(robot.get("id") or robot.get("appid") or "")
             if not pf_id:
                 continue
+            robot_meta[pf_id] = {
+                "name": str(robot.get("name") or "").strip(),
+                "appid": str(robot.get("appid") or ""),
+            }
             raw_scenes = robot.get("scenes")
             scenes = (
                 {scope: normalize_panel_items(raw_scenes.get(scope, [])) for scope in SCENES}
@@ -673,6 +680,21 @@ class PanelSyncer:
             return {}
 
         total = len(expected)
+        name_counts = Counter(
+            robot_meta[pf_id]["name"] for pf_id in expected if robot_meta.get(pf_id, {}).get("name")
+        )
+
+        def platform_label(pf_id: str) -> str:
+            """重名时追加脱敏 AppID，避免同步进度无法区分同名机器人。"""
+            meta = robot_meta.get(pf_id, {})
+            name = meta.get("name", "")
+            masked_appid = mask_appid(meta.get("appid"))
+            if name:
+                if name_counts[name] > 1 and masked_appid:
+                    return f"{name} ({masked_appid})"
+                return name
+            return masked_appid or pf_id
+
         total_items = sum(
             len(items) for scenes in robot_scenes.values() for items in scenes.values()
         )
@@ -706,6 +728,7 @@ class PanelSyncer:
         # 部分场景失败时同步仍写过的面板，配合 result 的 error 一起记录
         partial_saved: dict[str, dict[str, str]] = {}
         for idx, (pf_id, client) in enumerate(expected.items(), start=1):
+            meta = robot_meta.get(pf_id, {})
             try:
                 scene_map = robot_scenes.get(pf_id, {scope: [] for scope in SCENES})
                 saved = await self.sync_for_platform(pf_id, client, scene_map)
@@ -716,7 +739,7 @@ class PanelSyncer:
                     on_progress,
                     t(
                         "progress.platform_synced",
-                        pf_id=pf_id,
+                        pf_id=platform_label(pf_id),
                         index=idx,
                         total=total,
                         saved=len(saved),
@@ -727,6 +750,8 @@ class PanelSyncer:
                     {
                         "type": "platform",
                         "pf_id": pf_id,
+                        "name": meta.get("name", ""),
+                        "appid": mask_appid(meta.get("appid")),
                         "index": idx,
                         "total": total,
                         "status": "ok",
@@ -736,7 +761,8 @@ class PanelSyncer:
                 )
             except Exception as exc:
                 logger.error(
-                    f"{LOG_TAG} " + t("log.sync_platform_failed", pf_id=pf_id, exc=exc),
+                    f"{LOG_TAG} "
+                    + t("log.sync_platform_failed", pf_id=platform_label(pf_id), exc=exc),
                     exc_info=True,
                 )
                 result[pf_id] = {"error": str(exc)}
@@ -747,7 +773,7 @@ class PanelSyncer:
                     on_progress,
                     t(
                         "progress.platform_sync_failed",
-                        pf_id=pf_id,
+                        pf_id=platform_label(pf_id),
                         index=idx,
                         total=total,
                         exc=exc,
@@ -758,6 +784,8 @@ class PanelSyncer:
                     {
                         "type": "platform",
                         "pf_id": pf_id,
+                        "name": meta.get("name", ""),
+                        "appid": mask_appid(meta.get("appid")),
                         "index": idx,
                         "total": total,
                         "status": "error",

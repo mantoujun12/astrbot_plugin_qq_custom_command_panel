@@ -55,6 +55,8 @@ describe('reduceSyncEvent', () => {
       type: 'platform',
       seq: 2,
       pf_id: 'pf1',
+      name: '主机器人',
+      appid: '102*****89',
       index: 1,
       total: 2,
       status: 'ok',
@@ -64,6 +66,8 @@ describe('reduceSyncEvent', () => {
       type: 'platform',
       seq: 3,
       pf_id: 'pf2',
+      name: '备用机器人',
+      appid: '555*****78',
       index: 2,
       total: 2,
       status: 'error',
@@ -75,6 +79,8 @@ describe('reduceSyncEvent', () => {
     expect(state.succeeded).toBe(1)
     expect(state.failed).toBe(1)
     expect(state.platformStates.map((item) => item.pf_id)).toEqual(['pf1', 'pf2'])
+    expect(state.platformStates.map((item) => item.name)).toEqual(['主机器人', '备用机器人'])
+    expect(state.platformStates.map((item) => item.appid)).toEqual(['102*****89', '555*****78'])
     expect(state.platformStates[1].error).toBe('boom')
   })
 
@@ -129,6 +135,28 @@ describe('reduceSyncEvent', () => {
 
     expect(next.status).toBe('failed')
     expect(next.error).toBe('backend exploded')
+  })
+
+  it('resets to idle when the stream closes without a run', () => {
+    const state = {
+      ...initialSyncState(),
+      status: 'running' as const,
+      platforms: 2,
+      messages: ['上一轮的日志'],
+      lastSeq: 5,
+    }
+
+    const next = reduceSyncEvent(state, {
+      type: 'finish',
+      seq: 5,
+      ok: false,
+      reason: 'idle',
+      platforms: 0,
+      succeeded: 0,
+      failed: 0,
+    })
+
+    expect(next).toEqual(initialSyncState())
   })
 })
 

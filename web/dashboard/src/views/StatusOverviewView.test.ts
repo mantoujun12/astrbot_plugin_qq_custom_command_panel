@@ -76,9 +76,11 @@ describe('StatusOverviewView', () => {
     ])
     expect(wrapper.text()).toContain('主机器人')
     expect(wrapper.text()).toContain('已同步')
+    // 查询完整时线上面板仍是精确值，卡片上不出现下限提示
+    expect(wrapper.findAll('.qc-stat-card')[3]?.find('.qc-metric-note').exists()).toBe(false)
   })
 
-  it('does not show a note when some scenes failed to query', async () => {
+  it('marks the panel total as a lower bound when some scenes failed to query', async () => {
     const { api, mount } = await loadStatusView()
     vi.mocked(api.fetchStatus).mockResolvedValue(
       statusFixture({ panels: { total: 5, max: 40, partial: true } }),
@@ -86,7 +88,9 @@ describe('StatusOverviewView', () => {
 
     const wrapper = await mount()
 
-    expect(wrapper.text()).not.toContain('部分场景查询失败，该值为下限')
+    // 部分场景失败时不能把总数当成精确值：数值加后缀，并在卡片上说明原因
+    expect(wrapper.findAll('.qc-metric-value')[3]?.text()).toBe('5+')
+    expect(wrapper.text()).toContain('部分场景查询失败，该值为下限')
   })
 
   it('keeps the loading indicator up until the slow request answers', async () => {
