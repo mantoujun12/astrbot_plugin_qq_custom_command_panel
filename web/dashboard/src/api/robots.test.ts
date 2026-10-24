@@ -13,6 +13,7 @@ import {
   emptySceneConfig,
   fetchRobots,
   isRobotMock,
+  robotAppidChanged,
   robotItemCount,
   robotSceneCount,
   saveRobots,
@@ -152,6 +153,12 @@ describe('robot form helpers', () => {
     expect(form.scenes.c2c.items).not.toBe(source.scenes.c2c.items)
   })
 
+  it('detects an AppID change only for saved robots', () => {
+    expect(robotAppidChanged({ appid: ' 1023456789 ' }, '1023456789')).toBe(false)
+    expect(robotAppidChanged({ appid: '1038765432' }, '1023456789')).toBe(true)
+    expect(robotAppidChanged({ appid: '1023456789' }, '')).toBe(false)
+  })
+
   it('counts enabled scenes and items in enabled scenes only', () => {
     const form = robotForm()
     form.scenes.group = { enabled: true, items: [{ name: 'ping', desc: '' }] }
@@ -200,6 +207,31 @@ describe('validateRobotForm', () => {
     })
 
     expect(validateRobotForm(robotForm(), LIMITS, t).ok).toBe(true)
+  })
+
+  it('requires a new secret after an existing robot changes its AppID', () => {
+    const changed = robotForm()
+    changed.appid = ' 1038765432 '
+
+    expect(validateRobotForm(changed, LIMITS, t, { savedAppid: '1023456789' })).toEqual({
+      ok: false,
+      reason: '修改 AppID 后必须重新填写 ClientSecret。',
+    })
+
+    changed.secret = ' new-secret '
+    const result = validateRobotForm(changed, LIMITS, t, { savedAppid: '1023456789' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.payload.appid).toBe('1038765432')
+      expect(result.payload.secret).toBe('new-secret')
+    }
+  })
+
+  it('reuses the saved secret when the AppID is unchanged', () => {
+    expect(validateRobotForm(robotForm(), LIMITS, t, { savedAppid: '1023456789' }).ok).toBe(
+      true,
+    )
   })
 
   it('requires at least one item for every enabled scene', () => {

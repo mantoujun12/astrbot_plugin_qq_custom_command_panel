@@ -283,6 +283,8 @@
         "secret": "ClientSecret",
         "secretKeep": "空欄の場合は現在の値を維持します",
         "secretRequired": "新しいロボットには ClientSecret が必要です。",
+        "secretRequiredForAppidChange": "AppID を変更した場合は ClientSecret を再入力してください。",
+        "appidChangeWarning": "AppID を変更すると、新設定が互換設定のロボットを引き継ぐ対象が変わります。元の AppID は互換設定に戻り、新しい AppID は同じ AppID の互換設定を引き継ぎます。",
         "secretSaved": "現在：{masked}",
         "secretSetNoMask": "ClientSecret は保存済みです。空欄の場合は現在の値を維持します。",
         "platformType": "プラットフォーム種別",

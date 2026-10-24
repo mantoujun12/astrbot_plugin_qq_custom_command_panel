@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复「机器人」页修改已有机器人 AppID 后留空 ClientSecret 必定保存失败且没有提示的问题：检测到 AppID 变化时要求重新填写 ClientSecret，并提示该变化会影响新版配置对兼容性机器人的接管关系 (#79)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

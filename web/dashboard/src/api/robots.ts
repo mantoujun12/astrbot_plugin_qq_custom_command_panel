@@ -81,6 +81,10 @@ export const ROBOT_MESSAGES = {
     'pages.dashboard.robots.secretRequired',
     '新机器人必须填写 ClientSecret。',
   ],
+  secretRequiredForAppidChange: [
+    'pages.dashboard.robots.secretRequiredForAppidChange',
+    '修改 AppID 后必须重新填写 ClientSecret。',
+  ],
   sceneRequiresItem: [
     'pages.dashboard.robots.sceneRequiresItem',
     '启用的场景至少需要 1 条指令。',
@@ -146,6 +150,20 @@ export function toRobotForm(robot: RobotConfig): RobotConfigForm {
   }
 }
 
+/**
+ * 已保存机器人是否改动了 AppID。
+ *
+ * 后端按 appid 复用 secret，AppID 变化后旧 secret 不再适用；新增机器人没有
+ * 已保存的 AppID，因此始终返回 false。
+ */
+export function robotAppidChanged(
+  robot: Pick<RobotConfigForm, 'appid'>,
+  savedAppid: string,
+): boolean {
+  const original = savedAppid.trim()
+  return original !== '' && robot.appid.trim() !== original
+}
+
 export function robotSceneCount(robot: Pick<RobotConfigForm, 'scenes'>): number {
   return SCENES.filter((scene) => robot.scenes[scene]?.enabled).length
 }
@@ -174,14 +192,22 @@ export type ValidateRobotResult =
   | { ok: true; payload: RobotConfigPayload }
   | { ok: false; reason: string }
 
+/** 校验已有机器人时补充的上下文 */
+export interface ValidateRobotOptions {
+  /** 已保存机器人的原 AppID；新增机器人为空 */
+  savedAppid?: string
+}
+
 /**
  * 提交前的单台机器人本地校验：提前拦截明显错误并规范化提交字段，后端仍会再次校验。
- * id 为空视为新机器人，此时 secret 必填；已有机器人留空 secret 表示沿用原值。
+ * id 为空视为新机器人，此时 secret 必填；已有机器人留空 secret 表示沿用原值，
+ * 但 AppID 变化后后端无法按新 appid 复用旧 secret，必须重新填写。
  */
 export function validateRobotForm(
   robot: RobotConfigForm | null,
   limits: ConfigLimits,
   t: Translate,
+  options: ValidateRobotOptions = {},
 ): ValidateRobotResult {
   if (!robot) {
     return { ok: false, reason: message(t, 'notLoaded') }
@@ -201,8 +227,13 @@ export function validateRobotForm(
   }
   const id = robot.id.trim()
   const secret = robot.secret.trim()
-  if (!id && !secret) {
-    return { ok: false, reason: message(t, 'secretRequired') }
+  if (!secret) {
+    if (!id) {
+      return { ok: false, reason: message(t, 'secretRequired') }
+    }
+    if (robotAppidChanged(robot, options.savedAppid ?? '')) {
+      return { ok: false, reason: message(t, 'secretRequiredForAppidChange') }
+    }
   }
 
   const scenes = {} as Record<Scene, RobotSceneConfig>

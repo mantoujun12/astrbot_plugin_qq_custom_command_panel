@@ -399,6 +399,36 @@ describe('RobotsView', () => {
     expect((field(wrapper, 'secret').element as HTMLInputElement).value).toBe('')
   })
 
+  it('warns and requires a new secret when an existing AppID changes', async () => {
+    const { api, mount } = await loadView()
+    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
+
+    const wrapper = await mount()
+    await field(wrapper, 'appid').setValue('1099999999')
+    await flush()
+
+    expect(wrapper.text()).toContain('修改 AppID 会改变新版配置对兼容性机器人的接管关系')
+    expect(wrapper.text()).toContain('修改 AppID 后必须重新填写 ClientSecret。')
+
+    await button(wrapper, '保存').trigger('click')
+    await flush()
+
+    expect(api.saveRobots).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('修改 AppID 后必须重新填写 ClientSecret。')
+
+    await field(wrapper, 'secret').setValue('new-secret')
+    await button(wrapper, '保存').trigger('click')
+    await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
+
+    const [payload] = vi.mocked(api.saveRobots).mock.calls[0]
+    expect(payload.robots[0]).toMatchObject({
+      id: 'robot-1',
+      appid: '1099999999',
+      secret: 'new-secret',
+    })
+  })
+
   it('allows saving after removing every robot', async () => {
     const { api, mount } = await loadView()
     vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())

@@ -283,6 +283,8 @@
         "secret": "ClientSecret",
         "secretKeep": "Оставьте пустым, чтобы сохранить текущее значение",
         "secretRequired": "Для нового робота требуется ClientSecret.",
+        "secretRequiredForAppidChange": "После изменения AppID необходимо заново указать ClientSecret.",
+        "appidChangeWarning": "Изменение AppID меняет то, каких роботов из конфигурации совместимости перехватывает эта конфигурация: старый AppID вернётся к конфигурации совместимости, а новый AppID перехватит конфигурацию совместимости с тем же AppID.",
         "secretSaved": "Текущее значение: {masked}",
         "secretSetNoMask": "ClientSecret сохранён. Оставьте поле пустым, чтобы сохранить его.",
         "platformType": "Тип платформы",

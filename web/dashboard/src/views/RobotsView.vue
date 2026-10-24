@@ -18,6 +18,7 @@ import {
   emptyRobotDraft,
   fetchRobots,
   isRobotMock,
+  robotAppidChanged,
   robotItemCount,
   robotSceneCount,
   saveRobots,
@@ -37,6 +38,8 @@ import type {
 interface RobotDraft {
   key: string
   form: RobotConfigForm
+  /** 后端已保存的 AppID，用于判断 AppID 是否被改动；新增机器人为空 */
+  savedAppid: string
   secretMasked: string
   secretSet: boolean
 }
@@ -72,6 +75,18 @@ const selectedDraft = computed(
   () => drafts.value.find((draft) => draft.key === selectedKey.value) ?? null,
 )
 const selectedForm = computed(() => selectedDraft.value?.form ?? emptyRobotDraft())
+const selectedAppidChanged = computed(() => {
+  const draft = selectedDraft.value
+  return draft ? appidChanged(draft) : false
+})
+const appidChangeHint = computed(() =>
+  selectedAppidChanged.value
+    ? t(
+        'pages.dashboard.robots.appidChangeWarning',
+        '修改 AppID 会改变新版配置对兼容性机器人的接管关系：原 AppID 将回退到兼容性配置，新 AppID 将接管同名兼容性配置。',
+      )
+    : undefined,
+)
 const limits = computed<ConfigLimits>(() => response.value?.limits ?? FALLBACK_LIMITS)
 const mockMode = computed(
   () => ready.value && (!hasBackend.value || isRobotMock(response.value)),
@@ -141,9 +156,14 @@ function createDraft(robot: RobotConfig, index: number): RobotDraft {
   return {
     key: robot.id ? `robot:${robot.id}` : `robot:${index}`,
     form: toRobotForm(robot),
+    savedAppid: robot.appid,
     secretMasked: robot.secret_masked,
     secretSet: robot.secret_set,
   }
+}
+
+function appidChanged(draft: RobotDraft): boolean {
+  return robotAppidChanged(draft.form, draft.savedAppid)
 }
 
 function applyResponse(next: RobotConfigResponse, preferredAppid = ''): void {
@@ -221,6 +241,7 @@ function confirmCreate(): void {
       platform: createForm.value.platform,
       secret,
     },
+    savedAppid: '',
     secretMasked: '',
     secretSet: Boolean(secret),
   }
@@ -312,6 +333,9 @@ function robotName(draft: RobotDraft): string {
 }
 
 function secretPlaceholder(draft: RobotDraft): string {
+  if (appidChanged(draft)) {
+    return ''
+  }
   if (!draft.secretSet) {
     return t('pages.dashboard.robots.secretRequired', '新机器人必须填写 ClientSecret。')
   }
@@ -319,6 +343,12 @@ function secretPlaceholder(draft: RobotDraft): string {
 }
 
 function secretHint(draft: RobotDraft): string | undefined {
+  if (appidChanged(draft)) {
+    return t(
+      'pages.dashboard.robots.secretRequiredForAppidChange',
+      '修改 AppID 后必须重新填写 ClientSecret。',
+    )
+  }
   if (draft.secretMasked) {
     return t('pages.dashboard.robots.secretSaved', '当前：{masked}').replace(
       '{masked}',
@@ -341,7 +371,9 @@ async function save(options: { sync?: boolean } = {}): Promise<void> {
   const errors: Record<string, string> = {}
   let firstErrorKey = ''
   for (const draft of drafts.value) {
-    const checked = validateRobotForm(draft.form, limits.value, t)
+    const checked = validateRobotForm(draft.form, limits.value, t, {
+      savedAppid: draft.savedAppid,
+    })
     if (!checked.ok) {
       errors[draft.key] = checked.reason
       if (!firstErrorKey) firstErrorKey = draft.key
@@ -840,10 +872,12 @@ async function importLegacy(): Promise<void> {
                     v-model="selectedForm.appid"
                     data-field="appid"
                     :disabled="!editable"
+                    :hide-details="!selectedAppidChanged"
+                    :persistent-hint="selectedAppidChanged"
+                    :hint="appidChangeHint"
                     :label="t('pages.dashboard.robots.appid', 'AppID')"
                     variant="outlined"
                     density="compact"
-                    hide-details
                   />
                 </v-col>
                 <v-col cols="12" md="8">

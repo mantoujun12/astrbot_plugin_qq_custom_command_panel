@@ -283,6 +283,8 @@
         "secret": "ClientSecret",
         "secretKeep": "留空表示沿用原值",
         "secretRequired": "新机器人必须填写 ClientSecret。",
+        "secretRequiredForAppidChange": "修改 AppID 后必须重新填写 ClientSecret。",
+        "appidChangeWarning": "修改 AppID 会改变新版配置对兼容性机器人的接管关系：原 AppID 将回退到兼容性配置，新 AppID 将接管同名兼容性配置。",
         "secretSaved": "当前：{masked}",
         "secretSetNoMask": "已保存 ClientSecret，留空表示沿用原值。",
         "platformType": "平台类型",
