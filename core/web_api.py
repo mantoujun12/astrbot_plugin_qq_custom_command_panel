@@ -385,6 +385,8 @@ class WebApiBundle:
         self.cache = StatusCache(cache_ttl)
         self.runner = SyncRunner()
         self._robot_config_lock = asyncio.Lock()
+        # 校验、落盘与失败回滚必须整体串行，否则并发保存可能互相覆盖或回滚
+        self._config_save_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # 注册
@@ -513,20 +515,21 @@ class WebApiBundle:
         if not isinstance(payload, dict):
             return web.error_response(t("web.config_invalid_body"), status_code=400)
 
-        values, errors = normalize_config_payload(self._get_config(), payload)
-        if errors:
-            return web.error_response("；".join(errors), status_code=400)
+        async with self._config_save_lock:
+            values, errors = normalize_config_payload(self._get_config(), payload)
+            if errors:
+                return web.error_response("；".join(errors), status_code=400)
 
-        try:
-            await self._save_config(values)
-        except Exception as exc:
-            logger.error(f"{LOG_TAG} " + t("log.config_save_failed", exc=exc), exc_info=True)
-            return web.error_response(t("web.config_save_failed", exc=exc), status_code=500)
-        finally:
-            # 保存回调可能先改内存再落盘失败，失败路径同样需要失效缓存
-            self.cache.invalidate()
+            try:
+                await self._save_config(values)
+            except Exception as exc:
+                logger.error(f"{LOG_TAG} " + t("log.config_save_failed", exc=exc), exc_info=True)
+                return web.error_response(t("web.config_save_failed", exc=exc), status_code=500)
+            finally:
+                # 保存回调可能先改内存再落盘失败，失败路径同样需要失效缓存
+                self.cache.invalidate()
 
-        return web.json_response(export_config(self._get_config()))
+            return web.json_response(export_config(self._get_config()))
 
     # ------------------------------------------------------------------
     # 新版机器人配置

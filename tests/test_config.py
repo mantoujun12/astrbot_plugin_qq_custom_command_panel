@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from core.config import (
     mask_secret,
     normalize_config_payload,
     normalize_panel_items,
+    save_config_values,
 )
 from core.i18n import SUPPORTED_LANGUAGES
 
@@ -662,6 +664,94 @@ def test_normalize_config_payload_rejects_too_many_commands() -> None:
     )
     assert len(errors) == 1
     assert str(PANEL_MAX_ITEMS) in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# save_config_values：落盘失败必须回滚内存
+# ---------------------------------------------------------------------------
+
+
+async def test_save_config_values_prefers_async_and_updates_memory() -> None:
+    config: dict[str, Any] = {"language": "zh-CN", "scenes": ["c2c"]}
+    saved: list[dict[str, Any]] = []
+
+    async def save_async() -> None:
+        saved.append(dict(config))
+
+    def save_sync() -> None:  # pragma: no cover - 有异步接口时不应调用
+        raise AssertionError("sync persistence must not be used when async is available")
+
+    await save_config_values(
+        config,
+        {"language": "en-US"},
+        save_async=save_async,
+        save_sync=save_sync,
+    )
+
+    assert config == {"language": "en-US", "scenes": ["c2c"]}
+    assert saved == [{"language": "en-US", "scenes": ["c2c"]}]
+
+
+async def test_save_config_values_falls_back_to_sync_persistence() -> None:
+    config: dict[str, Any] = {"language": "zh-CN"}
+    calls = 0
+
+    def save_sync() -> None:
+        nonlocal calls
+        calls += 1
+
+    await save_config_values(config, {"language": "en-US"}, save_sync=save_sync)
+
+    assert config == {"language": "en-US"}
+    assert calls == 1
+
+
+async def test_save_config_values_rolls_back_when_async_save_fails() -> None:
+    config = make_existing()
+    original = dict(config)
+
+    async def save_async() -> None:
+        raise OSError("disk full")
+
+    with pytest.raises(OSError, match="disk full"):
+        await save_config_values(config, {"language": "en-US"}, save_async=save_async)
+
+    assert config == original
+
+
+async def test_save_config_values_rolls_back_when_sync_save_fails() -> None:
+    config = make_existing()
+    original = dict(config)
+
+    def save_sync() -> None:
+        raise PermissionError("read-only data dir")
+
+    with pytest.raises(PermissionError, match="read-only"):
+        await save_config_values(config, {"language": "en-US"}, save_sync=save_sync)
+
+    assert config == original
+
+
+async def test_save_config_values_keeps_memory_when_save_is_cancelled() -> None:
+    config: dict[str, Any] = {"language": "zh-CN"}
+
+    async def save_async() -> None:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await save_config_values(config, {"language": "en-US"}, save_async=save_async)
+
+    # 宿主的异步保存可能已在线程里提交完成，取消时回滚内存会与磁盘分叉
+    assert config == {"language": "en-US"}
+
+
+async def test_save_config_values_requires_persistence_without_touching_memory() -> None:
+    config: dict[str, Any] = {"language": "zh-CN"}
+
+    with pytest.raises(RuntimeError):
+        await save_config_values(config, {"language": "en-US"})
+
+    assert config == {"language": "zh-CN"}
 
 
 # ---------------------------------------------------------------------------

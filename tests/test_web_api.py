@@ -659,6 +659,47 @@ async def test_page_config_round_trip_preserves_platforms_sharing_a_name() -> No
     assert [platform["secret"] for platform in saved["qq_platforms"]] == ["s1", "s2"]
 
 
+async def test_page_config_save_serializes_concurrent_saves() -> None:
+    from astrbot.api.web import request
+
+    config = schema_config()
+    syncer = make_syncer(config)
+    release = asyncio.Event()
+    entered = asyncio.Event()
+    active = 0
+    max_active = 0
+
+    async def save_config(values: dict[str, Any]) -> None:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        entered.set()
+        try:
+            await release.wait()
+        finally:
+            active -= 1
+        config.clear()
+        config.update(values)
+
+    bundle = make_bundle(config, syncer, save_config)
+    request.payload = {"scenes": ["c2c"]}
+
+    first = asyncio.create_task(bundle.page_config_save())
+    await entered.wait()
+    second = asyncio.create_task(bundle.page_config_save())
+    # 给第二个请求足够的调度机会跑到加锁位置
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert max_active == 1
+
+    release.set()
+    first_response, second_response = await asyncio.gather(first, second)
+
+    assert max_active == 1
+    assert first_response["__json__"] is True
+    assert second_response["__json__"] is True
+
+
 @pytest.mark.asyncio
 async def test_page_config_save_rejects_invalid_payload() -> None:
     from astrbot.api.web import request
