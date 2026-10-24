@@ -131,6 +131,10 @@ class SyncRunner:
 
         页面刷新 / 断线重连时用同一个 since 重新订阅即可续看本轮结果；
         任务已结束且缓冲还在时，会把本轮事件回放完再结束。
+
+        订阅者拿不到 finish 时（插件重启后缓冲为空、任务被取消等），补发一条
+        ``reason="idle"`` 的 finish：宿主 bridge 不会通知 SSE 正常关闭，没有终止
+        事件前端就会一直停在 running。
         """
         cursor = max(0, int(since))
         while True:
@@ -147,6 +151,21 @@ class SyncRunner:
                 else:
                     # 没有待发事件且任务未在跑：没有后续了，结束流
                     finished = True
+                    # 缓冲为空（重启）或最后一条不是 finish（任务被取消）时，
+                    # 订阅者收不到 finish，补一条终止事件让它退出 running
+                    if not self._events or self._events[-1].get("type") != "finish":
+                        pending = [
+                            {
+                                "type": "finish",
+                                "seq": self._seq,
+                                "ok": False,
+                                "reason": "idle",
+                                "platforms": 0,
+                                "succeeded": 0,
+                                "failed": 0,
+                                "result": {},
+                            }
+                        ]
             for event in pending:
                 yield event
             if finished:

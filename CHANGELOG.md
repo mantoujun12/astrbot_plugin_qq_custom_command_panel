@@ -5,6 +5,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+
+- 修复同步进度流在没有 `finish` 事件时结束（插件重启后缓冲为空、任务被取消等）会让页面永久停在「正在同步…」的问题：后端补发 `reason` 为 `idle` 的终止事件，前端收到后回到可重新同步的空闲状态 (#76)
+
 ## [v0.6.1] - 2026-10-21
 
 ### 新增

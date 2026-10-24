@@ -54,7 +54,10 @@ async function subscribe(since: number, onFinish?: () => void): Promise<void> {
       state.value = reduceSyncEvent(state.value, event)
       if (event.type === 'finish') {
         void stopSubscription()
-        onFinish?.()
+        // idle 只是“当前没有可续看的运行”，不是一次真实同步结束，无需刷新状态页
+        if (event.reason !== 'idle') {
+          onFinish?.()
+        }
       }
     },
     onError: (error) => {

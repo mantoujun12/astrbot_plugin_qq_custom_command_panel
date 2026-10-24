@@ -130,6 +130,28 @@ describe('reduceSyncEvent', () => {
     expect(next.status).toBe('failed')
     expect(next.error).toBe('backend exploded')
   })
+
+  it('resets to idle when the stream closes without a run', () => {
+    const state = {
+      ...initialSyncState(),
+      status: 'running' as const,
+      platforms: 2,
+      messages: ['上一轮的日志'],
+      lastSeq: 5,
+    }
+
+    const next = reduceSyncEvent(state, {
+      type: 'finish',
+      seq: 5,
+      ok: false,
+      reason: 'idle',
+      platforms: 0,
+      succeeded: 0,
+      failed: 0,
+    })
+
+    expect(next).toEqual(initialSyncState())
+  })
 })
 
 describe('startSync', () => {

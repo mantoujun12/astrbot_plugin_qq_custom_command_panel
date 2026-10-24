@@ -72,9 +72,25 @@ async def test_stream_since_skips_delivered_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stream_returns_immediately_when_nothing_ran() -> None:
+async def test_stream_emits_idle_finish_when_nothing_ran() -> None:
+    """插件重启后缓冲为空，订阅者也要收到终止事件，不能永远等下去"""
     runner = SyncRunner()
-    assert await collect(runner) == []
+    events = await collect(runner)
+
+    assert [event["type"] for event in events] == ["finish"]
+    assert events[0]["reason"] == "idle"
+    assert events[0]["ok"] is False
+    assert events[0]["seq"] == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_idle_finish_for_stale_cursor_after_restart() -> None:
+    """前端还记着重启前的 lastSeq 时，续订同样要收到 idle 终止事件"""
+    runner = SyncRunner()
+    events = await collect(runner, since=42)
+
+    assert [event["type"] for event in events] == ["finish"]
+    assert events[0]["reason"] == "idle"
 
 
 @pytest.mark.asyncio
@@ -167,6 +183,8 @@ async def test_cancel_stops_task_and_notifies_subscribers() -> None:
 
     await runner.cancel()
 
-    # 取消后 _running 归位，订阅者不会一直挂着
+    # 取消后 _running 归位，订阅者不会一直挂着；没有真实 finish 时补发 idle 终止事件
     assert runner.running is False
-    assert await pending == [{"type": "start", "seq": 1}]
+    events = await pending
+    assert [event["type"] for event in events] == ["start", "finish"]
+    assert events[-1]["reason"] == "idle"
