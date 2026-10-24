@@ -148,6 +148,7 @@
           "commands": "コマンド項目",
           "panels": "オンラインパネル"
         },
+        "panelsPartial": "一部のシーンの取得に失敗したため、この値は下限です。",
         "state": {
           "synced": "同期済み",
           "duplicate": "重複パネル",

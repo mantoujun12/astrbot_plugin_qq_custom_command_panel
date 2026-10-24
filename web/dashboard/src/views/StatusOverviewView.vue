@@ -157,7 +157,16 @@ const mockMode = computed(() => ready.value && !hasBackend.value)
             :icon="mdiViewGridOutline"
             :title="t('pages.dashboard.status.cards.panels', '线上面板')"
             :value="status.panels.total"
+            :partial="status.panels.partial"
             :max="status.panels.partial ? undefined : status.panels.max"
+            :note="
+              status.panels.partial
+                ? t(
+                    'pages.dashboard.status.panelsPartial',
+                    '部分场景查询失败，该值为下限',
+                  )
+                : undefined
+            "
             emphasize-at-limit
           />
         </v-col>

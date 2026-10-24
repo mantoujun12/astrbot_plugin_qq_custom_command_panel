@@ -148,6 +148,7 @@
           "commands": "Command entries",
           "panels": "Online panels"
         },
+        "panelsPartial": "Some scene queries failed; this value is a lower bound.",
         "state": {
           "synced": "Synced",
           "duplicate": "Duplicate panels",
