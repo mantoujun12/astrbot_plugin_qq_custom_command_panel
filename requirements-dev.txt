@@ -1,6 +1,6 @@
 # 开发/CI 专用依赖, 不随插件打包 (release zip 只包含 requirements.txt)
 pytest>=9.1.1
-pytest-asyncio>=1.4.0
+pytest-asyncio>=1.4.1
 pytest-cov>=7.1.0
 ruff>=0.17.1
 # 运行期由 AstrBot 宿主环境提供（所以 requirements.txt 不声明，避免版本冲突）；
