@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from astrbot.api.web import request
 
 from core.config import PANEL_MAX_ITEMS, SCENES
 from core.i18n import Translator
@@ -47,8 +48,6 @@ REMARK_PREFIX = PanelSyncer.REMARK_PREFIX
 @pytest.fixture(autouse=True)
 def _reset_web_request() -> Any:
     """每个用例都从干净的 query / body 开始"""
-    from astrbot.api.web import request
-
     request.query.set_values({})
     request.payload = {}
     yield
@@ -494,26 +493,35 @@ async def test_page_status_returns_payload_and_uses_cache() -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_status_reports_not_ready() -> None:
+async def test_endpoints_report_not_ready() -> None:
     bundle = WebApiBundle(lambda: None, lambda: {})
 
-    response = await bundle.page_status()
+    responses = [
+        await bundle.page_status(),
+        await bundle.page_sync_start(),
+        await bundle.page_sync_events(),
+        await bundle.page_log_events(),
+    ]
 
-    assert response["__error__"] is True
-    assert response["status_code"] == 503
+    for response in responses:
+        assert response["__error__"] is True
+        assert response["status_code"] == 503
 
 
 @pytest.mark.asyncio
-async def test_page_status_reports_corrupt_robot_config(tmp_path: Path) -> None:
+@pytest.mark.parametrize("endpoint", ["status", "robots"])
+async def test_corrupt_robot_config_reports_error(tmp_path: Path, endpoint: str) -> None:
     (tmp_path / "robot_config.json").write_text("{broken", encoding="utf-8")
-    syncer = make_syncer({})
-    bundle = WebApiBundle(
-        lambda: syncer,
-        lambda: {},
-        robot_config_dir=tmp_path,
-    )
-
-    response = await bundle.page_status()
+    if endpoint == "status":
+        bundle = WebApiBundle(
+            lambda: make_syncer({}),
+            lambda: {},
+            robot_config_dir=tmp_path,
+        )
+        response = await bundle.page_status()
+    else:
+        bundle = make_robot_bundle({}, tmp_path)
+        response = await bundle.page_robots_get()
 
     assert response["__error__"] is True
     assert response["status_code"] == 500
@@ -522,8 +530,6 @@ async def test_page_status_reports_corrupt_robot_config(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_page_status_refresh_param_bypasses_cache() -> None:
-    from astrbot.api.web import request
-
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
 
@@ -571,8 +577,6 @@ async def test_page_config_get_masks_secret() -> None:
 
 @pytest.mark.asyncio
 async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
-    from astrbot.api.web import request
-
     config = schema_config(
         qq_platforms=[{"name": "pf1", "appid": "1023456789", "secret": "old-secret"}],
     )
@@ -621,8 +625,6 @@ async def test_page_config_save_merges_secret_and_invalidates_cache() -> None:
 @pytest.mark.asyncio
 async def test_page_config_round_trip_preserves_platforms_sharing_a_name() -> None:
     """GET 后原样 POST 不能删掉同名平台及其配置。"""
-    from astrbot.api.web import request
-
     config = schema_config(
         qq_platforms=[
             {"name": "bot", "appid": "A", "secret": "s1"},
@@ -661,8 +663,6 @@ async def test_page_config_round_trip_preserves_platforms_sharing_a_name() -> No
 
 
 async def test_page_config_save_serializes_concurrent_saves() -> None:
-    from astrbot.api.web import request
-
     config = schema_config()
     syncer = make_syncer(config)
     release = asyncio.Event()
@@ -702,40 +702,29 @@ async def test_page_config_save_serializes_concurrent_saves() -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_config_save_rejects_invalid_payload() -> None:
-    from astrbot.api.web import request
-
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [({"language": "fr-FR"}, "language"), (["nope"], None)],
+    ids=["invalid-field", "non-object"],
+)
+async def test_page_config_save_rejects_invalid_payload(
+    payload: Any,
+    expected: str | None,
+) -> None:
     config = schema_config()
 
     async def save_config(_values: dict[str, Any]) -> None:  # pragma: no cover - 不应被调用
         raise AssertionError("invalid payload must not be persisted")
 
     bundle = make_bundle(config, make_syncer(config), save_config)
-    request.payload = {"language": "fr-FR"}
+    request.payload = payload
 
     response = await bundle.page_config_save()
 
     assert response["__error__"] is True
     assert response["status_code"] == 400
-    assert "language" in response["message"]
-
-
-@pytest.mark.asyncio
-async def test_page_config_save_rejects_non_object_body() -> None:
-    from astrbot.api.web import request
-
-    config = schema_config()
-
-    async def save_config(_values: dict[str, Any]) -> None:  # pragma: no cover - 不应被调用
-        raise AssertionError("invalid payload must not be persisted")
-
-    bundle = make_bundle(config, make_syncer(config), save_config)
-    request.payload = ["nope"]
-
-    response = await bundle.page_config_save()
-
-    assert response["__error__"] is True
-    assert response["status_code"] == 400
+    if expected is not None:
+        assert expected in response["message"]
 
 
 @pytest.mark.asyncio
@@ -751,8 +740,6 @@ async def test_page_config_save_without_persistence_is_unavailable() -> None:
 
 @pytest.mark.asyncio
 async def test_page_config_save_reports_save_failure() -> None:
-    from astrbot.api.web import request
-
     config = schema_config()
     bundle = make_bundle(config, make_syncer(config))
     await bundle.cache.get(_async_status_payload)
@@ -791,6 +778,17 @@ def make_robot_bundle(
         robot_config_dir=robot_dir,
         get_legacy_config=lambda: legacy_config if legacy_config is not None else config,
     )
+
+
+async def seed_robot(bundle: WebApiBundle, tmp_path: Path) -> dict[str, Any]:
+    """先存一台机器人，返回落盘配置；供“二次保存”类用例复用。"""
+    request.payload = {"version": 1, "robots": [robot_payload()]}
+    response = await bundle.page_robots_save()
+    assert response["__json__"] is True
+    assert response["data"]["version"] == 2
+    before = load_robot_config(tmp_path)
+    assert [robot["appid"] for robot in before["robots"]] == ["1023456789"]
+    return before
 
 
 def scene_config(
@@ -850,18 +848,6 @@ async def test_page_robots_get_empty_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_robots_get_reports_corrupt_config(tmp_path: Path) -> None:
-    (tmp_path / "robot_config.json").write_text("{broken", encoding="utf-8")
-    bundle = make_robot_bundle({}, tmp_path)
-
-    response = await bundle.page_robots_get()
-
-    assert response["__error__"] is True
-    assert response["status_code"] == 500
-    assert "JSON" in response["message"]
-
-
-@pytest.mark.asyncio
 async def test_page_robots_get_reports_invalid_nested_config(tmp_path: Path) -> None:
     payload = {"version": 1, "robots": [robot_payload(appid=123)]}  # type: ignore[arg-type]
     (tmp_path / "robot_config.json").write_text(json.dumps(payload), encoding="utf-8")
@@ -876,8 +862,6 @@ async def test_page_robots_get_reports_invalid_nested_config(tmp_path: Path) -> 
 
 @pytest.mark.asyncio
 async def test_page_robots_save_creates_robot_with_masked_secret(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
     request.payload = {"version": 1, "robots": [robot_payload()]}
 
@@ -898,16 +882,8 @@ async def test_page_robots_save_creates_robot_with_masked_secret(tmp_path: Path)
 async def test_page_robots_save_rejects_missing_robots_without_overwriting(
     tmp_path: Path,
 ) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-    initial = await bundle.page_robots_save()
-    assert initial["__json__"] is True
-    assert initial["data"]["version"] == 2
-    before = load_robot_config(tmp_path)
-    assert len(before["robots"]) == 1
-    assert before["robots"][0]["appid"] == "1023456789"
+    before = await seed_robot(bundle, tmp_path)
 
     request.payload = {"version": 2}
     response = await bundle.page_robots_save()
@@ -920,16 +896,8 @@ async def test_page_robots_save_rejects_missing_robots_without_overwriting(
 
 @pytest.mark.asyncio
 async def test_page_robots_save_accepts_explicit_empty_robots(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-    initial = await bundle.page_robots_save()
-    assert initial["__json__"] is True
-    assert initial["data"]["version"] == 2
-    before = load_robot_config(tmp_path)
-    assert len(before["robots"]) == 1
-    assert before["robots"][0]["appid"] == "1023456789"
+    await seed_robot(bundle, tmp_path)
 
     request.payload = {"version": 2, "robots": []}
     response = await bundle.page_robots_save()
@@ -941,15 +909,20 @@ async def test_page_robots_save_accepts_explicit_empty_robots(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
-async def test_page_robots_save_invalidates_status_cache(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
-    bundle = make_robot_bundle({}, tmp_path)
+@pytest.mark.parametrize("operation", ["save", "import"])
+async def test_page_robots_mutations_invalidate_status_cache(
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=schema_config())
     await bundle.cache.get(_async_status_payload)
     assert bundle.cache._is_fresh()
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-
-    response = await bundle.page_robots_save()
+    if operation == "save":
+        request.payload = {"version": 1, "robots": [robot_payload()]}
+        response = await bundle.page_robots_save()
+    else:
+        request.payload = {"appid": "1023456789", "version": 1}
+        response = await bundle.page_robots_import_legacy()
 
     assert response["__json__"] is True
     assert not bundle.cache._is_fresh()
@@ -961,8 +934,6 @@ async def test_page_robots_save_rejects_invalid_payload(
     tmp_path: Path,
     invalid_kind: str,
 ) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
     if invalid_kind == "scene":
         first = robot_payload(
@@ -999,11 +970,8 @@ async def test_page_robots_save_rejects_invalid_payload(
 
 @pytest.mark.asyncio
 async def test_page_robots_save_keeps_secret_when_blank(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-    await bundle.page_robots_save()
+    await seed_robot(bundle, tmp_path)
 
     request.payload = {"version": 2, "robots": [robot_payload(secret="")]}
     response = await bundle.page_robots_save()
@@ -1016,20 +984,23 @@ async def test_page_robots_save_keeps_secret_when_blank(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_robots_save_rejects_stale_version(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
-    bundle = make_robot_bundle({}, tmp_path)
+@pytest.mark.parametrize("operation", ["save", "import"])
+async def test_page_robots_reject_stale_version(tmp_path: Path, operation: str) -> None:
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=schema_config())
     request.payload = {"version": 1, "robots": [robot_payload(name="初次保存")]}
     first = await bundle.page_robots_save()
     assert first["data"]["version"] == 2
 
-    request.payload = {"version": 1, "robots": [robot_payload(name="旧页面覆盖")]}
-    stale = await bundle.page_robots_save()
+    if operation == "save":
+        request.payload = {"version": 1, "robots": [robot_payload(name="旧页面覆盖")]}
+        stale = await bundle.page_robots_save()
+        assert "重新载入" in stale["message"]
+    else:
+        request.payload = {"appids": ["1023456789"], "version": first["data"]["version"] - 1}
+        stale = await bundle.page_robots_import_legacy()
 
     assert stale["__error__"] is True
     assert stale["status_code"] == 409
-    assert "重新载入" in stale["message"]
     assert load_robot_config(tmp_path)["robots"][0]["name"] == "初次保存"
 
 
@@ -1040,8 +1011,6 @@ async def test_page_robots_mutations_hold_config_lock(
     monkeypatch: pytest.MonkeyPatch,
     operation: str,
 ) -> None:
-    from astrbot.api.web import request
-
     legacy = schema_config(
         qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
     )
@@ -1068,8 +1037,6 @@ async def test_page_robots_mutations_hold_config_lock(
 async def test_page_robots_import_legacy_copies_secret_without_response_leak(
     tmp_path: Path,
 ) -> None:
-    from astrbot.api.web import request
-
     legacy = schema_config(
         qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
     )
@@ -1099,8 +1066,6 @@ async def test_page_robots_import_legacy_normalizes_optional_name(
     legacy_name: str,
     expected_name: str,
 ) -> None:
-    from astrbot.api.web import request
-
     legacy = schema_config(
         qq_platforms=[
             {"name": legacy_name, "appid": "1023456789", "secret": "legacy-secret"},
@@ -1117,27 +1082,7 @@ async def test_page_robots_import_legacy_normalizes_optional_name(
 
 
 @pytest.mark.asyncio
-async def test_page_robots_import_invalidates_status_cache(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
-    legacy = schema_config(
-        qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
-    )
-    bundle = make_robot_bundle({}, tmp_path, legacy_config=legacy)
-    await bundle.cache.get(_async_status_payload)
-    assert bundle.cache._is_fresh()
-    request.payload = {"appid": "1023456789", "version": 1}
-
-    response = await bundle.page_robots_import_legacy()
-
-    assert response["__json__"] is True
-    assert not bundle.cache._is_fresh()
-
-
-@pytest.mark.asyncio
 async def test_page_robots_import_legacy_rejects_duplicate_appid(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
     legacy = schema_config(
         qq_platforms=[{"name": "旧机器人", "appid": "1023456789", "secret": "legacy-secret"}],
     )
@@ -1155,8 +1100,6 @@ async def test_page_robots_import_legacy_rejects_duplicate_appid(tmp_path: Path)
 
 @pytest.mark.asyncio
 async def test_page_robots_unavailable_without_config_dir() -> None:
-    from astrbot.api.web import request
-
     bundle = WebApiBundle(lambda: None, lambda: {})
     request.payload = {"version": 1, "robots": []}
 
@@ -1317,16 +1260,6 @@ def test_start_sync_without_syncer_returns_false() -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_sync_start_not_ready() -> None:
-    bundle = WebApiBundle(lambda: None, lambda: {})
-
-    response = await bundle.page_sync_start()
-
-    assert response["__error__"] is True
-    assert response["status_code"] == 503
-
-
-@pytest.mark.asyncio
 async def test_page_sync_start_streams_structured_events() -> None:
     """同步任务的进度事件：message + start/platform/finish 结构化事件"""
     config = schema_config(scenes=["c2c"])
@@ -1366,8 +1299,6 @@ async def test_page_sync_start_streams_structured_events() -> None:
 
 @pytest.mark.asyncio
 async def test_page_sync_events_returns_stream_and_honours_since() -> None:
-    from astrbot.api.web import request
-
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     stub_clients(syncer, {"1023456789": FakeQQClient(existing={})})
@@ -1382,19 +1313,7 @@ async def test_page_sync_events_returns_stream_and_honours_since() -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_sync_events_not_ready() -> None:
-    bundle = WebApiBundle(lambda: None, lambda: {})
-
-    response = await bundle.page_sync_events()
-
-    assert response["__error__"] is True
-    assert response["status_code"] == 503
-
-
-@pytest.mark.asyncio
 async def test_page_log_events_streams_history(monkeypatch: pytest.MonkeyPatch) -> None:
-    from astrbot.api.web import request
-
     host_logger = logging.getLogger("test-web-api-logs")
     host_logger.handlers.clear()
     host_logger.propagate = False
@@ -1431,8 +1350,6 @@ async def test_page_log_events_streams_history(monkeypatch: pytest.MonkeyPatch) 
 async def test_page_log_events_invalid_since_defaults_to_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     host_logger = logging.getLogger("test-web-api-invalid-since")
     host_logger.handlers.clear()
     host_logger.propagate = False
@@ -1465,8 +1382,6 @@ async def test_page_log_events_invalid_since_defaults_to_zero(
 async def test_page_log_events_resets_cursor_for_reloaded_stream(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     log_buffer = LogBuffer(heartbeat_seconds=0.01)
     bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
     request.query.set_values({"since": "5", "streamId": "old-stream"})
@@ -1521,8 +1436,6 @@ async def test_page_log_events_closes_excess_subscriber(
 async def test_page_log_events_emits_keep_alive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     log_buffer = LogBuffer(heartbeat_seconds=0.01)
     bundle = WebApiBundle(lambda: None, lambda: {}, log_buffer=log_buffer)
     request.query.set_values({})
@@ -1541,16 +1454,6 @@ async def test_page_log_events_emits_keep_alive(
         await captured["events"].aclose()
 
     assert heartbeat == ": keep-alive\n\n"
-
-
-@pytest.mark.asyncio
-async def test_page_log_events_not_ready_without_buffer() -> None:
-    bundle = WebApiBundle(lambda: None, lambda: {})
-
-    response = await bundle.page_log_events()
-
-    assert response["__error__"] is True
-    assert response["status_code"] == 503
 
 
 # ---------------------------------------------------------------------------
@@ -1699,8 +1602,6 @@ async def test_page_robots_errors_follow_selected_language(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     import core.i18n as i18n_module
 
     monkeypatch.setattr(i18n_module, "_instance", Translator(Path("core/i18n"), "ja-JP"))
@@ -1738,8 +1639,6 @@ async def test_build_status_handles_platform_list_exception() -> None:
 
 @pytest.mark.asyncio
 async def test_page_robots_reject_non_object_bodies(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
     request.payload = []
 
@@ -1751,52 +1650,44 @@ async def test_page_robots_reject_non_object_bodies(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_page_robots_save_reports_write_failure(
+@pytest.mark.parametrize("operation", ["save", "import"])
+async def test_page_robots_report_write_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    operation: str,
 ) -> None:
-    from astrbot.api.web import request
-
     def fail(*_args: Any, **_kwargs: Any) -> Path:
         raise RobotConfigError("disk full")
 
     monkeypatch.setattr("core.web_api.save_robot_config", fail)
-    bundle = make_robot_bundle({}, tmp_path)
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-
-    response = await bundle.page_robots_save()
+    bundle = make_robot_bundle({}, tmp_path, legacy_config=schema_config())
+    if operation == "save":
+        request.payload = {"version": 1, "robots": [robot_payload()]}
+        response = await bundle.page_robots_save()
+    else:
+        request.payload = {"appids": ["1023456789"], "version": 1}
+        response = await bundle.page_robots_import_legacy()
 
     assert response["status_code"] == 500
     assert "disk full" in response["message"]
 
 
 @pytest.mark.asyncio
-async def test_page_robots_save_reports_directory_creation_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize("operation", ["save", "import"])
+async def test_page_robots_report_directory_creation_failure(
+    tmp_path: Path,
+    operation: str,
+) -> None:
     """数据目录创建失败应返回本地化 500，而不是把原始 OSError 抛给宿主。"""
-    from astrbot.api.web import request
-
-    data_dir = tmp_path / "data"
-    data_dir.write_text("not a directory", encoding="utf-8")
-    bundle = make_robot_bundle({}, data_dir)
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-
-    response = await bundle.page_robots_save()
-
-    assert response["status_code"] == 500
-    assert "无法保存机器人配置" in response["message"]
-
-
-@pytest.mark.asyncio
-async def test_page_robots_import_reports_directory_creation_failure(tmp_path: Path) -> None:
-    """导入同样要经过真实保存路径，目录创建失败应返回本地化 500。"""
-    from astrbot.api.web import request
-
     data_dir = tmp_path / "data"
     data_dir.write_text("not a directory", encoding="utf-8")
     bundle = make_robot_bundle({}, data_dir, legacy_config=schema_config())
-    request.payload = {"appids": ["1023456789"], "version": 1}
-
-    response = await bundle.page_robots_import_legacy()
+    if operation == "save":
+        request.payload = {"version": 1, "robots": [robot_payload()]}
+        response = await bundle.page_robots_save()
+    else:
+        request.payload = {"appids": ["1023456789"], "version": 1}
+        response = await bundle.page_robots_import_legacy()
 
     assert response["status_code"] == 500
     assert "无法保存机器人配置" in response["message"]
@@ -1810,6 +1701,7 @@ async def test_page_robots_import_reports_directory_creation_failure(tmp_path: P
         ({"appids": ["", "app-1"]}, "appids[0]"),
         ({"appids": ["app-1", "app-1"]}, "重复"),
         ({"appids": ["missing"], "version": 1}, "找不到"),
+        ({"appids": ["1023456789"], "version": 0}, "version"),
     ],
 )
 async def test_page_robots_import_rejects_invalid_appid_payloads(
@@ -1817,8 +1709,6 @@ async def test_page_robots_import_rejects_invalid_appid_payloads(
     payload: dict[str, Any],
     expected: str,
 ) -> None:
-    from astrbot.api.web import request
-
     bundle = make_robot_bundle({}, tmp_path)
     request.payload = payload
 
@@ -1829,25 +1719,10 @@ async def test_page_robots_import_rejects_invalid_appid_payloads(
 
 
 @pytest.mark.asyncio
-async def test_page_robots_import_rejects_invalid_version(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
-    bundle = make_robot_bundle({}, tmp_path)
-    request.payload = {"appids": ["1023456789"], "version": 0}
-
-    response = await bundle.page_robots_import_legacy()
-
-    assert response["status_code"] == 400
-    assert "version" in response["message"]
-
-
-@pytest.mark.asyncio
 async def test_page_robots_import_reports_validation_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     monkeypatch.setattr(
         "core.web_api.legacy_to_robot_drafts",
         lambda _config: [
@@ -1879,8 +1754,6 @@ async def test_page_robots_reports_read_failure_on_save_and_import(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     def fail(_data_dir: Path) -> dict[str, Any]:
         raise RobotConfigError("cannot read")
 
@@ -1896,44 +1769,6 @@ async def test_page_robots_reports_read_failure_on_save_and_import(
     assert import_response["status_code"] == 500
 
 
-@pytest.mark.asyncio
-async def test_page_robots_import_rejects_stale_version(tmp_path: Path) -> None:
-    from astrbot.api.web import request
-
-    bundle = make_robot_bundle({}, tmp_path)
-    request.payload = {"version": 1, "robots": [robot_payload()]}
-    saved = await bundle.page_robots_save()
-
-    request.payload = {"appids": ["1023456789"], "version": saved["data"]["version"] - 1}
-    response = await bundle.page_robots_import_legacy()
-
-    assert response["status_code"] == 409
-
-
-@pytest.mark.asyncio
-async def test_page_robots_import_reports_write_failure(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from astrbot.api.web import request
-
-    def fail(*_args: Any, **_kwargs: Any) -> Path:
-        raise RobotConfigError("disk full")
-
-    monkeypatch.setattr("core.web_api.save_robot_config", fail)
-    bundle = make_robot_bundle(
-        {},
-        tmp_path,
-        legacy_config=schema_config(),
-    )
-    request.payload = {"appids": ["1023456789"], "version": 1}
-
-    response = await bundle.page_robots_import_legacy()
-
-    assert response["status_code"] == 500
-    assert "disk full" in response["message"]
-
-
 def test_get_legacy_falls_back_to_primary_config() -> None:
     config = {"scenes": ["c2c"]}
     bundle = WebApiBundle(lambda: None, lambda: config)
@@ -1945,8 +1780,6 @@ def test_get_legacy_falls_back_to_primary_config() -> None:
 async def test_page_sync_events_invalid_since_defaults_to_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from astrbot.api.web import request
-
     config = schema_config(scenes=["c2c"])
     syncer = make_syncer(config)
     bundle = make_bundle(config, syncer)

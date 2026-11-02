@@ -196,6 +196,23 @@ async function loadView(
   }
 }
 
+async function mountRobots(
+  options: {
+    withBackend?: boolean
+    bridge?: Partial<PluginViewBridge>
+    reject?: Error
+    robots?: RobotConfigResponse
+  } = {},
+) {
+  const view = await loadView(options)
+  if (options.reject) {
+    vi.mocked(view.api.fetchRobots).mockRejectedValue(options.reject)
+  } else {
+    vi.mocked(view.api.fetchRobots).mockResolvedValue(options.robots ?? robotResponse())
+  }
+  return { ...view, wrapper: await view.mount() }
+}
+
 afterEach(() => {
   delete window.AstrBotPluginView
   delete window.AstrBotPluginPage
@@ -204,10 +221,7 @@ afterEach(() => {
 
 describe('RobotsView', () => {
   it('loads the robot list and first editor', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountRobots()
 
     expect(api.fetchRobots).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('机器人')
@@ -221,10 +235,7 @@ describe('RobotsView', () => {
   })
 
   it('combines robot selection and configuration in one responsive shell', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots()
     const shell = wrapper.find('.qc-robots-shell')
 
     expect(wrapper.find('.qc-robots-page').exists()).toBe(true)
@@ -238,10 +249,7 @@ describe('RobotsView', () => {
   })
 
   it('switches between robots and keeps each robot scenes isolated', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots()
     await wrapper.findAll('.qc-robot-item')[1]?.trigger('click')
     await flush()
 
@@ -258,10 +266,7 @@ describe('RobotsView', () => {
   })
 
   it('switches robots from the compact select', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots()
     const select = wrapper.find('.qc-robot-select').findComponent(VSelect)
 
     expect(select.props('modelValue')).toBe('robot:robot-1')
@@ -277,10 +282,7 @@ describe('RobotsView', () => {
   })
 
   it('adds a new robot and edits its scene commands independently', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots()
     // 新增机器人走弹窗：先填基础信息，再点创建
     await button(wrapper, '新增机器人').trigger('click')
     await waitUntil(() => dialogEl('.qc-robot-create') !== null)
@@ -319,10 +321,7 @@ describe('RobotsView', () => {
   })
 
   it('shows a scene validation error when enabling an empty scene', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountRobots()
     await scene(wrapper, 'channel').find('input[type="checkbox"]').setValue(true)
     await button(wrapper, '保存').trigger('click')
     await flush()
@@ -332,16 +331,11 @@ describe('RobotsView', () => {
   })
 
   it('saves the normalized payload and refreshes from the response', async () => {
-    const { api, mount } = await loadView()
-    const loaded = robotResponse()
-    vi.mocked(api.fetchRobots).mockResolvedValue(loaded)
-
+    const { api, wrapper } = await mountRobots()
     const saved = robotResponse()
     saved.robots[0].name = '主机器人'
     saved.robots[0].scenes.c2c.items[0] = { name: 'help', desc: '帮助' }
     vi.mocked(api.saveRobots).mockResolvedValue(saved)
-
-    const wrapper = await mount()
     await field(wrapper, 'name').setValue('  主机器人  ')
     await scene(wrapper, 'c2c')
       .find('[data-field="command-desc"] input')
@@ -387,11 +381,9 @@ describe('RobotsView', () => {
   })
 
   it('keeps an existing secret empty and posts it empty', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, wrapper } = await mountRobots()
     vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
 
-    const wrapper = await mount()
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
 
@@ -401,11 +393,9 @@ describe('RobotsView', () => {
   })
 
   it('warns and requires a new secret when an existing AppID changes', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, wrapper } = await mountRobots()
     vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
 
-    const wrapper = await mount()
     await field(wrapper, 'appid').setValue('1099999999')
     await flush()
 
@@ -431,13 +421,11 @@ describe('RobotsView', () => {
   })
 
   it('allows saving after removing every robot', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, wrapper } = await mountRobots()
     const saved = robotResponse()
     saved.robots = []
     vi.mocked(api.saveRobots).mockResolvedValue(saved)
 
-    const wrapper = await mount()
     await button(wrapper, '删除机器人配置').trigger('click')
     await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
     clickInDialog('确认删除')
@@ -456,10 +444,7 @@ describe('RobotsView', () => {
   })
 
   it('asks for confirmation before deleting a robot', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots()
     await button(wrapper, '删除机器人配置').trigger('click')
     await waitUntil(() => dialogEl('.qc-robot-delete') !== null)
 
@@ -483,11 +468,11 @@ describe('RobotsView', () => {
   })
 
   it('keeps saving disabled in mock but still lets local dialogs open', async () => {
-    const { api, legacyApi, mount } = await loadView({ withBackend: false })
-    vi.mocked(api.fetchRobots).mockResolvedValue(MOCK_ROBOTS)
+    const { api, legacyApi, wrapper } = await mountRobots({
+      withBackend: false,
+      robots: MOCK_ROBOTS,
+    })
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
-
-    const wrapper = await mount()
 
     expect(wrapper.text()).toContain('本地开发环境：展示的是 mock 数据，不能保存配置。')
     expect(wrapper.text()).toContain('主机器人')
@@ -537,13 +522,9 @@ describe('RobotsView', () => {
   })
 
   it('imports legacy appids, reloads robots, and shows the import result', async () => {
-    const { api, legacyApi, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, legacyApi, wrapper } = await mountRobots()
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
     vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
 
     await button(wrapper, '从兼容配置导入').trigger('click')
     await waitUntil(() => dialogEl('.qc-import-panel') !== null)
@@ -565,11 +546,8 @@ describe('RobotsView', () => {
   })
 
   it('asks before importing over unsaved edits and keeps them on cancel', async () => {
-    const { api, legacyApi, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, legacyApi, wrapper } = await mountRobots()
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
-
-    const wrapper = await mount()
     await field(wrapper, 'name').setValue('本地未保存')
 
     await button(wrapper, '从兼容配置导入').trigger('click')
@@ -592,11 +570,8 @@ describe('RobotsView', () => {
   })
 
   it('imports after the user discards unsaved edits and says they were discarded', async () => {
-    const { api, legacyApi, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, legacyApi, wrapper } = await mountRobots()
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
-
-    const wrapper = await mount()
     await field(wrapper, 'name').setValue('本地未保存')
 
     await button(wrapper, '从兼容配置导入').trigger('click')
@@ -620,12 +595,10 @@ describe('RobotsView', () => {
   })
 
   it('saves unsaved edits before importing when the user chooses to save', async () => {
-    const { api, legacyApi, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, legacyApi, wrapper } = await mountRobots()
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
     vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
 
-    const wrapper = await mount()
     await field(wrapper, 'name').setValue('本地未保存')
 
     await button(wrapper, '从兼容配置导入').trigger('click')
@@ -649,11 +622,8 @@ describe('RobotsView', () => {
   })
 
   it('keeps the confirmation open when saving before import is invalid', async () => {
-    const { api, legacyApi, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, legacyApi, wrapper } = await mountRobots()
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
-
-    const wrapper = await mount()
     await field(wrapper, 'name').setValue('')
 
     await button(wrapper, '从兼容配置导入').trigger('click')
@@ -675,12 +645,10 @@ describe('RobotsView', () => {
   })
 
   it('shows the real save error in the confirmation when saving before import fails', async () => {
-    const { api, legacyApi, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, legacyApi, wrapper } = await mountRobots()
     vi.mocked(legacyApi.fetchConfig).mockResolvedValue(legacyConfig())
     vi.mocked(api.saveRobots).mockRejectedValue(new Error('版本已更新，请重新载入'))
 
-    const wrapper = await mount()
     await field(wrapper, 'name').setValue('本地未保存')
 
     await button(wrapper, '从兼容配置导入').trigger('click')
@@ -702,10 +670,7 @@ describe('RobotsView', () => {
   })
 
   it('asks before reloading over unsaved edits', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountRobots()
     await field(wrapper, 'name').setValue('本地未保存')
 
     await button(wrapper, '重新载入').trigger('click')
@@ -731,11 +696,9 @@ describe('RobotsView', () => {
   })
 
   it('saves before starting sync and jumps to the status page', async () => {
-    const { api, mount, router } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, router, wrapper } = await mountRobots()
     vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
 
-    const wrapper = await mount()
     await button(wrapper, '保存并同步').trigger('click')
     await waitUntil(() => router.currentRoute.value.name === 'status')
 
@@ -744,10 +707,7 @@ describe('RobotsView', () => {
   })
 
   it('reports a failed load and clears the editor', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockRejectedValue(new Error('robot list failed'))
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots({ reject: new Error('robot list failed') })
 
     expect(wrapper.text()).toContain('robot list failed')
     expect(wrapper.text()).toContain('还没有机器人，先新增一台。')
@@ -755,11 +715,9 @@ describe('RobotsView', () => {
   })
 
   it('toggles a scene and adds or removes its own command rows', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, wrapper } = await mountRobots()
     vi.mocked(api.saveRobots).mockResolvedValue(robotResponse())
 
-    const wrapper = await mount()
     const channel = scene(wrapper, 'channel')
 
     await channel.find('input[type="checkbox"]').setValue(true)
@@ -782,10 +740,7 @@ describe('RobotsView', () => {
   })
 
   it('closes the import panel without importing anything', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountRobots()
     await button(wrapper, '从兼容配置导入').trigger('click')
     await waitUntil(() => dialogEl('.qc-import-panel') !== null)
 
@@ -796,11 +751,9 @@ describe('RobotsView', () => {
   })
 
   it('shows the backend error when saving is rejected', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, wrapper } = await mountRobots()
     vi.mocked(api.saveRobots).mockRejectedValue(new Error('duplicate appid'))
 
-    const wrapper = await mount()
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
     await flush()
@@ -810,10 +763,7 @@ describe('RobotsView', () => {
   })
 
   it('keeps the latest reload when responses resolve out of order', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountRobots()
     const stale = deferred<RobotConfigResponse>()
     const fresh = deferred<RobotConfigResponse>()
     vi.mocked(api.fetchRobots)
@@ -868,12 +818,10 @@ describe('RobotsView', () => {
   })
 
   it('disables reload while a save is in flight', async () => {
-    const { api, mount } = await loadView()
-    vi.mocked(api.fetchRobots).mockResolvedValue(robotResponse())
+    const { api, wrapper } = await mountRobots()
     const pendingSave = deferred<RobotConfigResponse>()
     vi.mocked(api.saveRobots).mockReturnValueOnce(pendingSave.promise)
 
-    const wrapper = await mount()
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveRobots).mock.calls.length > 0)
 

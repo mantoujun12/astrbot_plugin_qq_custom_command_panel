@@ -155,17 +155,22 @@ def test_format_version() -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "expected"),
-    [("patch", (0, 5, 1)), ("minor", (0, 6, 0)), ("major", (1, 0, 0))],
+    ("current", "kind", "expected"),
+    [
+        ((0, 5, 0), "patch", (0, 5, 1)),
+        ((0, 5, 0), "minor", (0, 6, 0)),
+        ((0, 5, 0), "major", (1, 0, 0)),
+        ((1, 2, 3), "patch", (1, 2, 4)),
+        ((1, 2, 3), "minor", (1, 3, 0)),
+        ((1, 2, 3), "major", (2, 0, 0)),
+    ],
 )
-def test_next_version(kind: str, expected: tuple[int, int, int]) -> None:
-    assert bump.next_version((0, 5, 0), kind) == expected
-
-
-def test_next_version_resets_lower_parts() -> None:
-    assert bump.next_version((1, 2, 3), "patch") == (1, 2, 4)
-    assert bump.next_version((1, 2, 3), "minor") == (1, 3, 0)
-    assert bump.next_version((1, 2, 3), "major") == (2, 0, 0)
+def test_next_version(
+    current: tuple[int, int, int],
+    kind: str,
+    expected: tuple[int, int, int],
+) -> None:
+    assert bump.next_version(current, kind) == expected
 
 
 def test_next_version_rejects_unknown_kind() -> None:

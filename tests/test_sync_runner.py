@@ -72,30 +72,8 @@ async def test_stream_since_skips_delivered_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stream_emits_idle_finish_when_nothing_ran() -> None:
-    """插件重启后缓冲为空，订阅者也要收到终止事件，不能永远等下去"""
-    runner = SyncRunner()
-    events = await collect(runner)
-
-    assert [event["type"] for event in events] == ["finish"]
-    assert events[0]["reason"] == "idle"
-    assert events[0]["ok"] is False
-    assert events[0]["seq"] == 0
-
-
-@pytest.mark.asyncio
-async def test_stream_emits_idle_finish_for_stale_cursor_after_restart() -> None:
-    """前端还记着重启前的 lastSeq 时，续订同样要收到 idle 终止事件"""
-    runner = SyncRunner()
-    events = await collect(runner, since=42)
-
-    assert [event["type"] for event in events] == ["finish"]
-    assert events[0]["reason"] == "idle"
-
-
-@pytest.mark.asyncio
-async def test_stream_emits_idle_finish_when_cursor_is_past_completed_buffer() -> None:
-    """新进程已有完整一轮缓冲时，超前的旧游标也不能静默返回"""
+async def test_stream_emits_idle_finish_for_empty_or_stale_subscriptions() -> None:
+    """缓冲为空或游标超前时，订阅者也要收到终止事件，不能永远等下去"""
 
     async def run(emit: Any) -> dict[str, Any]:
         await emit({"type": "start"})
@@ -103,13 +81,22 @@ async def test_stream_emits_idle_finish_when_cursor_is_past_completed_buffer() -
         return {}
 
     runner = SyncRunner()
+    empty = await collect(runner)
+    assert [event["type"] for event in empty] == ["finish"]
+    assert empty[0]["reason"] == "idle"
+    assert empty[0]["ok"] is False
+    assert empty[0]["seq"] == 0
+
+    # 前端还记着重启前的 lastSeq 时同样补发 idle
+    stale = await collect(runner, since=42)
+    assert [event["type"] for event in stale] == ["finish"]
+    assert stale[0]["reason"] == "idle"
+
     runner.start(run)
     await runner.join()
-
-    events = await collect(runner, since=runner.last_seq + 40)
-
-    assert [event["type"] for event in events] == ["finish"]
-    assert events[0]["reason"] == "idle"
+    past = await collect(runner, since=runner.last_seq + 40)
+    assert [event["type"] for event in past] == ["finish"]
+    assert past[0]["reason"] == "idle"
 
 
 @pytest.mark.asyncio

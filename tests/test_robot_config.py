@@ -75,6 +75,12 @@ def make_legacy_config(
     }
 
 
+def assert_invalid(payload: Any, *fragments: str) -> None:
+    normalized, errors = validate_robot_config(empty_robot_config(), payload)
+    assert normalized == empty_robot_config(), errors
+    assert any(all(fragment in error for fragment in fragments) for error in errors), errors
+
+
 # 加载 / 保存
 
 
@@ -110,30 +116,28 @@ def test_save_is_atomic_and_leaves_no_temp_files(tmp_path: Path) -> None:
     assert leftovers == []
 
 
-def test_load_corrupt_json_raises(tmp_path: Path) -> None:
-    (tmp_path / ROBOT_CONFIG_FILENAME).write_text("{not-json", encoding="utf-8")
-
-    with pytest.raises(RobotConfigError):
-        load_robot_config(tmp_path)
-
-
-def test_load_non_object_json_raises(tmp_path: Path) -> None:
-    (tmp_path / ROBOT_CONFIG_FILENAME).write_text("[]", encoding="utf-8")
-
-    with pytest.raises(RobotConfigError):
-        load_robot_config(tmp_path)
-
-
-def test_load_corrupt_json_does_not_silently_fallback(tmp_path: Path) -> None:
-    """损坏文件绝不能变成空配置，否则后续保存会覆盖用户数据。"""
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b"{not-json",
+        b"[]",
+        b"\xff\xfe",
+        b'{"version": 0}',
+        b'{"version": 1, "robots": {}}',
+        json.dumps({"version": 1, "robots": [make_robot()]})[:-1].encode(),
+    ],
+    ids=["corrupt", "non-object", "invalid-utf8", "bad-version", "bad-robots", "truncated"],
+)
+def test_load_rejects_invalid_file_without_touching_it(tmp_path: Path, raw: bytes) -> None:
+    """损坏或结构非法的文件绝不能变成空配置，否则后续保存会覆盖用户数据。"""
     path = tmp_path / ROBOT_CONFIG_FILENAME
-    path.write_text(json.dumps({"version": 1, "robots": [make_robot()]})[:-1], encoding="utf-8")
-    before = path.read_text(encoding="utf-8")
+    path.write_bytes(raw)
+    before = path.read_bytes()
 
     with pytest.raises(RobotConfigError):
         load_robot_config(tmp_path)
 
-    assert path.read_text(encoding="utf-8") == before
+    assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize(
@@ -234,74 +238,47 @@ def test_validate_generates_id_when_missing() -> None:
 
 
 def test_validate_rejects_duplicate_appid() -> None:
-    payload = {
-        "robots": [
-            make_robot(appid="same-appid", robot_id="r1"),
-            make_robot(appid="same-appid", robot_id="r2"),
-        ]
-    }
-
-    _normalized, errors = validate_robot_config(empty_robot_config(), payload)
-
-    assert any("重复" in error for error in errors)
+    assert_invalid(
+        {
+            "robots": [
+                make_robot(appid="same-appid", robot_id="r1"),
+                make_robot(appid="same-appid", robot_id="r2"),
+            ]
+        },
+        "重复",
+    )
 
 
 def test_validate_rejects_non_string_appid() -> None:
-    normalized, errors = validate_robot_config(
-        empty_robot_config(),
-        {"robots": [make_robot(appid=123)]},  # type: ignore[arg-type]
-    )
-
-    assert normalized == empty_robot_config()
-    assert any("appid" in error for error in errors)
+    assert_invalid({"robots": [make_robot(appid=123)]}, "appid")
 
 
 def test_validate_rejects_duplicate_robot_id() -> None:
-    payload = {
-        "robots": [
-            make_robot(appid="app-1", robot_id="same-id"),
-            make_robot(appid="app-2", robot_id="same-id"),
-        ]
-    }
-
-    _normalized, errors = validate_robot_config(empty_robot_config(), payload)
-
-    assert any(".id" in error and "重复" in error for error in errors)
+    assert_invalid(
+        {
+            "robots": [
+                make_robot(appid="app-1", robot_id="same-id"),
+                make_robot(appid="app-2", robot_id="same-id"),
+            ]
+        },
+        ".id",
+        "重复",
+    )
 
 
 def test_validate_rejects_invalid_platform() -> None:
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(platform="aiocqhttp")]}
-    )
-
-    assert any("platform" in error for error in errors)
+    assert_invalid({"robots": [make_robot(platform="aiocqhttp")]}, "platform")
 
 
-def test_validate_rejects_robot_name_too_long() -> None:
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(name="名" * 15)]}
-    )
-
-    assert any("name" in error and "14" in error for error in errors)
-
-
-def test_validate_rejects_empty_robot_name() -> None:
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(name="   ")]}
-    )
-
-    assert any("name" in error for error in errors)
+def test_validate_rejects_invalid_robot_name() -> None:
+    assert_invalid({"robots": [make_robot(name="名" * 15)]}, "name", "14")
+    assert_invalid({"robots": [make_robot(name="   ")]}, "name")
 
 
 def test_validate_rejects_enabled_scene_without_items() -> None:
     scenes = make_scenes()
     scenes["c2c"] = {"enabled": True, "items": []}
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=scenes)]}
-    )
-
-    assert any("启用" in error and "至少" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "启用", "至少")
 
 
 def test_validate_allows_disabled_scene_without_items() -> None:
@@ -318,100 +295,55 @@ def test_validate_allows_disabled_scene_without_items() -> None:
 
 def test_validate_rejects_too_many_items_per_scene() -> None:
     items = [{"name": f"cmd{i}", "desc": ""} for i in range(PANEL_MAX_ITEMS + 1)]
-    scenes = make_scenes(items=items)
+    assert_invalid({"robots": [make_robot(scenes=make_scenes(items=items))]}, str(PANEL_MAX_ITEMS))
 
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=scenes)]}
+
+def test_validate_rejects_oversized_item_fields() -> None:
+    name_too_long = [{"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "ok"}]
+    desc_too_long = [{"name": "ok", "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)}]
+    assert_invalid(
+        {"robots": [make_robot(scenes=make_scenes(items=name_too_long))]},
+        str(PANEL_ITEM_NAME_MAX),
     )
-
-    assert any(str(PANEL_MAX_ITEMS) in error for error in errors)
-
-
-def test_validate_rejects_item_name_too_long() -> None:
-    items = [{"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "ok"}]
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=make_scenes(items=items))]}
+    assert_invalid(
+        {"robots": [make_robot(scenes=make_scenes(items=desc_too_long))]},
+        str(PANEL_ITEM_DESC_MAX),
     )
-
-    assert any(str(PANEL_ITEM_NAME_MAX) in error for error in errors)
-
-
-def test_validate_rejects_item_desc_too_long() -> None:
-    items = [{"name": "ok", "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)}]
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=make_scenes(items=items))]}
-    )
-
-    assert any(str(PANEL_ITEM_DESC_MAX) in error for error in errors)
 
 
 def test_validate_rejects_empty_item_name() -> None:
     items = [{"name": "  ", "desc": "ok"}]
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=make_scenes(items=items))]}
-    )
-
-    assert any("name" in error and "不能为空" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=make_scenes(items=items))]}, "name", "不能为空")
 
 
 def test_validate_rejects_non_list_items() -> None:
     scenes = make_scenes()
     scenes["c2c"] = {"enabled": False, "items": "bad"}
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=scenes)]}
-    )
-
-    assert any("items" in error and "列表" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "items", "列表")
 
 
 def test_validate_rejects_unknown_scene() -> None:
-    scenes = {
-        **make_scenes(),
-        "other": {"enabled": False, "items": []},
-    }
-
-    normalized, errors = validate_robot_config(
-        empty_robot_config(),
-        {"robots": [make_robot(scenes=scenes)]},
-    )
-
-    assert normalized == empty_robot_config()
-    assert any("scenes.other" in error and "不支持" in error for error in errors)
+    scenes = {**make_scenes(), "other": {"enabled": False, "items": []}}
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "scenes.other", "不支持")
 
 
 def test_validate_does_not_silently_truncate() -> None:
     items = [{"name": "n" * (PANEL_ITEM_NAME_MAX + 1), "desc": "d" * (PANEL_ITEM_DESC_MAX + 1)}]
-
-    normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=make_scenes(items=items))]}
-    )
-
-    assert errors
-    assert normalized == empty_robot_config()
+    assert_invalid({"robots": [make_robot(scenes=make_scenes(items=items))]}, "name")
 
 
 # secret：导出掩码与沿用原值
 
 
 def test_export_masks_secret_and_marks_set() -> None:
-    exported = export_robot_config({"version": 1, "robots": [make_robot()]})
-
-    robot = exported["robots"][0]
+    robot = export_robot_config({"version": 1, "robots": [make_robot()]})["robots"][0]
     assert "secret" not in robot
     assert robot["secret_masked"] == "pla*************ue"
     assert robot["secret_set"] is True
 
-
-def test_export_keeps_secret_set_false_for_empty_secret() -> None:
-    exported = export_robot_config({"version": 1, "robots": [make_robot(secret="")]})
-
-    robot = exported["robots"][0]
-    assert robot["secret_masked"] == ""
-    assert robot["secret_set"] is False
+    empty = export_robot_config({"version": 1, "robots": [make_robot(secret="")]})
+    assert empty["robots"][0]["secret_masked"] == ""
+    assert empty["robots"][0]["secret_set"] is False
 
 
 def test_validate_keeps_existing_secret_on_empty_submission() -> None:
@@ -424,22 +356,9 @@ def test_validate_keeps_existing_secret_on_empty_submission() -> None:
     assert normalized["robots"][0]["secret"] == "plain-secret-value"
 
 
-def test_validate_requires_secret_for_new_robot() -> None:
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(secret="")]}
-    )
-
-    assert any("secret" in error for error in errors)
-
-
-def test_validate_rejects_non_string_secret() -> None:
-    normalized, errors = validate_robot_config(
-        {"version": 1, "robots": [make_robot()]},
-        {"robots": [make_robot(secret=123)]},  # type: ignore[arg-type]
-    )
-
-    assert normalized == empty_robot_config()
-    assert any("secret" in error and "字符串" in error for error in errors)
+def test_validate_rejects_missing_or_non_string_secret() -> None:
+    assert_invalid({"robots": [make_robot(secret="")]}, "secret")
+    assert_invalid({"robots": [make_robot(secret=123)]}, "secret", "字符串")
 
 
 # 新旧合并 / legacy 转换
@@ -605,40 +524,23 @@ def test_legacy_drafts_can_be_validated_into_v2() -> None:
 
 
 def test_validate_rejects_non_dict_payload() -> None:
-    normalized, errors = validate_robot_config(empty_robot_config(), ["not-a-dict"])  # type: ignore[arg-type]
-
-    assert normalized == empty_robot_config()
-    assert any("payload" in error for error in errors)
+    assert_invalid(["not-a-dict"], "payload")
 
 
 def test_validate_rejects_missing_scene_key() -> None:
     scenes = make_scenes()
     scenes.pop("dm")
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=scenes)]}
-    )
-
-    assert any("dm" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "dm")
 
 
 def test_validate_rejects_non_bool_enabled() -> None:
     scenes = make_scenes(enabled_scenes=())
     scenes["c2c"] = {"enabled": "yes", "items": []}
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(scenes=scenes)]}
-    )
-
-    assert any("enabled" in error and "布尔" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "enabled", "布尔")
 
 
 def test_validate_rejects_blank_secret_for_new_robot() -> None:
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(), {"robots": [make_robot(secret="   ")]}
-    )
-
-    assert any("secret" in error for error in errors)
+    assert_invalid({"robots": [make_robot(secret="   ")]}, "secret")
 
 
 def test_export_does_not_leak_plaintext_secret() -> None:
@@ -660,26 +562,6 @@ def test_validation_errors_follow_selected_language(
     )
 
     assert errors == ["robots[0].appid: значение не может быть пустым"]
-
-
-def test_load_invalid_utf8_raises(tmp_path: Path) -> None:
-    (tmp_path / ROBOT_CONFIG_FILENAME).write_bytes(b"\xff\xfe")
-
-    with pytest.raises(RobotConfigError):
-        load_robot_config(tmp_path)
-
-
-def test_load_rejects_invalid_version_and_robots_type(tmp_path: Path) -> None:
-    (tmp_path / ROBOT_CONFIG_FILENAME).write_text('{"version": 0}', encoding="utf-8")
-    with pytest.raises(RobotConfigError):
-        load_robot_config(tmp_path)
-
-    (tmp_path / ROBOT_CONFIG_FILENAME).write_text(
-        '{"version": 1, "robots": {}}',
-        encoding="utf-8",
-    )
-    with pytest.raises(RobotConfigError):
-        load_robot_config(tmp_path)
 
 
 def test_save_failure_raises_robot_config_error(tmp_path: Path) -> None:
@@ -747,49 +629,24 @@ def test_validate_rejects_non_dict_robot_entry() -> None:
     assert errors == ["robots[0]：必须是对象"]
 
 
-def test_validate_rejects_non_dict_scenes() -> None:
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(),
-        {"robots": [make_robot(scenes="bad")]},  # type: ignore[arg-type]
-    )
-
-    assert any("scenes" in error for error in errors)
-
-
-def test_validate_rejects_non_dict_scene() -> None:
+def test_validate_rejects_non_dict_scenes_and_scene() -> None:
+    assert_invalid({"robots": [make_robot(scenes="bad")]}, "scenes")
     scenes = make_scenes()
     scenes["c2c"] = "bad"  # type: ignore[assignment]
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(),
-        {"robots": [make_robot(scenes=scenes)]},
-    )
-
-    assert any("scenes.c2c" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "scenes.c2c")
 
 
 def test_validate_rejects_non_dict_item_and_non_string_desc() -> None:
     scenes = make_scenes()
     scenes["c2c"]["items"] = ["bad", {"name": "help", "desc": 123}]
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(),
-        {"robots": [make_robot(scenes=scenes)]},
-    )
-
-    assert any("items[0]" in error for error in errors)
-    assert any("items[1].desc" in error for error in errors)
+    payload = {"robots": [make_robot(scenes=scenes)]}
+    assert_invalid(payload, "items[0]")
+    assert_invalid(payload, "items[1].desc")
 
 
 def test_validate_rejects_desc_too_long() -> None:
     scenes = make_scenes(items=[{"name": "help", "desc": "x" * (PANEL_ITEM_DESC_MAX + 1)}])
-
-    _normalized, errors = validate_robot_config(
-        empty_robot_config(),
-        {"robots": [make_robot(scenes=scenes)]},
-    )
-
-    assert any("desc" in error for error in errors)
+    assert_invalid({"robots": [make_robot(scenes=scenes)]}, "desc")
 
 
 def test_validate_accepts_none_desc() -> None:

@@ -401,6 +401,28 @@ def stub_clients(syncer: PanelSyncer, clients: dict[str, FakeQQClient]) -> Panel
     return syncer
 
 
+def runtime_robot(
+    robot_id: str = "robot-a",
+    scenes: dict[str, list[dict[str, str]]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": robot_id,
+        "appid": f"app-{robot_id}",
+        "secret": f"sec-{robot_id}",
+        "platform": "qq_official",
+        "source": "v2",
+        "scenes": scenes or {},
+    }
+
+
+def stub_runtime(
+    syncer: PanelSyncer,
+    monkeypatch: pytest.MonkeyPatch,
+    *robots: dict[str, Any],
+) -> None:
+    monkeypatch.setattr(syncer, "build_runtime_robots", lambda *args, **kwargs: list(robots))
+
+
 async def collect_events() -> tuple[list[dict[str, Any]], Any]:
     """构造一个把事件收进列表的回调"""
     events: list[dict[str, Any]] = []
@@ -634,27 +656,11 @@ async def test_sync_all_uses_v2_robot_scenes(monkeypatch) -> None:
     client_a = FakeQQClient(existing={})
     client_b = FakeQQClient(existing={})
     stub_clients(syncer, {"robot-a": client_a, "robot-b": client_b})
-    monkeypatch.setattr(
+    stub_runtime(
         syncer,
-        "build_runtime_robots",
-        lambda *args, **kwargs: [
-            {
-                "id": "robot-a",
-                "appid": "app-a",
-                "secret": "sec-a",
-                "platform": "qq_official",
-                "source": "v2",
-                "scenes": {"c2c": [{"name": "help", "desc": "私聊"}]},
-            },
-            {
-                "id": "robot-b",
-                "appid": "app-b",
-                "secret": "sec-b",
-                "platform": "qq_official",
-                "source": "v2",
-                "scenes": {"group": [{"name": "sign", "desc": "群聊"}]},
-            },
-        ],
+        monkeypatch,
+        runtime_robot("robot-a", {"c2c": [{"name": "help", "desc": "私聊"}]}),
+        runtime_robot("robot-b", {"group": [{"name": "sign", "desc": "群聊"}]}),
     )
 
     result = await syncer.sync_all()
@@ -679,22 +685,15 @@ async def test_sync_all_reports_platform_failure_when_a_scene_write_fails(monkey
 
     client = FailingGroupClient(existing={})
     stub_clients(syncer, {"robot-a": client})
-    monkeypatch.setattr(
+    stub_runtime(
         syncer,
-        "build_runtime_robots",
-        lambda *args, **kwargs: [
-            {
-                "id": "robot-a",
-                "appid": "app-a",
-                "secret": "sec-a",
-                "platform": "qq_official",
-                "source": "v2",
-                "scenes": {
-                    "c2c": [{"name": "help", "desc": "私聊"}],
-                    "group": [{"name": "sign", "desc": "群聊"}],
-                },
+        monkeypatch,
+        runtime_robot(
+            scenes={
+                "c2c": [{"name": "help", "desc": "私聊"}],
+                "group": [{"name": "sign", "desc": "群聊"}],
             }
-        ],
+        ),
     )
     events, on_event = await collect_events()
 
@@ -718,19 +717,10 @@ async def test_sync_all_reports_platform_failure_when_panel_limit_reached(monkey
     # 20 个他方面板 → 该机器人已达上限，新建场景拿不到额度
     client = FakeQQClient(existing={"c2c": [foreign_panel("c2c", f"f_{i}") for i in range(20)]})
     stub_clients(syncer, {"robot-a": client})
-    monkeypatch.setattr(
+    stub_runtime(
         syncer,
-        "build_runtime_robots",
-        lambda *args, **kwargs: [
-            {
-                "id": "robot-a",
-                "appid": "app-a",
-                "secret": "sec-a",
-                "platform": "qq_official",
-                "source": "v2",
-                "scenes": {"group": [{"name": "sign", "desc": "群聊"}]},
-            }
-        ],
+        monkeypatch,
+        runtime_robot(scenes={"group": [{"name": "sign", "desc": "群聊"}]}),
     )
     events, on_event = await collect_events()
 
@@ -925,13 +915,11 @@ async def test_purge_and_clear_skip_panels_without_ids() -> None:
 @pytest.mark.asyncio
 async def test_sync_all_skips_robot_without_id_and_handles_empty_clients(monkeypatch) -> None:
     syncer = make_syncer(config={"scenes": ["c2c"]})
-    monkeypatch.setattr(
+    stub_runtime(
         syncer,
-        "build_runtime_robots",
-        lambda *args, **kwargs: [
-            {"id": "", "appid": "", "scenes": {}},
-            {"id": "robot-a", "appid": "app-a", "secret": "sec-a", "scenes": {}},
-        ],
+        monkeypatch,
+        {"id": "", "appid": "", "scenes": {}},
+        runtime_robot(scenes={}),
     )
     monkeypatch.setattr(syncer, "build_clients", lambda *args, **kwargs: {})
     events, on_event = await collect_events()

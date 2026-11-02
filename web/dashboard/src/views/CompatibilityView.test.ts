@@ -76,12 +76,26 @@ async function loadCompatibilityView(
   }
 }
 
+async function mountCompatibility(
+  options: {
+    withBackend?: boolean
+    bridge?: Partial<PluginViewBridge>
+    config?: PluginConfigResponse
+    reject?: Error
+  } = {},
+) {
+  const view = await loadCompatibilityView(options)
+  if (options.reject) {
+    vi.mocked(view.api.fetchConfig).mockRejectedValue(options.reject)
+  } else {
+    vi.mocked(view.api.fetchConfig).mockResolvedValue(options.config ?? configFixture())
+  }
+  return { ...view, wrapper: await view.mount() }
+}
+
 describe('CompatibilityView', () => {
   it('loads the config into the form', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountCompatibility()
 
     expect(api.fetchConfig).toHaveBeenCalledTimes(1)
     // 一行平台 + 两条指令
@@ -142,10 +156,7 @@ describe('CompatibilityView', () => {
   })
 
   it('reports a failed load and keeps saving disabled', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockRejectedValue(new Error('config failed'))
-
-    const wrapper = await mount()
+    const { wrapper } = await mountCompatibility({ reject: new Error('config failed') })
 
     expect(wrapper.text()).toContain('config failed')
     expect(wrapper.findAll('.qc-config-item')).toHaveLength(0)
@@ -153,10 +164,7 @@ describe('CompatibilityView', () => {
   })
 
   it('labels mock data and refuses to fake a save in local dev', async () => {
-    const { api, mount } = await loadCompatibilityView({ withBackend: false })
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountCompatibility({ withBackend: false })
 
     expect(wrapper.text()).toContain('本地开发环境：展示的是 mock 数据，不能保存配置。')
     expect(button(wrapper, '保存').attributes('disabled')).toBeDefined()
@@ -170,10 +178,7 @@ describe('CompatibilityView', () => {
   })
 
   it('adds and removes platform rows', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountCompatibility()
 
     await button(wrapper, '添加平台').trigger('click')
     expect(wrapper.findAll('.qc-config-item')).toHaveLength(2)
@@ -183,12 +188,9 @@ describe('CompatibilityView', () => {
   })
 
   it('adds and removes command rows and hides the add button at the limit', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(
-      configFixture({ limits: { name_max: 14, desc_max: 30, items_max: 2 } }),
-    )
-
-    const wrapper = await mount()
+    const { wrapper } = await mountCompatibility({
+      config: configFixture({ limits: { name_max: 14, desc_max: 30, items_max: 2 } }),
+    })
 
     // 已经到上限：加不了，按钮直接禁用
     expect(button(wrapper, '添加指令').attributes('disabled')).toBeDefined()
@@ -206,10 +208,7 @@ describe('CompatibilityView', () => {
   })
 
   it('follows the appid when deciding what the secret field means', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountCompatibility()
     const appidInput = wrapper.findAll('.qc-config-item input')[1]
     expect(appidInput).toBeDefined()
 
@@ -226,10 +225,7 @@ describe('CompatibilityView', () => {
   })
 
   it('shows the local validation error instead of calling the backend', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountCompatibility()
 
     await button(wrapper, '添加平台').trigger('click')
     await button(wrapper, '保存').trigger('click')
@@ -240,13 +236,11 @@ describe('CompatibilityView', () => {
   })
 
   it('saves the trimmed config and refills the form from the response', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountCompatibility()
     vi.mocked(api.saveConfig).mockResolvedValue(
       configFixture({ selected_commands: [{ name: 'help', desc: '查看帮助' }] }),
     )
 
-    const wrapper = await mount()
     await wrapper.findAll(NAME_INPUTS)[1]?.setValue('  ping  ')
 
     await button(wrapper, '保存').trigger('click')
@@ -270,11 +264,9 @@ describe('CompatibilityView', () => {
   })
 
   it('shows the backend error when saving is rejected', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountCompatibility()
     vi.mocked(api.saveConfig).mockRejectedValue(new Error('language：fr-FR 不是支持的语言'))
 
-    const wrapper = await mount()
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
     await flush()
@@ -284,11 +276,9 @@ describe('CompatibilityView', () => {
   })
 
   it('writes every field edit back into the submitted payload', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountCompatibility()
     vi.mocked(api.saveConfig).mockResolvedValue(configFixture())
 
-    const wrapper = await mount()
     // v-select 的下拉挂在 body 上，直接驱动 model 比点浮层稳
     const selects = wrapper.findAllComponents(VSelect)
     expect(selects).toHaveLength(2)
@@ -321,11 +311,9 @@ describe('CompatibilityView', () => {
   })
 
   it('triggers a sync and jumps to the status page when saving and syncing', async () => {
-    const { api, bridge, mount, router } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, bridge, router, wrapper } = await mountCompatibility()
     vi.mocked(api.saveConfig).mockResolvedValue(configFixture())
 
-    const wrapper = await mount()
     await button(wrapper, '保存并同步').trigger('click')
     await waitUntil(() => router.currentRoute.value.name === 'status')
 
@@ -334,10 +322,7 @@ describe('CompatibilityView', () => {
   })
 
   it('reloads the config on demand', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountCompatibility()
     await button(wrapper, '重新载入').trigger('click')
     await waitUntil(() => vi.mocked(api.fetchConfig).mock.calls.length === 2)
 
@@ -345,13 +330,10 @@ describe('CompatibilityView', () => {
   })
 
   it('ignores a stale reload that resolves after the save', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountCompatibility()
     vi.mocked(api.saveConfig).mockResolvedValue(
       configFixture({ selected_commands: [{ name: 'saved', desc: '保存后的指令' }] }),
     )
-
-    const wrapper = await mount()
     const stale = deferred<PluginConfigResponse>()
     vi.mocked(api.fetchConfig).mockReturnValueOnce(stale.promise)
 
@@ -375,12 +357,10 @@ describe('CompatibilityView', () => {
   })
 
   it('disables reload while a save is in flight', async () => {
-    const { api, mount } = await loadCompatibilityView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountCompatibility()
     const pendingSave = deferred<PluginConfigResponse>()
     vi.mocked(api.saveConfig).mockReturnValueOnce(pendingSave.promise)
 
-    const wrapper = await mount()
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
 

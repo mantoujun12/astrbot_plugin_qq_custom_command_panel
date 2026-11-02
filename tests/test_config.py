@@ -40,18 +40,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 
 
-def test_get_enabled_scenes_default_when_missing() -> None:
+def test_get_enabled_scenes_defaults_and_filters_invalid() -> None:
     assert get_enabled_scenes({}) == DEFAULT_SCENES
-
-
-def test_get_enabled_scenes_filters_invalid() -> None:
-    config: dict[str, Any] = {"scenes": ["c2c", "hacker", 123, None, "group"]}
-    assert get_enabled_scenes(config) == ["c2c", "group"]
-
-
-def test_get_enabled_scenes_non_list_falls_back() -> None:
     assert get_enabled_scenes({"scenes": "c2c"}) == DEFAULT_SCENES
     assert get_enabled_scenes({"scenes": {"c2c": True}}) == DEFAULT_SCENES
+    config: dict[str, Any] = {"scenes": ["c2c", "hacker", 123, None, "group"]}
+    assert get_enabled_scenes(config) == ["c2c", "group"]
 
 
 # ---------------------------------------------------------------------------
@@ -82,31 +76,28 @@ def test_get_theme_colors_falls_back_for_missing_or_invalid_values() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_selected_commands_truncates() -> None:
-    config = {
-        "selected_commands": [
-            {"name": "n" * 30, "desc": "d" * 50},
-        ]
-    }
-    items = get_selected_commands(config)
-    assert len(items) == 1
-    assert items[0]["name"] == "n" * PANEL_ITEM_NAME_MAX
-    assert items[0]["desc"] == "d" * PANEL_ITEM_DESC_MAX
-    assert items[0]["type"] == "command"
+def test_get_selected_commands_truncates_and_validates() -> None:
+    items = get_selected_commands({"selected_commands": [{"name": "n" * 30, "desc": "d" * 50}]})
+    assert items == [
+        {
+            "name": "n" * PANEL_ITEM_NAME_MAX,
+            "type": "command",
+            "desc": "d" * PANEL_ITEM_DESC_MAX,
+        }
+    ]
 
-
-def test_get_selected_commands_skips_invalid_entries() -> None:
-    config = {
-        "selected_commands": [
-            "not a dict",
-            42,
-            {"desc": "no name"},
-            {"name": "", "desc": "empty name"},
-            {"name": "ok", "desc": 123},  # desc 非字符串 → 该条变空描述
-            {"name": "fine", "desc": "good"},
-        ]
-    }
-    items = get_selected_commands(config)
+    items = get_selected_commands(
+        {
+            "selected_commands": [
+                "not a dict",
+                42,
+                {"desc": "no name"},
+                {"name": "", "desc": "empty name"},
+                {"name": "ok", "desc": 123},  # desc 非字符串 → 该条变空描述
+                {"name": "fine", "desc": "good"},
+            ]
+        }
+    )
     assert items == [
         {"name": "ok", "type": "command", "desc": ""},
         {"name": "fine", "type": "command", "desc": "good"},
@@ -114,10 +105,13 @@ def test_get_selected_commands_skips_invalid_entries() -> None:
 
 
 def test_get_selected_commands_caps_at_max_items() -> None:
-    config = {
-        "selected_commands": [{"name": f"cmd{i}", "desc": "d"} for i in range(PANEL_MAX_ITEMS + 5)]
-    }
-    items = get_selected_commands(config)
+    items = get_selected_commands(
+        {
+            "selected_commands": [
+                {"name": f"cmd{i}", "desc": "d"} for i in range(PANEL_MAX_ITEMS + 5)
+            ]
+        }
+    )
     assert len(items) == PANEL_MAX_ITEMS
 
 
@@ -131,7 +125,7 @@ def test_get_selected_commands_non_list_returns_empty() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_normalize_panel_items_fills_type_and_truncates() -> None:
+def test_normalize_panel_items_fills_type_truncates_and_skips_invalid() -> None:
     items = normalize_panel_items(
         [
             {"name": "help", "desc": "帮助"},
@@ -147,15 +141,8 @@ def test_normalize_panel_items_fills_type_and_truncates() -> None:
         },
     ]
 
-
-def test_normalize_panel_items_skips_invalid_entries() -> None:
     assert normalize_panel_items(
-        [
-            "junk",
-            {"desc": "no name"},
-            {"name": "  "},
-            {"name": "ok", "desc": 42},
-        ]
+        ["junk", {"desc": "no name"}, {"name": "  "}, {"name": "ok", "desc": 42}]
     ) == [{"name": "ok", "type": "command", "desc": ""}]
 
 
@@ -278,9 +265,6 @@ def test_get_configured_platforms_empty_without_qq_platforms() -> None:
 
 def test_mask_secret_keeps_head_and_tail() -> None:
     assert mask_secret("abcdefghij") == "abc*****ij"
-
-
-def test_mask_secret_short_and_empty() -> None:
     assert mask_secret("abc") == "***"
     assert mask_secret(None) == ""
     assert mask_secret("") == ""
@@ -424,15 +408,10 @@ def test_normalize_config_payload_accepts_full_payload() -> None:
 
 
 @pytest.mark.parametrize("language", ["ru-RU", "ja-JP"])
-def test_normalize_config_payload_accepts_new_languages(language: str) -> None:
+def test_new_languages_round_trip(language: str) -> None:
     values, errors = normalize_config_payload(make_existing(), {"language": language})
-
     assert errors == []
     assert values["language"] == language
-
-
-@pytest.mark.parametrize("language", ["ru-RU", "ja-JP"])
-def test_export_config_preserves_new_languages(language: str) -> None:
     assert export_config({"language": language})["language"] == language
 
 
