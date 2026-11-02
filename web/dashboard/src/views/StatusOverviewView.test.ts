@@ -58,12 +58,21 @@ async function loadStatusView(options: { withBackend?: boolean } = {}) {
   }
 }
 
+async function mountStatus(
+  options: { withBackend?: boolean; status?: StatusResponse; reject?: Error } = {},
+) {
+  const view = await loadStatusView(options)
+  if (options.reject) {
+    vi.mocked(view.api.fetchStatus).mockRejectedValue(options.reject)
+  } else {
+    vi.mocked(view.api.fetchStatus).mockResolvedValue(options.status ?? statusFixture())
+  }
+  return { ...view, wrapper: await view.mount() }
+}
+
 describe('StatusOverviewView', () => {
   it('loads the status and renders the overview cards', async () => {
-    const { api, mount } = await loadStatusView()
-    vi.mocked(api.fetchStatus).mockResolvedValue(statusFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountStatus()
 
     expect(api.fetchStatus).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('状态概览')
@@ -81,12 +90,9 @@ describe('StatusOverviewView', () => {
   })
 
   it('marks the panel total as a lower bound when some scenes failed to query', async () => {
-    const { api, mount } = await loadStatusView()
-    vi.mocked(api.fetchStatus).mockResolvedValue(
-      statusFixture({ panels: { total: 5, max: 40, partial: true } }),
-    )
-
-    const wrapper = await mount()
+    const { wrapper } = await mountStatus({
+      status: statusFixture({ panels: { total: 5, max: 40, partial: true } }),
+    })
 
     // 部分场景失败时不能把总数当成精确值：数值加后缀，并在卡片上说明原因
     expect(wrapper.findAll('.qc-metric-value')[3]?.text()).toBe('5+')
@@ -111,10 +117,7 @@ describe('StatusOverviewView', () => {
   })
 
   it('shows the backend error instead of the cards', async () => {
-    const { api, mount } = await loadStatusView()
-    vi.mocked(api.fetchStatus).mockRejectedValue(new Error('status failed'))
-
-    const wrapper = await mount()
+    const { wrapper } = await mountStatus({ reject: new Error('status failed') })
 
     expect(wrapper.text()).toContain('获取状态失败')
     expect(wrapper.text()).toContain('status failed')
@@ -122,31 +125,22 @@ describe('StatusOverviewView', () => {
   })
 
   it('points at the settings page when no platform is configured', async () => {
-    const { api, mount } = await loadStatusView()
-    vi.mocked(api.fetchStatus).mockResolvedValue(statusFixture({ platforms: [] }))
-
-    const wrapper = await mount()
+    const { wrapper } = await mountStatus({ status: statusFixture({ platforms: [] }) })
 
     expect(wrapper.text()).toContain('还没有可用的 QQ 平台')
     expect(wrapper.text()).not.toContain('主机器人')
   })
 
   it('warns when the command list is empty', async () => {
-    const { api, mount } = await loadStatusView()
-    vi.mocked(api.fetchStatus).mockResolvedValue(
-      statusFixture({ items: { count: 0, max: 20 } }),
-    )
-
-    const wrapper = await mount()
+    const { wrapper } = await mountStatus({
+      status: statusFixture({ items: { count: 0, max: 20 } }),
+    })
 
     expect(wrapper.text()).toContain('尚未配置指令条目，同步会清空本插件创建的面板。')
   })
 
   it('refreshes with refresh=1 when the user clicks 刷新', async () => {
-    const { api, mount } = await loadStatusView()
-    vi.mocked(api.fetchStatus).mockResolvedValue(statusFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountStatus()
     const refresh = wrapper.findAll('button').find((node) => node.text().includes('刷新'))
     expect(refresh).toBeDefined()
 
@@ -179,10 +173,7 @@ describe('StatusOverviewView', () => {
   })
 
   it('labels the mock data in local dev', async () => {
-    const { api, mount } = await loadStatusView({ withBackend: false })
-    vi.mocked(api.fetchStatus).mockResolvedValue(statusFixture())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountStatus({ withBackend: false })
 
     expect(wrapper.text()).toContain('本地开发环境：展示的是 mock 数据，未连接 AstrBot 后端。')
   })

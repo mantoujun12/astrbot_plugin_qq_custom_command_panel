@@ -21,56 +21,37 @@ TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 
 
 @pytest.mark.asyncio
-async def test_token_fetched_and_cached() -> None:
+async def test_token_is_fetched_cached_and_refetched_after_expiry() -> None:
     session = FakeSession()
     session.route_token({"access_token": "tok1", "expires_in": 7200})
     client = make_client(session)
 
-    token1 = await client._ensure_token()
-    token2 = await client._ensure_token()
-
-    assert token1 == "tok1"
-    assert token2 == "tok1"
-    # 只请求了一次 token 端点
+    assert await client._ensure_token() == "tok1"
+    assert await client._ensure_token() == "tok1"
     token_calls = [r for r in session.requests if r["url"] == TOKEN_URL]
-    assert len(token_calls) == 1
+    assert len(token_calls) == 1  # 缓存命中不重复请求
 
-
-@pytest.mark.asyncio
-async def test_token_expires_and_refetches() -> None:
-    session = FakeSession()
-    session.route_token({"access_token": "tok1", "expires_in": 7200})
-    client = make_client(session)
-
-    await client._ensure_token()
     # 模拟过期：token 过期时间回到过去
     client._token_expire_at = 0.0
     await client._ensure_token()
-
     token_calls = [r for r in session.requests if r["url"] == TOKEN_URL]
     assert len(token_calls) == 2
 
 
 @pytest.mark.asyncio
-async def test_token_http_error_raises_and_clears_cache() -> None:
+async def test_token_failures_raise_and_clear_cache() -> None:
     session = FakeSession()
     session.route_token({"message": "bad"}, status=500)
     client = make_client(session)
 
     with pytest.raises(RuntimeError, match="500"):
         await client._ensure_token()
-
     assert client._token is None
 
-
-@pytest.mark.asyncio
-async def test_token_missing_in_response_raises() -> None:
     session = FakeSession()
     session.route_token({"expires_in": 7200})  # 无 access_token
-    client = make_client(session)
-
     with pytest.raises(RuntimeError, match="access_token"):
-        await client._ensure_token()
+        await make_client(session)._ensure_token()
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +128,7 @@ async def test_list_panels_backfills_scope() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_panel_returns_id() -> None:
+async def test_create_panel_returns_id_and_truncates_remark() -> None:
     session = FakeSession()
     session.route_token({"access_token": "tok1", "expires_in": 7200})
     session.route_panels("POST", "/v2/panels", payload={"panel_id": "p_new"})
@@ -164,6 +145,9 @@ async def test_create_panel_returns_id() -> None:
     assert body["scope"] == "group"
     assert body["target_type"] == "all"
     assert body["panel"]["remark"] == "remark"
+
+    await client.create_panel(scope="c2c", items=[], remark="r" * 400)
+    assert len(session.requests[-1]["kwargs"]["json"]["panel"]["remark"]) == 255
 
 
 @pytest.mark.asyncio
@@ -201,19 +185,6 @@ async def test_create_panel_specific_maps_target_openids(
     body = session.requests[-1]["kwargs"]["json"]
     assert body["target_type"] == "specific"
     assert body[openids_key] == ["target-1"]
-
-
-@pytest.mark.asyncio
-async def test_create_panel_remark_truncated() -> None:
-    session = FakeSession()
-    session.route_token({"access_token": "tok1", "expires_in": 7200})
-    session.route_panels("POST", "/v2/panels", payload={"panel_id": "p"})
-    client = make_client(session)
-
-    await client.create_panel(scope="c2c", items=[], remark="r" * 400)
-
-    body = session.requests[-1]["kwargs"]["json"]
-    assert len(body["panel"]["remark"]) == 255
 
 
 @pytest.mark.asyncio
@@ -258,51 +229,23 @@ async def test_update_panel_items_only() -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_panel_specific_c2c_maps_user_openids() -> None:
+@pytest.mark.parametrize(
+    ("scope", "openids_key"),
+    [("c2c", "user_openids"), ("group", "group_openids"), ("channel", "channel_openids")],
+)
+async def test_update_panel_specific_maps_openids(scope: str, openids_key: str) -> None:
     session = FakeSession()
     session.route_token({"access_token": "tok1", "expires_in": 7200})
     # specific 需要先查详情拿 scope
-    session.route_panels("GET", "/v2/panels/p1", payload={"panel_id": "p1", "scope": "c2c"})
+    session.route_panels("GET", "/v2/panels/p1", payload={"panel_id": "p1", "scope": scope})
     session.route_panels("PUT", "/v2/panels/p1", payload={})
     client = make_client(session)
 
-    await client.update_panel(
-        "p1",
-        target_type="specific",
-        target_openids=["u1", "u2"],
-    )
+    await client.update_panel("p1", target_type="specific", target_openids=["o1"])
 
     put_body = session.requests[-1]["kwargs"]["json"]
     assert put_body["target_type"] == "specific"
-    assert put_body["user_openids"] == ["u1", "u2"]
-
-
-@pytest.mark.asyncio
-async def test_update_panel_specific_group_maps_group_openids() -> None:
-    session = FakeSession()
-    session.route_token({"access_token": "tok1", "expires_in": 7200})
-    session.route_panels("GET", "/v2/panels/p1", payload={"panel_id": "p1", "scope": "group"})
-    session.route_panels("PUT", "/v2/panels/p1", payload={})
-    client = make_client(session)
-
-    await client.update_panel("p1", target_type="specific", target_openids=["g1"])
-
-    put_body = session.requests[-1]["kwargs"]["json"]
-    assert put_body["group_openids"] == ["g1"]
-
-
-@pytest.mark.asyncio
-async def test_update_panel_specific_channel_maps_channel_openids() -> None:
-    session = FakeSession()
-    session.route_token({"access_token": "tok1", "expires_in": 7200})
-    session.route_panels("GET", "/v2/panels/p1", payload={"panel_id": "p1", "scope": "channel"})
-    session.route_panels("PUT", "/v2/panels/p1", payload={})
-    client = make_client(session)
-
-    await client.update_panel("p1", target_type="specific", target_openids=["ch1"])
-
-    put_body = session.requests[-1]["kwargs"]["json"]
-    assert put_body["channel_openids"] == ["ch1"]
+    assert put_body[openids_key] == ["o1"]
 
 
 @pytest.mark.asyncio

@@ -123,21 +123,8 @@ def test_uses_context_get_data_dir_with_plugin_name(
     # 关键：必须以 plugin_name 作为参数调用，而不是无参调用
     assert calls == [PLUGIN_NAME]
 
-
-def test_passes_custom_plugin_name_to_context(
-    no_star_tools: None,
-    no_astrbot_path: None,
-    tmp_path: pytest.Path,
-) -> None:
-    calls: list[str] = []
-
-    def get_data_dir(plugin_name: str) -> Path:
-        calls.append(plugin_name)
-        return tmp_path
-
-    context = types.SimpleNamespace(get_data_dir=get_data_dir)
     assert resolve_plugin_data_dir(context, "another_plugin") == tmp_path
-    assert calls == ["another_plugin"]
+    assert calls == [PLUGIN_NAME, "another_plugin"]
 
 
 # ---------------------------------------------------------------------------
@@ -145,23 +132,15 @@ def test_passes_custom_plugin_name_to_context(
 # ---------------------------------------------------------------------------
 
 
-def test_uses_context_data_dir_attribute(
+def test_uses_context_data_dir_attribute_or_callable(
     no_star_tools: None,
     no_astrbot_path: None,
     tmp_path: pytest.Path,
 ) -> None:
     """context.data_dir 被视为数据根，按约定拼出 plugin_data/<plugin_name>"""
-    context = types.SimpleNamespace(data_dir=tmp_path)
-    assert resolve_plugin_data_dir(context) == tmp_path / "plugin_data" / PLUGIN_NAME
-
-
-def test_uses_context_data_dir_callable(
-    no_star_tools: None,
-    no_astrbot_path: None,
-    tmp_path: pytest.Path,
-) -> None:
-    context = types.SimpleNamespace(data_dir=lambda: tmp_path)
-    assert resolve_plugin_data_dir(context) == tmp_path / "plugin_data" / PLUGIN_NAME
+    expected = tmp_path / "plugin_data" / PLUGIN_NAME
+    assert resolve_plugin_data_dir(types.SimpleNamespace(data_dir=tmp_path)) == expected
+    assert resolve_plugin_data_dir(types.SimpleNamespace(data_dir=lambda: tmp_path)) == expected
 
 
 def test_context_get_data_dir_failure_falls_to_context_data_dir(
@@ -205,42 +184,24 @@ def test_uses_astrbot_data_path_when_plugin_helper_missing(
 # ---------------------------------------------------------------------------
 
 
-def test_context_failure_falls_through_to_relative(
+def test_relative_fallback(
     no_star_tools: None,
     no_astrbot_path: None,
     no_data_root_env: None,
 ) -> None:
+    """官方 API 不可用时回退到 <cwd>/data/plugin_data/<plugin_name>"""
+    assert resolve_plugin_data_dir(None) == CWD_FALLBACK
+    assert resolve_plugin_data_dir(None, "another_plugin") == (
+        Path.cwd().resolve() / "data" / "plugin_data" / "another_plugin"
+    )
+
     def broken_get_data_dir(plugin_name: str) -> Path:
         raise RuntimeError("boom")
 
     context = types.SimpleNamespace(get_data_dir=broken_get_data_dir)
     assert resolve_plugin_data_dir(context) == CWD_FALLBACK
 
-
-def test_relative_fallback_when_no_api_available(
-    no_star_tools: None,
-    no_astrbot_path: None,
-    no_data_root_env: None,
-) -> None:
-    assert resolve_plugin_data_dir(None) == CWD_FALLBACK
-
-
-def test_relative_fallback_uses_custom_plugin_name(
-    no_star_tools: None,
-    no_astrbot_path: None,
-    no_data_root_env: None,
-) -> None:
-    assert resolve_plugin_data_dir(None, "another_plugin") == (
-        Path.cwd().resolve() / "data" / "plugin_data" / "another_plugin"
-    )
-
-
-def test_relative_fallback_never_targets_bare_data_dir(
-    no_star_tools: None,
-    no_astrbot_path: None,
-    no_data_root_env: None,
-) -> None:
-    """回归保护：兜底目录必须包含 plugin_data/<plugin_name>，不能是裸 data/"""
+    # 回归保护：兜底目录必须包含 plugin_data/<plugin_name>，不能是裸 data/
     resolved = resolve_plugin_data_dir(None)
     assert resolved != Path("data")
     assert resolved.parts[-3:] == ("data", "plugin_data", PLUGIN_NAME)
@@ -253,22 +214,16 @@ def test_fallback_honors_astrbot_root_env(
     tmp_path: pytest.Path,
 ) -> None:
     """官方 API 不可用时，兜底也必须锚定 ASTRBOT_ROOT 指向的数据根"""
+    expected = tmp_path / "data" / "plugin_data" / PLUGIN_NAME
     monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     monkeypatch.delenv("ASTRBOT_DESKTOP_CLIENT", raising=False)
-    assert resolve_plugin_data_dir(None) == tmp_path / "data" / "plugin_data" / PLUGIN_NAME
+    assert resolve_plugin_data_dir(None) == expected
 
-
-def test_astrbot_root_env_takes_precedence_in_fallback(
-    no_star_tools: None,
-    no_astrbot_path: None,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pytest.Path,
-) -> None:
-    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    # ASTRBOT_ROOT 优先于桌面版默认值，不会落到 ~/.astrbot
     monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
     resolved = resolve_plugin_data_dir(None)
-    assert resolved == tmp_path / "data" / "plugin_data" / PLUGIN_NAME
-    assert "astrbot" not in resolved.parts  # 不是 ~/.astrbot
+    assert resolved == expected
+    assert "astrbot" not in resolved.parts
 
 
 def test_fallback_honors_desktop_runtime_env(

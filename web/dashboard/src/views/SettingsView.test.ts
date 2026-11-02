@@ -64,16 +64,25 @@ async function loadSettingsView(options: { withBackend?: boolean } = {}) {
   }
 }
 
+async function mountSettings(
+  options: { withBackend?: boolean; config?: PluginConfigResponse; reject?: Error } = {},
+) {
+  const view = await loadSettingsView(options)
+  if (options.reject) {
+    vi.mocked(view.api.fetchConfig).mockRejectedValue(options.reject)
+  } else {
+    vi.mocked(view.api.fetchConfig).mockResolvedValue(options.config ?? configFixture())
+  }
+  return { ...view, wrapper: await view.mount() }
+}
+
 afterEach(() => {
   applyThemeColors(vuetify.theme, DEFAULT_THEME_COLORS)
 })
 
 describe('SettingsView', () => {
   it('loads the basic configuration into the form', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountSettings()
 
     expect(api.fetchConfig).toHaveBeenCalledTimes(1)
     expect(wrapper.get('.qc-title').text()).toBe('设置')
@@ -109,8 +118,7 @@ describe('SettingsView', () => {
   })
 
   it('submits only the fields this page owns', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountSettings()
     vi.mocked(api.saveConfig).mockResolvedValue(
       configFixture({
         language: 'en-US',
@@ -120,7 +128,6 @@ describe('SettingsView', () => {
       }),
     )
 
-    const wrapper = await mount()
     // v-select 的下拉挂在 body 上，直接驱动 model 比点浮层稳
     wrapper.findAllComponents(VSelect)[0]?.vm.$emit('update:modelValue', 'en-US')
     const colorFields = wrapper.findAllComponents({ name: 'ThemeColorField' })
@@ -143,10 +150,7 @@ describe('SettingsView', () => {
   })
 
   it('keeps the form editable but disables save for an invalid color', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { wrapper } = await mountSettings()
     wrapper
       .findAllComponents({ name: 'ThemeColorField' })[0]
       ?.vm.$emit('update:modelValue', 'not-a-color')
@@ -160,10 +164,7 @@ describe('SettingsView', () => {
   })
 
   it('reports a failed load and keeps saving disabled', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockRejectedValue(new Error('config failed'))
-
-    const wrapper = await mount()
+    const { wrapper } = await mountSettings({ reject: new Error('config failed') })
 
     expect(wrapper.text()).toContain('config failed')
     expect(wrapper.find('.qc-card').exists()).toBe(false)
@@ -171,10 +172,7 @@ describe('SettingsView', () => {
   })
 
   it('labels mock data and refuses to fake a save in local dev', async () => {
-    const { api, mount } = await loadSettingsView({ withBackend: false })
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountSettings({ withBackend: false })
 
     expect(wrapper.text()).toContain('本地开发环境：可编辑预览，但不能保存配置。')
     expect(button(wrapper, '保存').attributes('disabled')).toBeDefined()
@@ -198,10 +196,7 @@ describe('SettingsView', () => {
   })
 
   it('reloads the config on demand', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
-
-    const wrapper = await mount()
+    const { api, wrapper } = await mountSettings()
     await button(wrapper, '重新载入').trigger('click')
     await waitUntil(() => vi.mocked(api.fetchConfig).mock.calls.length === 2)
 
@@ -209,8 +204,7 @@ describe('SettingsView', () => {
   })
 
   it('ignores a stale reload that resolves after the save', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountSettings()
     vi.mocked(api.saveConfig).mockResolvedValue(
       configFixture({
         language: 'en-US',
@@ -218,8 +212,6 @@ describe('SettingsView', () => {
         secondary_color: '#445566',
       }),
     )
-
-    const wrapper = await mount()
     wrapper.findAllComponents(VSelect)[0]?.vm.$emit('update:modelValue', 'en-US')
 
     const stale = deferred<PluginConfigResponse>()
@@ -243,12 +235,10 @@ describe('SettingsView', () => {
   })
 
   it('disables reload while a save is in flight', async () => {
-    const { api, mount } = await loadSettingsView()
-    vi.mocked(api.fetchConfig).mockResolvedValue(configFixture())
+    const { api, wrapper } = await mountSettings()
     const pendingSave = deferred<PluginConfigResponse>()
     vi.mocked(api.saveConfig).mockReturnValueOnce(pendingSave.promise)
 
-    const wrapper = await mount()
     await button(wrapper, '保存').trigger('click')
     await waitUntil(() => vi.mocked(api.saveConfig).mock.calls.length > 0)
 

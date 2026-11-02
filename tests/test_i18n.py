@@ -87,17 +87,11 @@ def test_translator_switch_language() -> None:
     assert tr.language == "zh-CN"
 
 
-def test_translator_unsupported_language_falls_back() -> None:
-    tr = make_translator("zh-CN")
-    tr.set_language("xx-XX")
-    assert tr.language == DEFAULT_LANGUAGE
-
-
-def test_translator_non_string_language_falls_back() -> None:
-    tr = make_translator("zh-CN")
-    tr.set_language(None)  # type: ignore[arg-type]
-    tr.set_language(123)  # type: ignore[arg-type]
-    assert tr.language == DEFAULT_LANGUAGE
+def test_translator_invalid_language_falls_back() -> None:
+    for invalid in ("xx-XX", None, 123):
+        tr = make_translator("zh-CN")
+        tr.set_language(invalid)  # type: ignore[arg-type]
+        assert tr.language == DEFAULT_LANGUAGE
 
 
 def test_translator_format_failure_returns_template() -> None:
@@ -107,36 +101,24 @@ def test_translator_format_failure_returns_template() -> None:
     assert "更新面板" in result
 
 
-def test_log_tag_constant() -> None:
+def test_constants() -> None:
     assert LOG_TAG == "[qq-command-panel]"
-
-
-def test_supported_languages() -> None:
     assert SUPPORTED_LANGUAGES == ("zh-CN", "en-US", "ru-RU", "ja-JP")
 
 
-def test_locale_files_keep_the_same_key_set() -> None:
-    expected = set(load_locale(DEFAULT_LANGUAGE))
-    for language in SUPPORTED_LANGUAGES:
-        assert set(load_locale(language)) == expected, language
-
-
-def test_locale_files_keep_the_same_placeholders() -> None:
+def test_locale_files_are_complete() -> None:
     fallback = load_locale(DEFAULT_LANGUAGE)
+    expected_keys = set(fallback)
     for language in SUPPORTED_LANGUAGES:
         locale = load_locale(language)
+        assert set(locale) == expected_keys, language
+        assert [key for key, value in locale.items() if not value.strip()] == [], language
         mismatched = {
             key: (placeholders(fallback[key]), placeholders(locale[key]))
             for key in fallback
             if placeholders(fallback[key]) != placeholders(locale[key])
         }
         assert mismatched == {}, language
-
-
-def test_locale_values_are_not_empty() -> None:
-    for language in SUPPORTED_LANGUAGES:
-        locale = load_locale(language)
-        assert [key for key, value in locale.items() if not value.strip()] == [], language
 
 
 def test_translator_missing_locale_dir_returns_empty(tmp_path: pytest.Path) -> None:
