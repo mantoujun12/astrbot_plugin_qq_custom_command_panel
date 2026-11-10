@@ -50,12 +50,21 @@
   --v-btn-size: 0.875rem;
 }
 
-/* 卡片标题用的是 .text-body-large：16px / 400 / 字距 0.03em。
-   比正文只大 2px 却更轻，读起来和正文分不出层级；那点字距是给拉丁字母调的，
-   中文用不着。宿主卡片标题是 18px / 600 的分量。 */
+/* 卡片标题：宿主统一用 text-h3（Vuetify 3 映射 1.25rem / 600 / 2rem 行高），
+   这里把 Vuetify 4 的默认（body-large 16px / 400 / 0.03125em 字距）改回宿主的刻度；
+   模板里保留了 text-body-large 类名，靠后置覆盖压到宿主刻度。 */
 .v-card-title {
+  font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0;
+  line-height: 2rem;
+}
+
+.text-body-large {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 2rem;
 }
 
 .qc-page {
@@ -101,7 +110,7 @@
 .qc-metric-label {
   margin-top: 12px;
   color: var(--qc-muted);
-  font-size: 13px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -117,7 +126,7 @@
 .qc-metric-note {
   margin-top: 8px;
   color: var(--qc-subtle);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -217,7 +226,7 @@
 }
 
 .qc-sidebar .v-list-item-title {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   line-height: 20px;
 }
@@ -226,7 +235,7 @@
 .qc-sidebar-version {
   padding: 0 10px 12px;
   color: rgba(var(--v-theme-on-surface), 0.46);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -254,7 +263,7 @@
   min-width: 0;
   padding: 12px 0;
   border-bottom: 1px solid var(--qc-border);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .qc-list-row:last-child {
@@ -297,7 +306,7 @@
   border-radius: 12px;
   background: rgba(128, 128, 128, 0.06);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: 0.75rem;
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
@@ -526,7 +535,7 @@
 }
 
 .qc-log-autoscroll .v-label {
-  font-size: 13px;
+  font-size: 0.875rem;
   opacity: 0.82;
 }
 
@@ -538,7 +547,7 @@
   border: 1px solid var(--qc-border);
   border-radius: 999px;
   color: var(--qc-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -580,7 +589,7 @@
   padding: 11px 18px;
   border-bottom: 1px solid var(--qc-border);
   color: var(--qc-subtle);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .qc-log-paused-note {
@@ -594,7 +603,7 @@
   overscroll-behavior: contain;
   background: color-mix(in srgb, rgb(var(--v-theme-surface)) 96%, rgb(var(--v-theme-on-surface)));
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: 0.75rem;
   line-height: 1.65;
 }
 
@@ -609,7 +618,7 @@
 }
 
 .qc-logs-empty-title {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -618,7 +627,7 @@
   margin-top: 7px;
   color: var(--qc-subtle);
   font-family: var(--v-font-body);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .qc-log-row {
@@ -636,7 +645,7 @@
 
 .qc-log-time {
   color: var(--qc-subtle);
-  font-size: 11.5px;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -646,7 +655,7 @@
   border-radius: 999px;
   background: rgba(var(--v-theme-on-surface), 0.08);
   font-family: var(--v-font-body);
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.7;
   text-align: center;
@@ -697,7 +706,7 @@
   color: rgba(var(--v-theme-primary), 0.9);
   cursor: pointer;
   font-family: var(--v-font-body);
-  font-size: 11.5px;
+  font-size: 0.75rem;
 }
 
 .qc-log-traceback {
