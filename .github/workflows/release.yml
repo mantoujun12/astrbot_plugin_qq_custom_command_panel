@@ -93,7 +93,7 @@ jobs:
           set -euo pipefail
           # 打包收敛到 scripts/package_plugin.py，只收录 AstrBot 会读取的文件
           # （metadata.yaml / main.py / core / pages / .astrbot-plugin 等），
-          # 避免把 tests/、web/、pyproject.toml 等无关内容带进发布包
+          # 避免把 web/、pyproject.toml 等无关内容带进发布包
           ZIP_FILE=$(python3 scripts/package_plugin.py)
 
           echo "zip_path=${ZIP_FILE}" >> "$GITHUB_OUTPUT"

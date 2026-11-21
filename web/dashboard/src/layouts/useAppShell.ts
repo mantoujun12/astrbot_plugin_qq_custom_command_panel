@@ -2,7 +2,7 @@
  * AppShell 的侧边栏与标题状态。
  *
  * 抽成 composable 让「窄屏临时抽屉 / 宽屏 rail」两套交互脱离模板就能被驱动，
- * 模板只留绑定（见同目录 AppShell.test.ts）。
+ * 模板只留绑定。
  */
 
 import { computed, ref, watch } from 'vue'

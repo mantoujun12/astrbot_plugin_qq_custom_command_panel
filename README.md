@@ -4,9 +4,7 @@
 
 <!-- Badge 1 -->
 
-[![CI Core](https://img.shields.io/github/actions/workflow/status/mantoujun12/astrbot_plugin_qq_custom_command_panel/ci-core.yml?style=flat-square&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPgoJPHBhdGggZD0iTTAgMGgxNnYxNkgweiIgZmlsbD0ibm9uZSIgLz4KCTxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik04IDFDNC4xNCAxIDEgNC4xNCAxIDhzMy4xNCA3IDcgN3M3LTMuMTQgNy03cy0zLjE0LTctNy03bTAgMTNjLTMuMzA5IDAtNi0yLjY5MS02LTZzMi42OTEtNiA2LTZzNiAyLjY5MSA2IDZzLTIuNjkxIDYtNiA2bTIuNzEyLTZhLjQzLjQzIDAgMCAxLS4yMTQuMzcxbC0zLjUzNCAyLjA0MkEuNjQzLjY0MyAwIDAgMSA2IDkuODU3VjYuMTQ0YzAtLjQ5NS41MzYtLjgwNC45NjQtLjU1NmwzLjUzNCAyLjA0MmEuNDMuNDMgMCAwIDEgLjIxNC4zNyIgLz4KPC9zdmc%2BCg%3D%3D&label=Core)](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/actions/workflows/ci-core.yml)
 [![CI Dashboard](https://img.shields.io/github/actions/workflow/status/mantoujun12/astrbot_plugin_qq_custom_command_panel/ci-dashboard.yml?style=flat-square&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPgoJPHBhdGggZD0iTTAgMGgxNnYxNkgweiIgZmlsbD0ibm9uZSIgLz4KCTxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik04IDFDNC4xNCAxIDEgNC4xNCAxIDhzMy4xNCA3IDcgN3M3LTMuMTQgNy03cy0zLjE0LTctNy03bTAgMTNjLTMuMzA5IDAtNi0yLjY5MS02LTZzMi42OTEtNiA2LTZzNiAyLjY5MSA2IDZzLTIuNjkxIDYtNiA2bTIuNzEyLTZhLjQzLjQzIDAgMCAxLS4yMTQuMzcxbC0zLjUzNCAyLjA0MkEuNjQzLjY0MyAwIDAgMSA2IDkuODU3VjYuMTQ0YzAtLjQ5NS41MzYtLjgwNC45NjQtLjU1NmwzLjUzNCAyLjA0MmEuNDMuNDMgMCAwIDEgLjIxNC4zNyIgLz4KPC9zdmc%2BCg%3D%3D&label=Dashboard)](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/actions/workflows/ci-dashboard.yml)
-[![Codecov Coverage](https://img.shields.io/codecov/c/github/mantoujun12/astrbot_plugin_qq_custom_command_panel?style=flat-square&logo=codecov&label=Coverage)](https://codecov.io/gh/mantoujun12/astrbot_plugin_qq_custom_command_panel)
 [![GitHub last commit](https://img.shields.io/github/last-commit/mantoujun12/astrbot_plugin_qq_custom_command_panel?style=flat-square&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPgoJPHBhdGggZD0iTTAgMGgyNHYyNEgweiIgZmlsbD0ibm9uZSIgLz4KCTxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik00LjI2NiAxNi4wNmE4LjkyIDguOTIgMCAwIDAgMy45MTUgMy45NzhhOC43IDguNyAwIDAgMCA1LjQ3MS44MzJhOC44IDguOCAwIDAgMCA0Ljg4Ny0yLjY0YTkuMDcgOS4wNyAwIDAgMCAyLjM4OC01LjA3OWE5LjE0IDkuMTQgMCAwIDAtMS4wNDQtNS41M2E4LjkgOC45IDAgMCAwLTQuMDY5LTMuODE1YTguNyA4LjcgMCAwIDAtNS41LS42MDhjLTEuODUuNDAxLTMuMzY2IDEuMzEzLTQuNjIgMi43NTVjLS4xNTEuMTYtLjczNS44MDYtMS4yMiAxLjc4MU03LjUgOGwtMy42MDkuNzJMMyA1bTkgNHY0bDMgMiIgLz4KPC9zdmc%2BCg%3D%3D&label=Last%20commit&color=blue)](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/commits/master/)
 [![GitHub Release](https://img.shields.io/github/v/release/mantoujun12/astrbot_plugin_qq_custom_command_panel?display_name=tag&style=flat-square&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPgoJPHBhdGggZD0iTTAgMGgyNHYyNEgweiIgZmlsbD0ibm9uZSIgLz4KCTxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utd2lkdGg9IjIiPgoJCTxwYXRoIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Ik0xNS4yNDQgMjEuMzY2YTIuMTY0IDIuMTY0IDAgMCAxLTMuMDYxIDBsLTguNTQ5LTguNTQ5QTIuMTYgMi4xNiAwIDAgMSAzIDExLjI4N1Y1LjE2NEMzIDMuOTcgMy45NyAzIDUuMTY0IDNoNi4xMjNjLjU3MyAwIDEuMTI0LjIyOCAxLjUzLjYzNGw4LjU0OSA4LjU0OWEyLjE2NCAyLjE2NCAwIDAgMSAwIDMuMDYxeiIgLz4KCQk8cGF0aCBkPSJNNi41IDYuNUw3IDciIC8%2BCgk8L2c%2BCjwvc3ZnPgo%3D&label=Release&color=blue)](https://github.com/mantoujun12/astrbot_plugin_qq_custom_command_panel/releases/latest)
 
@@ -113,23 +111,18 @@ QQ 官方机器人指令面板的 API 限制：
 - 某个场景未启用时，同步会清理该场景下本插件创建的面板；任一场景的 `GET /v2/panels` 请求失败时，该机器人整次同步中止
 - ClientSecret 只以明文落盘，后端响应、日志与前端只展示掩码或是否已设置
 
-## 开发与测试
+## 开发
 
-插件通过 AstrBot 加载，功能测试需要在运行的 AstrBot 实例下进行；业务逻辑可以跑离线 pytest 套件，`tests/conftest.py` 会注入 AstrBot stub，无需安装 AstrBot。
+插件通过 AstrBot 加载，功能验证需要在运行的 AstrBot 实例下进行。
 
 ### 后端（Python 3.10+）
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -q                                                                             # 全部离线测试
-pytest tests/test_robot_config.py -q                                                  # 只跑单个模块
-pytest --cov --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy  # 覆盖率 + 测试报告，与 CI 口径一致
 ruff check . --fix
 ruff format --check .
-pre-commit run --all-files                                                            # 可选，与 CI 同一套 hooks
+pre-commit run --all-files   # 可选，与 CI 同一套 hooks
 ```
-
-用例都在 `tests/`，与 `core/` 模块一一对应（如 `core/robot_config.py` → `tests/test_robot_config.py`）；异步用例直接写 `async def`（`asyncio_mode = "auto"`）；公共假件在 `tests/fakes.py`。`main.py` 是装配层，离线套件不覆盖它，改动入口需在真实 AstrBot 下验证。
 
 ### 插件视图（web/dashboard）
 
@@ -140,13 +133,9 @@ cd web/dashboard
 pnpm install
 pnpm dev            # 本地 dev server，没有 bridge，走 mock 并显式标注
 pnpm build          # vue-tsc 类型检查 + Vite 打包，直接写 pages/dashboard/
-pnpm test           # vitest 单次运行
-pnpm test:coverage  # 覆盖率，阈值见 vitest.config.ts
-pnpm test:report    # 额外产出 test-report.junit.xml
-pnpm test:codecov   # 覆盖率 + JUnit，CI 用的入口
 ```
 
-`pnpm build` 会先执行 `vue-tsc` 类型检查，并直接生成 `pages/dashboard/` 产物；视图本地开发没有 AstrBot bridge 时会显示 mock 数据，保存与同步入口不会伪装成成功。测试文件与被测代码同目录、命名 `*.test.ts`，挂载用 `src/test/helpers.ts` 的 `mountView`。
+`pnpm build` 会先执行 `vue-tsc` 类型检查，并直接生成 `pages/dashboard/` 产物；视图本地开发没有 AstrBot bridge 时会显示 mock 数据，保存与同步入口不会伪装成成功。
 
 ### 打包与发布
 
@@ -159,9 +148,7 @@ python scripts/package_plugin.py       # 生成 dist/<插件名>-<版本>.zip
 
 ### 持续集成
 
-- [ci-core](.github/workflows/ci-core.yml)：Python 3.10 / 3.11 / 3.12 上跑 `pytest`
 - [ci-dashboard](.github/workflows/ci-dashboard.yml)：Node 24 + pnpm 12 上跑 `pnpm build`
-- [codecov-core](.github/workflows/codecov-core.yml) / [codecov-dashboard](.github/workflows/codecov-dashboard.yml)：把覆盖率与 JUnit 测试报告上传到 [Codecov](https://codecov.io/gh/mantoujun12/astrbot_plugin_qq_custom_command_panel)，前后端分别使用 flag `unittests` 与 `dashboard`
 
 ### 目录结构
 
@@ -173,7 +160,6 @@ metadata.yaml      插件元数据（版本号唯一来源）
 .astrbot-plugin/   WebUI 侧 i18n（metadata / config / pages）
 web/dashboard/     视图源码（Vue 3 + TypeScript + Vite）
 pages/dashboard/   视图构建产物（提交进仓库的生成文件）
-tests/             离线 pytest 套件
 scripts/           bump_version.py、package_plugin.py
 ```
 
