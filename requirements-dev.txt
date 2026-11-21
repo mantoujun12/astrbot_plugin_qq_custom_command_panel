@@ -1,9 +1,3 @@
 # 开发/CI 专用依赖, 不随插件打包 (release zip 只包含 requirements.txt)
 
-pytest-asyncio>=1.5.0
-pytest>=9.2.0
-pytest-cov>=7.1.0
 ruff>=0.17.5
-# 运行期由 AstrBot 宿主环境提供（所以 requirements.txt 不声明，避免版本冲突）；
-# 但测试会导入打包后的 main.py，需要真实存在这个模块
-aiohttp>=3.14.5

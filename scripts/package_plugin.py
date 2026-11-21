@@ -17,7 +17,7 @@
 | .astrbot-plugin/      | WebUI metadata / config 的 i18n 翻译             |
 | pages/（或 views/）   | 插件可视化视图静态产物                           |
 
-仓库里的 tests/、web/、.github/、pyproject.toml、CHANGELOG.md 等
+仓库里的 web/、.github/、pyproject.toml、CHANGELOG.md 等
 都不会被打进 zip。
 
 用法：

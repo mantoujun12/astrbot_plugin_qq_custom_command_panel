@@ -4,10 +4,10 @@
 
 ## 前置要求
 
-- **Node.js `^22.12.0 || >=24`** —— Vite 8 与 Vitest 5 的硬性要求，版本过低时 `pnpm build` / `pnpm test` 会在运行前直接失败。
+- **Node.js `^22.12.0 || >=24`** —— Vite 8 的硬性要求，版本过低时 `pnpm build` 会在运行前直接失败。
   可在 `package.json` 的 `engines` 字段查看。
-- **pnpm** —— lockfile 为 `lockfileVersion: 9.0`，pnpm 9+ 均可安装；CI 固定用 **pnpm 12** 构建与测试
-  （见 `.github/workflows/ci-dashboard.yml` 与 `.github/workflows/codecov-dashboard.yml`）。
+- **pnpm** —— lockfile 为 `lockfileVersion: 9.0`，pnpm 9+ 均可安装；CI 固定用 **pnpm 12** 构建
+  （见 `.github/workflows/ci-dashboard.yml`）。
 
 ## 构建
 
@@ -71,19 +71,7 @@ pnpm dev
 - 日志流独立于同步流运行，只收集带 `[qq-command-panel]` 前缀的插件日志；暂停只冻结页面显示，后端仍继续收集。
 - `config` 的 POST 载荷里 secret 留空表示沿用原值（页面只拿到掩码），新增平台则必须填 secret。
 
-## 测试
+## 验证
 
-```bash
-pnpm test          # 单次跑完 vitest
-pnpm test:coverage # 单次跑完 vitest 并统计 v8 覆盖率
-pnpm test:report   # 单次跑完 vitest 并额外产出 test-report.junit.xml
-pnpm test:codecov  # 覆盖率与 JUnit 报告一起产出，CI 用的就是它
-```
-
-要点：
-
-- 配置在 `vitest.config.ts`，用 `mergeConfig` 复用 `vite.config.ts` 的插件；运行环境是 happy-dom，测试文件与被测代码同目录、命名 `*.test.ts`。
-- `pnpm build` 里的 `vue-tsc` 会把 `src/**`、`vite.config.ts`、`vitest.config.ts` 一起做类型检查，所以测试文件里的类型错误会让构建失败。
-- 覆盖率只统计 `src/**`，排除 `*.test.ts` 与入口 `src/main.ts`；`coverage/` 与 `test-report.junit.xml` 已在 `.gitignore` 中，不要提交。
-- `pnpm test:codecov` 同时产出 `coverage/lcov.info`（覆盖率）与 `test-report.junit.xml`（JUnit），由 CI 的 `.github/workflows/codecov-dashboard.yml` 分两次以 flag `dashboard` 上传到 Codecov（覆盖率 + Test Analytics）；后端 Python 走 `.github/workflows/codecov-core.yml`，flag 为 `unittests`。前后端各自独立统计。
-- 视图与 bridge 相关的部分只能靠单元测试兜住（受限 iframe、无 `localStorage`），交互行为仍要在真实 AstrBot 下验证。
+- 本包不包含自动化测试套件；视图与 bridge 相关的部分（受限 iframe、无 `localStorage`）只能在真实 AstrBot 下验证。
+- `pnpm build` 里的 `vue-tsc` 会把 `src/**` 与 `vite.config.ts` 一起做类型检查，构建通过即类型通过。
